@@ -1,7 +1,17 @@
 # 铸文项目长期约定
 
 项目：`E:\AI-Project\write-tool` — 本地优先的小说写作桌面应用「铸文」（Electron + React + TS + Vite + TipTap + node:sqlite）。
-**非 git 仓库**，改动前请自行备份，没有版本回退兜底。
+**已纳入 git**（2026-09-15 建立，分支 `main`）。此前是无版本控制状态，历史提交中最早的那个是重建的基线。
+
+## git 使用约定
+
+- `v0.4.7` 标签 = **优化前的基线快照**（由手工备份重建），不是原始构建提交。`git diff v0.4.7 HEAD` 查看 0.4.7 之后的全部改动。
+- 仓库**统一 LF**。`.gitattributes` 用 `* text=auto eol=lf` 覆盖 Git for Windows 默认的系统级 `core.autocrlf=true`；已实测克隆不产生 CRLF。**改 `.gitattributes` 前先想清楚**，破坏它会引发全文件级伪 diff。
+- `.gitignore` 排除：`node_modules/`、`dist/`、`dist-electron/`、`release*/`（约 3.4 GB）、`artifacts/`、`.frontend-design/`、`.backup/`、`*.tsbuildinfo`、`secrets.json`。
+- 安装包二进制**不入库**，版本 / 大小 / SHA-256 记在 `README.md`。
+- 提交信息用 `feat:` / `fix:` / `chore:` / `refactor:` / `style:` / `docs:` 开头，正文说明改了什么、为什么、如何验证。
+- 尚未配置远端。推送属外部操作，未经用户明确同意不要执行。
+- 手工备份仍在 `E:\AI-Project\write-tool-backup\20260915-1420-pre-optimize`（693 KB），保留作双保险。
 
 ## 硬性约定
 
