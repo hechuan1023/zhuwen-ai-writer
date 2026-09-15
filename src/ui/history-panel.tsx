@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, fmt, time, Empty, DiffModal, AnyRow, UiLanguage } from "./shared";
+import { api, fmt, time, Empty, DiffModal, ConfirmDialog, AnyRow, UiLanguage } from "./shared";
 
 export function HistoryPanel({
   chapter,
@@ -15,7 +15,8 @@ export function HistoryPanel({
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const [rows, setRows] = useState<AnyRow[]>([]),
     [preview, setPreview] = useState<AnyRow | null>(null),
-    [diffOpen, setDiffOpen] = useState(false);
+    [diffOpen, setDiffOpen] = useState(false),
+    [restoreOpen, setRestoreOpen] = useState(false);
   const load = () =>
     chapter &&
     api("revisions:list", chapter.id).then((r) => r.ok && setRows(r.data));
@@ -63,15 +64,7 @@ export function HistoryPanel({
             </button>
             <button
               className="primary"
-              onClick={async () => {
-                if (confirm(tr("恢复前会先保存当前正文为历史版本。继续？", "The current manuscript will be saved as a history snapshot first. Continue?"))) {
-                  const r = await api("revisions:restore", preview.id);
-                  if (r.ok) {
-                    notify(tr("已恢复历史版本", "History version restored"));
-                    reload();
-                  } else notify(r.error || tr("历史版本恢复失败", "Could not restore history version"));
-                }
-              }}
+              onClick={() => setRestoreOpen(true)}
             >
               {tr("恢复此版本", "Restore this version")}
             </button>
@@ -111,6 +104,32 @@ export function HistoryPanel({
             />
           )}
         </div>
+      )}
+      {restoreOpen && preview && (
+        <ConfirmDialog
+          title={tr("恢复历史版本", "Restore history version")}
+          message={tr(
+            "恢复前会先保存当前正文为历史版本。继续？",
+            "The current manuscript will be saved as a history snapshot first. Continue?",
+          )}
+          confirmLabel={tr("恢复此版本", "Restore this version")}
+          cancelLabel={tr("取消", "Cancel")}
+          onCancel={() => setRestoreOpen(false)}
+          onConfirm={async () => {
+            const target = preview;
+            setRestoreOpen(false);
+            if (!target) return;
+            const r = await api("revisions:restore", target.id);
+            if (r.ok) {
+              notify(tr("已恢复历史版本", "History version restored"));
+              reload();
+            } else
+              notify(
+                r.error ||
+                  tr("历史版本恢复失败", "Could not restore history version"),
+              );
+          }}
+        />
       )}
     </>
   );

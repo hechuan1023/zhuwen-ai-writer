@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, fmt, time, Empty, Modal, AnyRow, UiLanguage } from "./shared";
+import { api, fmt, time, Empty, Modal, ConfirmDialog, AnyRow, UiLanguage } from "./shared";
 import { CreateNovel, NovelTrash } from "./shelf";
 import { NovelEdit } from "./novel-edit";
 import { DailyGoalMeter } from "./daily-goal";
@@ -39,6 +39,8 @@ export function CreativeHome({
   const [creating, setCreating] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  // 待确认移入回收站的小说
+  const [trashTarget, setTrashTarget] = useState<AnyRow | null>(null);
   const [statsOpen, setStatsOpen] = useState(false);
   const [today, setToday] = useState(0);
   const [dailyGoal, setDailyGoal] = useState(0);
@@ -300,13 +302,9 @@ export function CreativeHome({
                       </button>
                       <button
                         className="danger-text"
-                        onClick={async () => {
+                        onClick={() => {
                           setMenuFor(null);
-                          if (!confirm(tr(`将《${n.title}》移入回收站？`, `Move “${n.title}” to Trash?`)))
-                            return;
-                          const r = await api("novels:trash", n.id);
-                          if (r.ok) loadShelf();
-                          else notify(r.error || tr("删除失败", "Delete failed"));
+                          setTrashTarget(n);
                         }}
                       >
                         {tr("移入回收站", "Trash")}
@@ -382,6 +380,27 @@ export function CreativeHome({
             onDailyGoal={setGoal}
           />
         </Modal>
+      )}
+      {trashTarget && (
+        <ConfirmDialog
+          title={tr("移入回收站", "Move to Trash")}
+          message={tr(
+            `将《${trashTarget.title}》移入回收站？可在回收站恢复。`,
+            `Move “${trashTarget.title}” to Trash? You can restore it later.`,
+          )}
+          confirmLabel={tr("移入回收站", "Move to Trash")}
+          cancelLabel={tr("取消", "Cancel")}
+          danger
+          onCancel={() => setTrashTarget(null)}
+          onConfirm={async () => {
+            const target = trashTarget;
+            if (!target) return;
+            setTrashTarget(null);
+            const r = await api("novels:trash", target.id);
+            if (r.ok) loadShelf();
+            else notify(r.error || tr("删除失败", "Delete failed"));
+          }}
+        />
       )}
     </div>
   );

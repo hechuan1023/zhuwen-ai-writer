@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, time, AnyRow, UiLanguage } from "./shared";
+import { api, time, PromptDialog, AnyRow, UiLanguage } from "./shared";
 import { Select } from "./select";
 
 export function IoPanel({
@@ -31,7 +31,9 @@ export function IoPanel({
       intervalMinutes: 30,
       keep: 10,
     }),
-    [autoLast, setAutoLast] = useState<any>(null);
+    [autoLast, setAutoLast] = useState<any>(null),
+    // 导入作品命名弹窗的初值；null 表示未打开
+    [importTitleEdit, setImportTitleEdit] = useState<string | null>(null);
   useEffect(() => {
     api("novels:open", novel.id).then(
       (r) => r.ok && setBookChapters(r.data.chapters),
@@ -397,31 +399,43 @@ export function IoPanel({
             </div>
             <button
               className="primary"
-              onClick={async () => {
-                const title = prompt(
-                  tr("导入后的作品名称", "Name for imported novel"),
+              onClick={() =>
+                setImportTitleEdit(
                   imported.path
                     .split(/[\\/]/)
                     .pop()
                     .replace(/\.[^.]+$/, ""),
-                );
-                if (!title) return;
-                const r = await api("import:commit", {
-                  title,
-                  token: imported.token,
-                  parts: imported.parts,
-                });
-                if (r.ok) {
-                  notify(tr("导入完成，已创建新作品", "Import complete; a new novel was created"));
-                  onImported();
-                } else notify(r.error || tr("导入失败", "Import failed"));
-              }}
+                )
+              }
             >
               {tr("确认导入为新作品", "Import as new novel")}
             </button>
           </div>
         )}
       </section>
+      {importTitleEdit !== null && (
+        <PromptDialog
+          title={tr("导入后的作品名称", "Name for imported novel")}
+          label={tr("作品名称", "Novel title")}
+          initial={importTitleEdit}
+          confirmLabel={tr("导入", "Import")}
+          cancelLabel={tr("取消", "Cancel")}
+          onCancel={() => setImportTitleEdit(null)}
+          onConfirm={async (title) => {
+            setImportTitleEdit(null);
+            if (!title) return;
+            const r = await api("import:commit", {
+              title,
+              token: imported.token,
+              parts: imported.parts,
+            });
+            if (r.ok) {
+              notify(tr("导入完成，已创建新作品", "Import complete; a new novel was created"));
+              onImported();
+            } else notify(r.error || tr("导入失败", "Import failed"));
+          }}
+        />
+      )}
     </div>
   );
 }

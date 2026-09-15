@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, time, Empty, Modal, AnyRow, UiLanguage } from "./shared";
+import { api, time, Empty, Modal, PromptDialog, AnyRow, UiLanguage } from "./shared";
+import { isPurgeConfirmed, purgeConfirmWord } from "./trash-confirm";
 
 export function CreateNovel({
   close,
@@ -94,6 +95,9 @@ export function NovelTrash({
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const [rows, setRows] = useState<AnyRow[]>([]);
+  // 永久删除的强确认词；见 trash-confirm.ts，须与服务端校验一致
+  const purgeWord = purgeConfirmWord(language);
+  const [purgeTarget, setPurgeTarget] = useState<AnyRow | null>(null);
   const load = () =>
     api("novels:trashList").then((r) => r.ok && setRows(r.data));
   useEffect(() => {
@@ -124,24 +128,7 @@ export function NovelTrash({
             </button>
             <button
               className="danger-text"
-              onClick={async () => {
-                if (
-                  prompt(
-                    tr(
-                      `永久删除《${n.title}》及其全部章节、资料和会话，无法恢复。请输入“永久删除”确认`,
-                      `Permanently delete “${n.title}” and all chapters, references, and conversations? Type DELETE to confirm.`,
-                    ),
-                  ) === (language === "en" ? "DELETE" : "永久删除")
-                ) {
-                  const r = await api("trash:purge", {
-                    kind: "novel",
-                    id: n.id,
-                    confirm: language === "en" ? "DELETE" : "永久删除",
-                  });
-                  if (r.ok) load();
-                  else notify(r.error || tr("永久删除失败", "Permanent deletion failed"));
-                }
-              }}
+              onClick={() => setPurgeTarget(n)}
             >
               {tr("永久删除", "Delete permanently")}
             </button>
@@ -151,6 +138,35 @@ export function NovelTrash({
           <Empty title={tr("回收站为空", "Trash is empty")} text={tr("删除的小说会暂存在这里。", "Deleted novels will appear here temporarily.")} />
         )}
       </div>
+      {purgeTarget && (
+        <PromptDialog
+          title={tr("永久删除小说", "Delete novel permanently")}
+          label={tr(
+            `永久删除《${purgeTarget.title}》及其全部章节、资料和会话，无法恢复。请输入「${purgeWord}」确认`,
+            `Permanently delete “${purgeTarget.title}” and all chapters, references, and conversations? This cannot be undone. Type ${purgeWord} to confirm.`,
+          )}
+          confirmLabel={tr("永久删除", "Delete permanently")}
+          cancelLabel={tr("取消", "Cancel")}
+          danger
+          validate={(v) => isPurgeConfirmed(v, language)}
+          validateHint={tr(
+            `请输入「${purgeWord}」后才能继续`,
+            `Type ${purgeWord} to continue`,
+          )}
+          onCancel={() => setPurgeTarget(null)}
+          onConfirm={async () => {
+            const target = purgeTarget;
+            setPurgeTarget(null);
+            const r = await api("trash:purge", {
+              kind: "novel",
+              id: target.id,
+              confirm: purgeWord,
+            });
+            if (r.ok) load();
+            else notify(r.error || tr("永久删除失败", "Permanent deletion failed"));
+          }}
+        />
+      )}
     </Modal>
   );
 }

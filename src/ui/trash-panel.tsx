@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, time, Empty, AnyRow, UiLanguage } from "./shared";
+import { api, time, Empty, PromptDialog, AnyRow, UiLanguage } from "./shared";
+import { isPurgeConfirmed, purgeConfirmWord } from "./trash-confirm";
 
 export function TrashPanel({
   novel,
@@ -18,6 +19,9 @@ export function TrashPanel({
     volumes: [],
     library: [],
   });
+  // 永久删除的强确认词；见 trash-confirm.ts，须与服务端校验一致
+  const purgeWord = purgeConfirmWord(language);
+  const [purgeTarget, setPurgeTarget] = useState<AnyRow | null>(null);
   const load = () =>
     api("trash:list", novel.id).then((r) => r.ok && setData(r.data));
   useEffect(() => {
@@ -56,20 +60,7 @@ export function TrashPanel({
             </button>
             <button
               className="danger-text"
-              onClick={async () => {
-                if (
-                  prompt(tr("永久删除无法恢复。请输入“永久删除”确认", "Permanent deletion cannot be undone. Type DELETE to confirm.")) ===
-                  (language === "en" ? "DELETE" : "永久删除")
-                ) {
-                  const r = await api("trash:purge", {
-                    kind: x.kind,
-                    id: x.id,
-                    confirm: language === "en" ? "DELETE" : "永久删除",
-                  });
-                  if (r.ok) load();
-                  else notify(r.error || tr("永久删除失败", "Permanent deletion failed"));
-                }
-              }}
+              onClick={() => setPurgeTarget(x)}
             >
               {tr("永久删除", "Delete permanently")}
             </button>
@@ -79,6 +70,35 @@ export function TrashPanel({
           <Empty title={tr("回收站为空", "Trash is empty")} text={tr("删除的章节和资料会暂存在这里。", "Deleted chapters and story-bible items will appear here temporarily.")} />
         )}
       </div>
+      {purgeTarget && (
+        <PromptDialog
+          title={tr("永久删除", "Delete permanently")}
+          label={tr(
+            `永久删除「${purgeTarget.title}」无法恢复。请输入「${purgeWord}」确认`,
+            `Permanently deleting “${purgeTarget.title}” cannot be undone. Type ${purgeWord} to confirm.`,
+          )}
+          confirmLabel={tr("永久删除", "Delete permanently")}
+          cancelLabel={tr("取消", "Cancel")}
+          danger
+          validate={(v) => isPurgeConfirmed(v, language)}
+          validateHint={tr(
+            `请输入「${purgeWord}」后才能继续`,
+            `Type ${purgeWord} to continue`,
+          )}
+          onCancel={() => setPurgeTarget(null)}
+          onConfirm={async () => {
+            const target = purgeTarget;
+            setPurgeTarget(null);
+            const r = await api("trash:purge", {
+              kind: target.kind,
+              id: target.id,
+              confirm: purgeWord,
+            });
+            if (r.ok) load();
+            else notify(r.error || tr("永久删除失败", "Permanent deletion failed"));
+          }}
+        />
+      )}
     </>
   );
 }

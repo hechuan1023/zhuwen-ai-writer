@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, readerFonts, promptNameFor, AnyRow, UiLanguage } from "./shared";
+import { api, readerFonts, promptNameFor, ConfirmDialog, AnyRow, UiLanguage } from "./shared";
 import { PlanSection } from "./plan-section";
 import { Select, Combobox } from "./select";
 
@@ -61,6 +61,13 @@ export function Settings({
       reasoningEffort: "",
       apiKey: "",
     });
+  // 需二次确认的操作（真实连接测试 / 删除模板 / 恢复默认模板）
+  const [confirmAction, setConfirmAction] = useState<
+    | { kind: "test-connection"; id: string; name: string }
+    | { kind: "delete-prompt"; id: string; name: string }
+    | { kind: "restore-defaults" }
+    | null
+  >(null);
   const load = () =>
     api("connections:list").then((r) => r.ok && setConnections(r.data));
   const loadPrompts = () =>
@@ -395,21 +402,13 @@ export function Settings({
               </button>
               {edit.id && (
                 <button
-                  onClick={async () => {
-                    if (
-                      confirm(
-                        tr(
-                          "测试会发送一个很小的真实请求，可能产生少量用量。继续？",
-                          "This sends a small real request and may use a small amount of quota. Continue?",
-                        ),
-                      )
-                    ) {
-                      const r = await api("connections:test", edit.id);
-                      notify(r.ok
-                        ? tr("连接测试成功", "Connection test succeeded")
-                        : r.error || tr("连接失败", "Connection failed"));
-                    }
-                  }}
+                  onClick={() =>
+                    setConfirmAction({
+                      kind: "test-connection",
+                      id: edit.id,
+                      name: edit.name || "",
+                    })
+                  }
                 >
                   {tr("真实测试", "Live test")}
                 </button>
@@ -450,12 +449,13 @@ export function Settings({
                     {!p.builtin && (
                       <button
                         className="danger-text"
-                        onClick={async () => {
-                          if (!confirm(tr(`删除模板「${p.name}」？`, `Delete template “${p.name}”?`))) return;
-                          const r = await api("prompts:delete", p.id);
-                          if (r.ok) loadPrompts();
-                          else notify(r.error || tr("删除失败", "Delete failed"));
-                        }}
+                        onClick={() =>
+                          setConfirmAction({
+                            kind: "delete-prompt",
+                            id: p.id,
+                            name: p.name,
+                          })
+                        }
                       >
                         {tr("删除", "Delete")}
                       </button>
@@ -498,18 +498,7 @@ export function Settings({
                   {tr("＋ 新增模板", "+ New template")}
                 </button>
                 <button
-                  onClick={async () => {
-                    if (!confirm(tr(
-                      "将内置模板恢复为默认内容，自定义模板不受影响。继续？",
-                      "Reset built-in templates to their defaults? Custom templates will not be changed.",
-                    )))
-                      return;
-                    const r = await api("prompts:restoreDefaults");
-                    if (r.ok) {
-                      notify(tr("内置模板已恢复默认", "Built-in templates restored"));
-                      loadPrompts();
-                    } else notify(r.error || tr("恢复失败", "Restore failed"));
-                  }}
+                  onClick={() => setConfirmAction({ kind: "restore-defaults" })}
                 >
                   {tr("恢复默认模板", "Reset built-in templates")}
                 </button>
@@ -637,6 +626,66 @@ export function Settings({
           />
         )}
       </div>
+      {confirmAction && (
+        <ConfirmDialog
+          title={
+            confirmAction.kind === "test-connection"
+              ? tr("真实测试连接", "Live connection test")
+              : confirmAction.kind === "delete-prompt"
+                ? tr("删除模板", "Delete template")
+                : tr("恢复默认模板", "Reset built-in templates")
+          }
+          message={
+            confirmAction.kind === "test-connection"
+              ? tr(
+                  `测试「${confirmAction.name}」会发送一个很小的真实请求，可能产生少量用量。继续？`,
+                  `Testing “${confirmAction.name}” sends a small real request and may use a small amount of quota. Continue?`,
+                )
+              : confirmAction.kind === "delete-prompt"
+                ? tr(
+                    `删除模板「${confirmAction.name}」？`,
+                    `Delete template “${confirmAction.name}”?`,
+                  )
+                : tr(
+                    "将内置模板恢复为默认内容，自定义模板不受影响。继续？",
+                    "Reset built-in templates to their defaults? Custom templates will not be changed.",
+                  )
+          }
+          confirmLabel={
+            confirmAction.kind === "test-connection"
+              ? tr("开始测试", "Run test")
+              : confirmAction.kind === "delete-prompt"
+                ? tr("删除", "Delete")
+                : tr("恢复默认", "Reset")
+          }
+          cancelLabel={tr("取消", "Cancel")}
+          danger={confirmAction.kind !== "test-connection"}
+          onCancel={() => setConfirmAction(null)}
+          onConfirm={async () => {
+            const action = confirmAction;
+            if (!action) return;
+            setConfirmAction(null);
+            if (action.kind === "test-connection") {
+              const r = await api("connections:test", action.id);
+              notify(
+                r.ok
+                  ? tr("连接测试成功", "Connection test succeeded")
+                  : r.error || tr("连接失败", "Connection failed"),
+              );
+            } else if (action.kind === "delete-prompt") {
+              const r = await api("prompts:delete", action.id);
+              if (r.ok) loadPrompts();
+              else notify(r.error || tr("删除失败", "Delete failed"));
+            } else {
+              const r = await api("prompts:restoreDefaults");
+              if (r.ok) {
+                notify(tr("内置模板已恢复默认", "Built-in templates restored"));
+                loadPrompts();
+              } else notify(r.error || tr("恢复失败", "Restore failed"));
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

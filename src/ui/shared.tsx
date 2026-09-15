@@ -478,20 +478,36 @@ export function PromptDialog({
   title,
   label,
   initial,
+  placeholder,
   confirmLabel,
   cancelLabel,
+  danger,
+  validate,
+  validateHint,
   onConfirm,
   onCancel,
 }: {
   title: string;
   label?: string;
   initial?: string;
+  placeholder?: string;
   confirmLabel: string;
   cancelLabel: string;
+  /** 危险操作：确认按钮使用警示样式 */
+  danger?: boolean;
+  /**
+   * 校验输入，接收原始值（未 trim）。返回 false 时禁用确认按钮。
+   * 默认要求非空。用于「必须逐字输入某个词」的不可逆操作强确认。
+   */
+  validate?: (value: string) => boolean;
+  /** 校验失败且已有输入时显示的提示 */
+  validateHint?: string;
   onConfirm: (value: string) => void;
   onCancel: () => void;
 }) {
   const [value, setValue] = useState(initial || "");
+  const ok = validate ? validate(value) : Boolean(value.trim());
+  const showHint = Boolean(validateHint) && !ok && value.length > 0;
   return (
     <Modal title={title} close={onCancel}>
       <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -499,21 +515,28 @@ export function PromptDialog({
         <input
           autoFocus
           value={value}
+          placeholder={placeholder}
+          aria-describedby={showHint ? `${title}-hint` : undefined}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            if (e.key === "Enter" && !e.nativeEvent.isComposing && ok) {
               e.preventDefault();
               onConfirm(value.trim());
             }
           }}
         />
       </label>
+      {showHint && (
+        <p className="hint" id={`${title}-hint`} style={{ margin: "8px 0 0" }}>
+          {validateHint}
+        </p>
+      )}
       <div className="row end" style={{ marginTop: 16 }}>
         <button onClick={onCancel}>{cancelLabel}</button>
         <button
-          className="primary"
+          className={danger ? "danger" : "primary"}
           data-fd-id="prompt-ok"
-          disabled={!value.trim()}
+          disabled={!ok}
           onClick={() => onConfirm(value.trim())}
         >
           {confirmLabel}

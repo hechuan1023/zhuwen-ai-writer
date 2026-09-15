@@ -480,6 +480,27 @@ function createMainWindow() {
         const translatedAiSettingsOk = await js(
           `Boolean([...document.querySelectorAll('.settings h3')].find(h=>h.textContent.includes('AI API connections'))&&[...document.querySelectorAll('.settings h3')].find(h=>h.textContent.includes('Prompt templates')))`,
         );
+        // 应用内确认弹窗：原生 confirm/prompt 已全部换成应用内弹窗。
+        // 这里验证「恢复默认模板」确实弹出可取消的确认框——点取消，不落地任何改动。
+        const dialogTriggeredOk = await js(
+          `(()=>{const btn=[...document.querySelectorAll('button')].find(b=>/Reset built-in templates|恢复默认模板/.test(b.textContent));if(!btn)return false;btn.click();return true})()`,
+        );
+        await wait(200);
+        const dialogOpenOk =
+          dialogTriggeredOk &&
+          (await js(
+            `Boolean(document.querySelector('[data-fd-id="confirm-ok"]'))`,
+          ));
+        await js(
+          `(()=>{const ok=document.querySelector('[data-fd-id="confirm-ok"]');const modal=ok&&ok.closest('.modal');if(!modal)return false;const btn=[...modal.querySelectorAll('button')].find(b=>b.getAttribute('data-fd-id')!=='confirm-ok');if(btn)btn.click();return true})()`,
+        );
+        await wait(200);
+        const dialogCloseOk = await js(
+          `!document.querySelector('[data-fd-id="confirm-ok"]')`,
+        );
+        const dialogOk = Boolean(
+          dialogTriggeredOk && dialogOpenOk && dialogCloseOk,
+        );
         const translatedAiPanelOk = await js(
           `document.querySelector('.right-panel .panel-head strong')?.textContent.includes('AI Writing Assistant')`,
         );
@@ -649,6 +670,7 @@ function createMainWindow() {
           languageOk,
           translatedSettingsOk,
           translatedAiSettingsOk,
+          dialogOk,
           translatedAiPanelOk,
           translatedLibraryOk,
           appearanceOk,
@@ -691,7 +713,7 @@ function createMainWindow() {
           }
         }
         console.log(
-          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n reference_picker typography_settings daily_goal database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent ai_float_shared summary_modal library_kinds relation_graph relation_expand library_detail ${status} ${out}`,
+          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n reference_picker typography_settings daily_goal database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared summary_modal library_kinds relation_graph relation_expand library_detail ${status} ${out}`,
         );
         app.exit(0);
       } catch (e) {

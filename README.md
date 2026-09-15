@@ -47,11 +47,23 @@
 - 移除旧首页残留类：`.shelf-head`、`.shelf-tools`、`.book-info`、`.panel-tabs`、`.status .goal-bar`、`.topbar-sep`、`.project-head`、`.project-mark`、`.zoom-controls`
 - 界面冒烟失败文件 `artifacts/ui-smoke-error.txt` 改为开跑前先清理，不再残留陈旧错误
 
+### 应用内弹窗替换原生 confirm / prompt
+
+- 11 处浏览器原生弹窗（9 处 `confirm`、2 处 `prompt`）全部改为应用内弹窗：
+  与整体视觉一致、支持键盘与焦点陷阱，且不再阻塞渲染进程
+- `PromptDialog` 新增 `validate` / `validateHint` / `danger`，可表达「必须逐字输入确认词」
+- **不可逆删除的保护语义未削弱**：回收站的永久删除（单条记录 / 整本小说）依旧要求
+  逐字输入 `永久删除`（英文 `DELETE`）才能提交，且主进程 `trash:purge` 仍二次校验该字段
+- 确认词抽为纯函数模块 `src/ui/trash-confirm.ts`，与主进程校验的字面量显式绑定，并补 5 项单测
+- 说明：原生 `prompt` 不支持首尾空白，应用内弹窗容忍首尾空白（仅此一处放宽），
+  其余写法（`确定`、`永久`、另一种语言下的词）一律拒绝
+- 复用 `Modal` 既有的嵌套支持（仅最顶层响应 Esc/Tab）；工作台 Esc 关闭顺序已纳入待确认状态
+
 ## 测试
 
-- unit **54/54**
+- unit **59/59**
 - SMOKE_OK
-- UI_SMOKE_OK（30 项断言，含 `goal_scope_home`、`goal_scope_workspace`、`reduce_motion_independent`）
+- UI_SMOKE_OK（31 项断言，含 `goal_scope_home`、`goal_scope_workspace`、`reduce_motion_independent`、`confirm_dialog`）
 
 ## 安装包
 

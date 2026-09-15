@@ -25,7 +25,15 @@
 
 ## 验证习惯
 
-- 交付前跑：`npm run build`（双 tsconfig 类型检查）→ `npm run test:unit`（vitest）→ `npm test`（DB 冒烟）→ `npm run test:ui`（界面冒烟）。
+- 交付前跑：`npm run build`（双 tsconfig 类型检查）→ `npm run test:unit`（vitest）→ `npm test`（DB 冒烟）→ 界面冒烟。
+- **界面冒烟在本机自动化环境必须绕开两个坑**，否则会误判成代码回归：
+  1. 运行环境注入了 `ELECTRON_RUN_AS_NODE=1`，会让 Electron 退化成纯 Node，报
+     `TypeError: Cannot read properties of undefined (reading 'setPath')`。
+     必须先 `env -u ELECTRON_RUN_AS_NODE`。
+  2. 无 GPU 时需 `--disable-gpu --no-sandbox --disable-gpu-compositing`，
+     否则报 `GPU process isn't usable. Goodbye.`。
+  完整命令：`env -u ELECTRON_RUN_AS_NODE ZHUWEN_UI_SMOKE=1 ./node_modules/electron/dist/electron.exe . --disable-gpu --no-sandbox --disable-gpu-compositing`
+  （`npm run test:ui` 不含这两个开关，直接调用会失败。）
 - macOS 构建与钥匙串**必须真机验证**，Windows 通过不代表 macOS 通过。
 - 打包后要报告文件名、大小、SHA-256、测试日期，并区分「打包应用启动验证」与「安装器安装/升级验证」。
 

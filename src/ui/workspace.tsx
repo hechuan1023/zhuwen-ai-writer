@@ -11,7 +11,7 @@ import {
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import { api, fmt, time, tx, UiLanguage, Empty, Modal, AnyRow, readerFonts, emptyDoc } from "./shared";
+import { api, fmt, time, tx, UiLanguage, Empty, Modal, ConfirmDialog, AnyRow, readerFonts, emptyDoc } from "./shared";
 import { NovelEdit } from "./novel-edit";
 import { DailyGoalMeter } from "./daily-goal";
 import { WritingStatsCenter } from "./stats-center";
@@ -148,7 +148,14 @@ export function Workspace({
     [paletteOpen, setPaletteOpen] = useState(false),
     [batchMode, setBatchMode] = useState(false),
     [checkedIds, setCheckedIds] = useState<string[]>([]),
-    [batchTarget, setBatchTarget] = useState("");
+    [batchTarget, setBatchTarget] = useState(""),
+    // 移入回收站前的待确认目标（章节 / 卷 / 批量章节）
+    [pendingTrash, setPendingTrash] = useState<
+      | { kind: "chapter"; id: string; title: string }
+      | { kind: "volume"; id: string; title: string }
+      | { kind: "chapters"; ids: string[] }
+      | null
+    >(null);
   const [theme, setTheme] = useState<"light" | "warm" | "dark">("warm"),
     [uiDensity, setUiDensity] = useState<"compact" | "comfortable">("compact"),
     [focusZen, setFocusZen] = useState(false),
@@ -737,6 +744,7 @@ export function Workspace({
         setFindOpen(true);
       }
       if (e.key === "Escape") {
+        if (pendingTrash) return setPendingTrash(null);
         if (paletteOpen) return setPaletteOpen(false);
         if (ctxMenu) return setCtxMenu(null);
         if (modal) return setModal(null);
@@ -755,6 +763,7 @@ export function Workspace({
     ctxMenu,
     modal,
     titleModal,
+    pendingTrash,
     searchOpen,
     statsOpen,
     summaryOpen,
@@ -864,22 +873,12 @@ export function Workspace({
         if (r.ok) load(r.data.id);
         else notify(r.error || tr("章节复制失败", "Could not duplicate chapter"));
       } else if (action === "trash") {
-        if (!confirm(tr(`将“${m.title}”移入回收站？`, `Move “${m.title}” to Trash?`))) return;
-        if (m.id === chapter?.id && !(await save(true))) return;
-        const r = await api("chapters:trash", m.id);
-        if (r.ok) load();
-        else notify(r.error || tr("章节删除失败", "Could not move chapter to Trash"));
+        setPendingTrash({ kind: "chapter", id: m.id, title: m.title });
       }
     } else if (action === "rename") {
       setTitleModal({ mode: "rename-volume", id: m.id, value: m.title });
     } else if (action === "trash") {
-      if (
-        !confirm(tr(`删除卷“${m.title}”？卷内章节会一并移入回收站，可在回收站恢复。`, `Delete volume “${m.title}”? Its chapters will also move to Trash and can be restored.`))
-      )
-        return;
-      const r = await api("volumes:trash", m.id);
-      if (r.ok) load();
-      else notify(r.error || tr("卷删除失败", "Could not delete volume"));
+      setPendingTrash({ kind: "volume", id: m.id, title: m.title });
     }
   }
   async function dropChapter(
@@ -1382,33 +1381,9 @@ export function Workspace({
                       <button
                         className="danger-text"
                         disabled={!checkedIds.length}
-                        onClick={async () => {
-                          if (
-                            !confirm(
-                              tr(
-                                `将选中的 ${checkedIds.length} 章移入回收站？`,
-                                `Move ${checkedIds.length} selected chapters to trash?`,
-                              ),
-                            )
-                          )
-                            return;
-                          if (chapter && checkedIds.includes(chapter.id))
-                            await save(true);
-                          const r = await api("chapters:batchTrash", {
-                            ids: checkedIds,
-                          });
-                          if (r.ok) {
-                            notify(
-                              tr(
-                                `已移入回收站 ${r.data} 章`,
-                                `${r.data} chapters moved to trash`,
-                              ),
-                            );
-                            setCheckedIds([]);
-                            load();
-                          } else
-                            notify(r.error || tr("删除失败", "Delete failed"));
-                        }}
+                        onClick={() =>
+                          setPendingTrash({ kind: "chapters", ids: checkedIds })
+                        }
                       >
                         {tr("删除", "Delete")}
                       </button>
@@ -1728,6 +1703,63 @@ export function Workspace({
             </div>
           </div>
         </Modal>
+      )}
+      {pendingTrash && (
+        <ConfirmDialog
+          title={tr("移入回收站", "Move to Trash")}
+          message={
+            pendingTrash.kind === "chapter"
+              ? tr(
+                  `将“${pendingTrash.title}”移入回收站？`,
+                  `Move “${pendingTrash.title}” to Trash?`,
+                )
+              : pendingTrash.kind === "volume"
+                ? tr(
+                    `删除卷“${pendingTrash.title}”？卷内章节会一并移入回收站，可在回收站恢复。`,
+                    `Delete volume “${pendingTrash.title}”? Its chapters will also move to Trash and can be restored.`,
+                  )
+                : tr(
+                    `将选中的 ${pendingTrash.ids.length} 章移入回收站？`,
+                    `Move ${pendingTrash.ids.length} selected chapters to trash?`,
+                  )
+          }
+          confirmLabel={tr("移入回收站", "Move to Trash")}
+          cancelLabel={tr("取消", "Cancel")}
+          danger
+          onCancel={() => setPendingTrash(null)}
+          onConfirm={async () => {
+            const target = pendingTrash;
+            if (!target) return;
+            setPendingTrash(null);
+            if (target.kind === "chapter") {
+              if (target.id === chapter?.id && !(await save(true))) return;
+              const r = await api("chapters:trash", target.id);
+              if (r.ok) load();
+              else
+                notify(
+                  r.error ||
+                    tr("章节删除失败", "Could not move chapter to Trash"),
+                );
+            } else if (target.kind === "volume") {
+              const r = await api("volumes:trash", target.id);
+              if (r.ok) load();
+              else notify(r.error || tr("卷删除失败", "Could not delete volume"));
+            } else {
+              if (chapter && target.ids.includes(chapter.id)) await save(true);
+              const r = await api("chapters:batchTrash", { ids: target.ids });
+              if (r.ok) {
+                notify(
+                  tr(
+                    `已移入回收站 ${r.data} 章`,
+                    `${r.data} chapters moved to trash`,
+                  ),
+                );
+                setCheckedIds([]);
+                load();
+              } else notify(r.error || tr("删除失败", "Delete failed"));
+            }
+          }}
+        />
       )}
       {paletteOpen && (
         <CommandPalette
