@@ -1,0 +1,42 @@
+# ===== 依赖 =====
+node_modules/
+
+# ===== 构建产物（npm run build 生成，可随时重建）=====
+dist/
+dist-electron/
+*.tsbuildinfo
+
+# ===== 打包产物 =====
+# 体积大（单个安装包约 96 MB），不入库。
+# 已发布的安装包版本 / 大小 / SHA-256 记录在 README.md。
+release/
+release-*/
+win-unpacked*/
+
+# ===== 测试产物（冒烟截图与日志）=====
+artifacts/
+
+# ===== 本地设计参考工作区 =====
+.frontend-design/
+
+# ===== 源码快照备份 =====
+.backup/
+
+# ===== 密钥与本地凭据（绝不入库）=====
+# 说明：API Key 实际存放于 Electron userData/secrets.json，位于系统 AppData，
+# 不在仓库内；此处为防御性排除，避免有人把密钥复制进项目后被误提交。
+secrets.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ===== 操作系统 / 编辑器 =====
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+*.log
+*.tmp

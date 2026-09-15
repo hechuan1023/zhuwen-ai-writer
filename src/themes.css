@@ -1,0 +1,66 @@
+.theme-light {
+  --bg: #f3f4f4;
+  --panel: #e8ebea;
+  --paper: #fff;
+  --line: #d5d9d7;
+}
+.theme-warm {
+  --bg: #f4f1e9;
+  --panel: #ebe8df;
+  --paper: #fffdf8;
+  --line: #d8d4ca;
+}
+.theme-dark {
+  --bg: #242725;
+  --panel: #2d312f;
+  --paper: #202321;
+  --line: #464c48;
+  --muted: #a9aea9;
+  --accent: #72998a;
+  --accent2: #3c5048;
+  color: #e3e5e1;
+}
+.theme-dark .topbar,
+.theme-dark .status,
+.theme-dark button,
+.theme-dark input,
+.theme-dark textarea,
+.theme-dark select,
+.theme-dark .context-chip,
+.theme-dark .library-list article {
+  background: #2b2f2d;
+  color: #e3e5e1;
+}
+.theme-dark .chapter-row:hover {
+  background: #373c39;
+}
+.theme-dark .chapter-row.active {
+  background: #3d5048;
+}
+.chapter-row .more {
+  display: none;
+  border: 0;
+  background: transparent;
+  padding: 0 2px;
+  font-size: 9px;
+}
+.chapter-row:hover .more {
+  display: block;
+}
+.resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  z-index: 4;
+  cursor: col-resize;
+}
+.resizer.right-edge {
+  right: -3px;
+}
+.resizer.left-edge {
+  left: -3px;
+}
+.resizer:hover {
+  background: #72998a66;
+}

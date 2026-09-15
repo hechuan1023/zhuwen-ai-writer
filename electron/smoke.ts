@@ -1,0 +1,68 @@
+import { strict as assert } from 'node:assert'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { countText, localDate, newId, openDatabase, timestamp } from './database'
+
+const dir=mkdtempSync(join(tmpdir(),'zhuwen-smoke-'))
+try{
+  const path=join(dir,'test.sqlite3'),db=openDatabase(path),t=timestamp(),novel=newId(),chapter=newId()
+  db.prepare('INSERT INTO novels(id,title,author,created_at,updated_at) VALUES(?,?,?,?,?)').run(novel,'中文测试小说','测试作者',t,t)
+  db.prepare('INSERT INTO chapters(id,novel_id,title,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(chapter,novel,'第一章',0,t,t)
+  const chinese='夜色落在城墙上。\n她没有回头，继续向北走。'
+  const content={type:'doc',content:chinese.split('\n').map(text=>({type:'paragraph',content:[{type:'text',text}]}))}
+  const save=db.prepare('UPDATE chapters SET content_json=?,plain_text=?,word_count=?,revision=revision+1 WHERE id=? AND revision=?')
+  assert.equal(save.run(JSON.stringify(content),chinese,countText(chinese),chapter,0).changes,1,'首次修订保存')
+  assert.equal(save.run('{}','旧内容',3,chapter,0).changes,0,'过期修订必须被拒绝')
+  const row:any=db.prepare('SELECT * FROM chapters WHERE id=?').get(chapter)
+  assert.equal(row.plain_text,chinese,'中文正文完整持久化')
+  assert.equal(row.revision,1,'修订号递增')
+  db.prepare('UPDATE chapters SET deleted_at=? WHERE id=?').run(timestamp(),chapter)
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM chapters WHERE novel_id=? AND deleted_at IS NULL').get(novel) as any).n,0,'软删除隐藏')
+  db.prepare('UPDATE chapters SET deleted_at=NULL WHERE id=?').run(chapter)
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM chapters WHERE novel_id=? AND deleted_at IS NULL').get(novel) as any).n,1,'回收站恢复')
+  assert.equal(countText('你 好，世界！'),6,'空白不计且标点计数')
+  assert.equal(countText('你 好，世界！',false),4,'可排除标点')
+  assert.equal(localDate(new Date(2026,8,12,0,30)),'2026-09-12','写作日期使用本地日历日期')
+  db.prepare('UPDATE novels SET deleted_at=? WHERE id=?').run(timestamp(),novel)
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM novels WHERE id=? AND deleted_at IS NULL').get(novel) as any).n,0,'小说软删除对外隐藏')
+  db.prepare('UPDATE novels SET deleted_at=NULL WHERE id=?').run(novel)
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM novels WHERE id=? AND deleted_at IS NULL').get(novel) as any).n,1,'小说回收站恢复')
+  const v1=newId(),v2=newId(),c1=newId(),c2=newId(),c3=newId()
+  db.prepare('INSERT INTO volumes(id,novel_id,title,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(v1,novel,'第一卷',0,t,t)
+  db.prepare('INSERT INTO volumes(id,novel_id,title,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(v2,novel,'第二卷',1,t,t)
+  const addc=(id:string,vol:string|null,title:string,order:number)=>db.prepare('INSERT INTO chapters(id,novel_id,volume_id,title,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run(id,novel,vol,title,order,t,t)
+  addc(c1,v1,'甲',0); addc(c2,v1,'乙',1); addc(c3,v2,'丙',0)
+  const order=[{id:c1,volumeId:v1 as string|null},{id:c2,volumeId:v2 as string|null},{id:c3,volumeId:v2 as string|null}]
+  db.transaction(()=>{order.forEach((x,i)=>db.prepare('UPDATE chapters SET volume_id=?,sort_order=?,updated_at=? WHERE id=?').run(x.volumeId,i,t,x.id))})()
+  const inV2:any[]=db.prepare('SELECT id FROM chapters WHERE novel_id=? AND volume_id=? ORDER BY sort_order').all(novel,v2)
+  assert.deepEqual(inV2.map((x:any)=>x.id),[c2,c3],'跨卷拖动后章节归属与顺序正确')
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM chapters WHERE novel_id=?').get(novel) as any).n,4,'排序不产生丢失或重复')
+  const conv=newId()
+  db.prepare('INSERT INTO ai_conversations(id,novel_id,title,created_at,updated_at) VALUES(?,?,?,?,?)').run(conv,novel,'测试会话',t,t)
+  db.prepare('INSERT INTO ai_messages(id,conversation_id,role,content,created_at) VALUES(?,?,?,?,?)').run(newId(),conv,'user','你好',t)
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM ai_messages WHERE conversation_id=?').get(conv) as any).n,1,'会话消息持久化')
+  db.prepare('UPDATE ai_conversations SET deleted_at=? WHERE id=?').run(t,conv)
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM ai_conversations WHERE id=? AND deleted_at IS NULL').get(conv) as any).n,0,'会话软删除隐藏')
+  db.prepare('DELETE FROM novels WHERE id=?').run(novel)
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM chapters WHERE novel_id=?').get(novel) as any).n,0,'永久删除小说级联清除章节')
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM ai_conversations WHERE novel_id=?').get(novel) as any).n,0,'永久删除小说级联清除会话')
+  const schemaVersion:any=db.prepare('SELECT MAX(version) v FROM schema_migrations').get()
+  assert.equal(schemaVersion.v,7,'数据库迁移到版本 7')
+  const chapterColumns:any[]=db.prepare('PRAGMA table_info(chapters)').all()
+  assert.ok(chapterColumns.some(x=>x.name==='summary'),'章节表包含摘要字段')
+  assert.ok(chapterColumns.some(x=>x.name==='summary_revision'),'章节表包含摘要修订字段')
+  const indexes:any[]=db.prepare("PRAGMA index_list('chapters')").all()
+  assert.ok(indexes.some(x=>x.name==='idx_chapters_search_order'),'章节搜索顺序索引存在')
+  const aiMessageIndexes:any[]=db.prepare("PRAGMA index_list('ai_messages')").all()
+  assert.ok(aiMessageIndexes.some(x=>x.name==='idx_ai_messages_conversation'),'AI 消息会话索引存在')
+  const connectionColumns:any[]=db.prepare('PRAGMA table_info(api_connections)').all()
+  assert.ok(!connectionColumns.some(x=>/key|secret/i.test(x.name)),'连接表结构不允许 API Key 字段')
+  const dbBytes=readFileSync(path).toString('utf8')
+  assert.ok(!dbBytes.includes('sk-test-should-never-appear'),'数据库不含 API Key 测试串')
+  db.close()
+  console.log('SMOKE_OK migration unicode_save optimistic_revision trash_restore word_count local_calendar_date secret_schema_absence novel_trash chapter_reorder ai_conversation cascade_purge summary_schema ai_indexes')
+}finally{
+  try{rmSync(dir,{recursive:true,force:true,maxRetries:5,retryDelay:100})}catch{ /* temp cleanup is best-effort */ }
+}
+process.exit(0)

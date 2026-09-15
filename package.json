@@ -1,0 +1,58 @@
+{
+  "name": "zhuwen",
+  "version": "0.4.7",
+  "private": true,
+  "description": "铸文——本地优先的小说写作桌面应用",
+  "main": "dist-electron/main.js",
+  "author": "Zhuwen",
+  "license": "MIT",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
+    "build": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.node.json && vite build",
+    "start": "electron .",
+    "icons": "electron scripts/make-icon.js",
+    "test": "tsc -p tsconfig.node.json && electron dist-electron/smoke.js",
+    "test:unit": "vitest run",
+    "test:ui": "npm run build && cross-env ZHUWEN_UI_SMOKE=1 electron .",
+    "dist": "npm run build && electron-builder --win nsis",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "pack": "npm run build && electron-builder --dir"
+  },
+  "dependencies": {
+    "docx": "^9.5.1"
+  },
+  "devDependencies": {
+    "@tiptap/extension-placeholder": "^3.4.1",
+    "@tiptap/react": "^3.4.1",
+    "@tiptap/starter-kit": "^3.4.1",
+    "@types/node": "^24.3.1",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@types/sanitize-html": "^2.16.0",
+    "@vitejs/plugin-react": "^5.0.2",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.0.0",
+    "electron": "43.4.0",
+    "electron-builder": "^26.0.12",
+    "marked": "^16.2.1",
+    "nanoid": "^5.1.5",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "sanitize-html": "^2.17.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.5",
+    "vitest": "^3.2.4",
+    "wait-on": "^8.0.4"
+  },
+  "build": {
+    "appId": "cn.zhuwen.app",
+    "productName": "铸文",
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "files": ["dist/**/*", "dist-electron/**/*", "package.json"],
+    "directories": { "output": "release" },
+    "win": { "target": "nsis", "icon": "build/icon.ico", "artifactName": "Zhuwen-Setup-${version}.${ext}" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true, "installerIcon": "build/icon.ico", "uninstallerIcon": "build/icon.ico" },
+    "mac": { "target": ["dmg", "zip"], "category": "public.app-category.productivity", "icon": "build/icon.png", "artifactName": "Zhuwen-${version}-${arch}.${ext}" }
+  }
+}

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a6055"/>
+      <stop offset="1" stop-color="#33423a"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <text x="500" y="706" font-family="'Noto Serif SC','Source Han Serif SC',SimSun,serif"
+        font-size="560" font-weight="700" fill="#f5f2e9" text-anchor="middle">铸</text>
+  <rect x="668" y="668" width="192" height="192" rx="30" fill="#bf4a30"/>
+  <text x="764" y="816" font-family="'Noto Serif SC','Source Han Serif SC',SimSun,serif"
+        font-size="128" font-weight="700" fill="#fdf3e7" text-anchor="middle">文</text>
+</svg>

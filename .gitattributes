@@ -1,0 +1,14 @@
+# 仓库内源码统一使用 LF。
+# 本项目现有源码全部为 LF（已逐字节确认）。此项可防止在 Windows 上以
+# core.autocrlf=true 克隆后工作区被改写成 CRLF，进而产生「整个文件都变了」
+# 的伪 diff，掩盖真实改动。
+* text=auto eol=lf
+
+# 二进制资源：禁止换行符转换，且不参与文本 diff / 合并
+*.ico   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.exe   binary
+*.dll   binary
+*.pak   binary
