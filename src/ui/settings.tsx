@@ -688,6 +688,18 @@ export function AppearanceSettings({
           onChange={(e) => onChange({ reduceTransparency: e.target.checked } as any)}
         />
       </label>
+      <label className="setting-switch">
+        <span>
+          <b>{tr("减少动态效果", "Reduce motion")}</b>
+          <small>{tr("关闭过渡与动画，保留必要的状态变化", "Turn off transitions and animations while keeping essential state changes")}</small>
+        </span>
+        <input
+          type="checkbox"
+          data-fd-id="settings-reduce-motion"
+          checked={Boolean((value as any).reduceMotion)}
+          onChange={(e) => onChange({ reduceMotion: e.target.checked } as any)}
+        />
+      </label>
       <h3>{tr("界面密度", "Interface density")}</h3>
       <div className="density-options" role="group" aria-label={tr("界面密度", "Interface density")}>
         <button className={value.uiDensity === "compact" ? "active" : ""} onClick={() => onChange({ uiDensity: "compact" })}>

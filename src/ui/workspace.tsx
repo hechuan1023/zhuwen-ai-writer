@@ -16,6 +16,7 @@ import { NovelEdit } from "./novel-edit";
 import { DailyGoalMeter } from "./daily-goal";
 import { WritingStatsCenter } from "./stats-center";
 import { Select } from "./select";
+import { applyReduceMotion } from "./motion";
 
 const AiPanel = lazy(() => import("./ai-panel").then((m) => ({ default: m.AiPanel })));
 const LibraryPanel = lazy(() => import("./library-panel").then((m) => ({ default: m.LibraryPanel })));
@@ -170,7 +171,8 @@ export function Workspace({
       "cover",
     ),
     [paperOpacity, setPaperOpacity] = useState(0.9),
-    [reduceTransparency, setReduceTransparency] = useState(false);
+    [reduceTransparency, setReduceTransparency] = useState(false),
+    [reduceMotion, setReduceMotion] = useState(false);
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const languageRef = useRef(language);
   languageRef.current = language;
@@ -197,6 +199,7 @@ export function Workspace({
     backgroundFit,
     paperOpacity,
     reduceTransparency,
+    reduceMotion,
   });
   appearance.current = {
     theme,
@@ -219,6 +222,7 @@ export function Workspace({
     backgroundFit,
     paperOpacity,
     reduceTransparency,
+    reduceMotion,
   };
   const persistTimer = useRef<number | undefined>(undefined);
   const pendingAppearance = useRef<Partial<typeof appearance.current>>({});
@@ -358,6 +362,7 @@ export function Workspace({
           setBackgroundFit(r.data.backgroundFit);
         setPaperOpacity(bounded(r.data.paperOpacity, 0.45, 1, 0.9));
         setReduceTransparency(Boolean(r.data.reduceTransparency));
+        setReduceMotion(Boolean(r.data.reduceMotion));
       }
     });
     api<any>("preferences:get", "writing").then((r) => {
@@ -378,7 +383,9 @@ export function Workspace({
       "reduce-transparency",
       reduceTransparency,
     );
-  }, [theme, reduceTransparency]);
+    // 与「减少透明效果」相互独立：只关动画，不影响材质
+    applyReduceMotion(reduceMotion);
+  }, [theme, reduceTransparency, reduceMotion]);
   useEffect(() => {
     const end = () => void api("writing:focusEnd");
     const onVis = () => {
@@ -1763,6 +1770,7 @@ export function Workspace({
               backgroundFit,
               paperOpacity,
               reduceTransparency,
+              reduceMotion,
             }}
             onPersonalization={(next) => {
               if (next.theme !== undefined) setTheme(next.theme);
@@ -1785,6 +1793,8 @@ export function Workspace({
                 setPaperOpacity(next.paperOpacity);
               if ((next as any).reduceTransparency !== undefined)
                 setReduceTransparency(Boolean((next as any).reduceTransparency));
+              if ((next as any).reduceMotion !== undefined)
+                setReduceMotion(Boolean((next as any).reduceMotion));
               persistAppearance(next);
             }}
           />

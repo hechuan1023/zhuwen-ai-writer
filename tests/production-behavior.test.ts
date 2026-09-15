@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   celebrateKey,
   goalScopeKey,
+  goalScopeLabel,
   hasCelebrated,
   markCelebrated,
   shouldCelebrateGoal,
@@ -17,6 +18,17 @@ describe("goal celebrate production logic", () => {
     expect(goalScopeKey(null)).toBe("all");
     expect(goalScopeKey("n1")).toBe("novel:n1");
     expect(goalScopeKey("n1")).not.toEqual(goalScopeKey("n2"));
+  });
+
+  it("labels the goal scope so all-novels and single-novel never look alike", () => {
+    expect(goalScopeLabel(null)).toBe("全部作品");
+    expect(goalScopeLabel(null, "en")).toBe("All novels");
+    expect(goalScopeLabel("n1")).toBe("本书");
+    expect(goalScopeLabel("n1", "en")).toBe("This book");
+    // 空字符串等同「未指定」，必须落到全部作品而不是空标签
+    expect(goalScopeLabel("")).toBe("全部作品");
+    expect(goalScopeLabel(undefined)).toBe("全部作品");
+    expect(goalScopeLabel("")).not.toBe(goalScopeLabel("n1"));
   });
 
   it("does not celebrate on first load when already at goal", () => {

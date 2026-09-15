@@ -9,7 +9,6 @@
   --line: #d8d4ca;
   --muted: #777970;
   --accent: #567166;
-  --accent2: #dfe9e3;
   --danger: #a24d47;
   --shadow: 0 16px 48px #30342d20;
 }
@@ -101,33 +100,6 @@ button:disabled {
   background:
     radial-gradient(circle at 85% 0, #e3ebe5 0, transparent 32%), var(--bg);
 }
-.shelf-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: auto;
-  max-width: 1200px;
-}
-.shelf-head h1 {
-  font-family: STKaiti, KaiTi, serif;
-  letter-spacing: 0.25em;
-  font-size: 38px;
-  margin: 0;
-}
-.shelf-head p {
-  color: var(--muted);
-  margin: 5px 0;
-}
-.shelf-tools {
-  display: flex;
-  gap: 10px;
-  margin: 34px auto 24px;
-  max-width: 1200px;
-}
-.shelf-tools input {
-  flex: 1;
-  max-width: 440px;
-}
 .shelf input,
 .shelf select,
 .search,
@@ -201,30 +173,6 @@ button:disabled {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-.book-info {
-  min-width: 0;
-  flex: 1;
-}
-.book-info h2 {
-  font-size: 18px;
-  margin: 6px 0 7px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.book-info p {
-  font-size: 13px;
-  color: var(--muted);
-  margin: 0 0 18px;
-}
-.book-info small {
-  display: block;
-  color: var(--muted);
-  margin: 5px 0;
-}
-.book-info .row {
-  margin-top: 10px;
 }
 .workspace {
   height: 100%;
@@ -432,13 +380,6 @@ button:disabled {
 .dot.done {
   background: #558066;
 }
-.panel-tabs {
-  padding: 8px;
-  border-top: 1px solid var(--line);
-}
-.panel-tabs button {
-  width: 100%;
-}
 .editor-area {
   flex: 1;
   min-width: 380px;
@@ -565,23 +506,6 @@ button:disabled {
   padding: 1px 5px;
   font-size: 10px;
 }
-.status .goal-bar {
-  width: 72px;
-  height: 6px;
-  border-radius: 3px;
-  background: #e2ded4;
-  overflow: hidden;
-  display: inline-block;
-}
-.status .goal-bar i {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.2s;
-}
-.theme-dark .status .goal-bar {
-  background: #3a3f3c;
-}
 .workspace.focus .editor-area {
   max-width: none;
 }
@@ -600,14 +524,8 @@ button:disabled {
   gap: 4px;
   align-items: center;
 }
-.topbar-sep {
-  width: 1px;
-  height: 18px;
-  background: var(--line);
-  flex: none;
-}
 .topbar button.active {
-  background: var(--accent2);
+  background: var(--accent-2);
   border-color: #adc1b5;
 }
 .typewriter-on .editor-scroll {
@@ -929,7 +847,7 @@ button:disabled {
   font-size: 12px;
 }
 .kind-tabs .active {
-  background: var(--accent2);
+  background: var(--accent-2);
   border-color: #adc1b5;
 }
 .library-list {
@@ -1002,7 +920,7 @@ button:disabled {
   stroke-width: 1.5;
 }
 .relation-graph circle {
-  fill: var(--accent2);
+  fill: var(--accent-2);
   stroke: var(--accent);
 }
 .relation-graph .node-label {
@@ -1121,6 +1039,20 @@ button:disabled {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+/* 应用内「减少动态效果」与系统偏好相互独立，故不能只靠上面的媒体查询。
+   注意：这条只管 CSS 动画；JS 驱动的动画由 src/ui/motion.ts 统一判断。 */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+.reduce-motion .workspace.focus.focus-minimal .topbar,
+.reduce-motion .workspace.focus.focus-minimal .status {
+  transition: none;
 }
 .settings section,
 .io section {
@@ -1473,7 +1405,7 @@ button:disabled {
   font-size: 13px;
 }
 .ctx-menu button:hover {
-  background: var(--accent2);
+  background: var(--accent-2);
 }
 .title-modal input {
   width: 100%;
@@ -1590,7 +1522,7 @@ button:disabled {
   font-size: 13px;
 }
 .palette-list button.active {
-  background: var(--accent2);
+  background: var(--accent-2);
 }
 .palette-list button small {
   color: var(--muted);
@@ -1628,7 +1560,7 @@ button:disabled {
   flex-wrap: wrap;
   padding: 8px 10px;
   border-top: 1px solid var(--line);
-  background: var(--accent2);
+  background: var(--accent-2);
 }
 .batch-bar select {
   max-width: 120px;
@@ -1637,7 +1569,7 @@ button:disabled {
   flex: none;
 }
 .chapter-row.checked {
-  background: var(--accent2);
+  background: var(--accent-2);
 }
 .last-read {
   overflow: hidden;

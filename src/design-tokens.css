@@ -96,7 +96,7 @@
   --faint: #6d7773;
   --accent: #6fb39a;
   --accent-soft: rgba(111, 179, 154, 0.14);
-  --accent-2: #24352f;
+  --accent-2: #3c5048;
   --accent-ink: #0f1613;
   --success: #6fb39a;
   --warning: #c9a66b;
@@ -186,6 +186,18 @@
   white-space: nowrap;
   transition: color var(--dur) var(--ease);
 }
+.goal-meter__scope {
+  color: var(--faint);
+  font-weight: 500;
+}
+.goal-meter__sep {
+  color: var(--faint);
+  margin: 0 4px;
+}
+.goal-meter:hover .goal-meter__scope,
+.goal-meter:hover .goal-meter__sep {
+  color: var(--accent);
+}
 .goal-meter__label strong {
   color: var(--ink);
   font-weight: 600;
@@ -208,6 +220,11 @@
     transition: none;
     animation: none;
   }
+}
+.reduce-motion .goal-meter__fill,
+.reduce-motion .goal-meter__pulse {
+  transition: none;
+  animation: none;
 }
 
 /* 创作首页 */
@@ -619,25 +636,6 @@
   background: transparent;
 }
 
-/* 主题切换预览块 */
-.theme-swatch {
-  width: 100%;
-  height: 56px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--line);
-  display: flex;
-  align-items: stretch;
-  overflow: hidden;
-  margin-bottom: 8px;
-}
-.theme-swatch i {
-  flex: 1;
-}
-.theme-swatch .s-bg { background: var(--sw-bg); }
-.theme-swatch .s-panel { background: var(--sw-panel); }
-.theme-swatch .s-paper { background: var(--sw-paper); }
-.theme-swatch .s-accent { background: var(--sw-accent); flex: 0 0 28%; }
-
 /* ===== 统一选择控件 ===== */
 .zw-select {
   position: relative;
@@ -727,6 +725,8 @@
   .zw-select-pop { animation: none; }
   .zw-select-arrow { transition: none; }
 }
+.reduce-motion .zw-select-pop { animation: none; }
+.reduce-motion .zw-select-arrow { transition: none; }
 .zw-select-search {
   flex: none;
   margin: 8px;

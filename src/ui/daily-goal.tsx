@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { fmt, UiLanguage } from "./shared";
 import {
   goalScopeKey,
+  goalScopeLabel,
   localDateKey,
   markCelebrated,
   shouldCelebrateGoal,
 } from "./goal-celebrate";
+import { prefersReducedMotion } from "./motion";
 
 export type GoalMeterProps = {
   today: number;
@@ -16,10 +18,6 @@ export type GoalMeterProps = {
   /** 统计范围：全部作品或 novelId；勿只用页面名 */
   scope?: string | null;
 };
-
-function prefersReducedMotion() {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
 
 export function DailyGoalMeter({
   today,
@@ -94,19 +92,23 @@ export function DailyGoalMeter({
   const remaining = Math.max(0, dailyGoal - today);
   const done = hasGoal && today >= dailyGoal;
   const negative = today < 0;
+  // 统计范围必须可见：首页与工作台分别统计全部作品与单本作品，
+  // 若界面不标注，同一个「今日」会看起来互相矛盾。
+  const resolvedScopeLabel = goalScopeLabel(scope, language);
 
   return (
     <button
       type="button"
       className={`goal-meter tabular ${done ? "is-done" : ""} ${flash ? "goal-meter__pulse" : ""}`}
       data-fd-id="daily-goal-meter"
-      title={
+      data-scope={scopeKey}
+      title={`${resolvedScopeLabel} · ${
         hasGoal
           ? done
             ? tr("今日目标已达成", "Daily goal reached")
             : tr(`还差 ${fmt(remaining)} 字`, `${fmt(remaining)} words to go`)
           : tr("点击设置每日目标", "Click to set a daily goal")
-      }
+      }`}
       onClick={onOpenStats}
     >
       {!compact && (
@@ -118,6 +120,14 @@ export function DailyGoalMeter({
         </span>
       )}
       <span className="goal-meter__label">
+        {!compact && (
+          <>
+            <span className="goal-meter__scope">{resolvedScopeLabel}</span>
+            <span className="goal-meter__sep" aria-hidden="true">
+              ·
+            </span>
+          </>
+        )}
         {hasGoal ? (
           <>
             {tr("今日", "Today")} <strong>{fmt(display)}</strong>

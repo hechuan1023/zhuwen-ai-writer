@@ -21,7 +21,7 @@
   padding: 5px 8px;
 }
 .topbar button.active {
-  background: var(--accent2);
+  background: var(--accent-2);
   color: var(--accent);
 }
 .topbar .primary.active {
@@ -76,7 +76,7 @@
 }
 .toolbar-more[open] > summary,
 .toolbar-more > summary:hover {
-  background: var(--accent2);
+  background: var(--accent-2);
 }
 .toolbar-menu {
   position: absolute;
@@ -130,10 +130,10 @@
   font-size: 15px;
 }
 .workspace-rail button:hover {
-  background: var(--accent2);
+  background: var(--accent-2);
 }
 .workspace-rail button.active {
-  background: var(--accent2);
+  background: var(--accent-2);
   color: var(--accent);
   box-shadow: inset 2px 0 var(--accent);
   font-weight: 700;
@@ -185,66 +185,6 @@
 }
 .right-panel .quick-prompts button {
   flex: 0 0 auto;
-}
-.project-head {
-  height: 56px;
-  padding: 8px 9px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-}
-.project-head .project-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 7px;
-  display: grid;
-  place-items: center;
-  background: var(--accent);
-  color: white;
-  font-family: KaiTi, serif;
-}
-.project-head > div {
-  min-width: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-.project-head small {
-  color: var(--muted);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.project-head b {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-}
-.project-head button {
-  border: 0;
-  background: transparent;
-  padding: 5px;
-}
-.zoom-controls {
-  display: flex;
-  align-items: center;
-  height: 28px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  overflow: hidden;
-}
-.zoom-controls button {
-  border: 0;
-  border-radius: 0;
-  padding: 3px 7px;
-}
-.zoom-controls span {
-  min-width: 39px;
-  font-size: 10px;
-  text-align: center;
-  color: var(--muted);
 }
 .editor-area {
   position: relative;
@@ -302,7 +242,7 @@
 }
 .status-tools > button.active {
   color: var(--accent);
-  background: var(--accent2);
+  background: var(--accent-2);
 }
 .status-zoom {
   height: 22px;
@@ -351,7 +291,7 @@
   padding: 8px 10px;
 }
 .settings-nav button.active {
-  background: var(--accent2);
+  background: var(--accent-2);
   color: var(--accent);
   font-weight: 600;
 }
@@ -400,7 +340,7 @@
 .appearance-presets button.active {
   color: var(--accent);
   border-color: var(--accent);
-  background: var(--accent2);
+  background: var(--accent-2);
 }
 .density-options {
   display: grid;
@@ -420,7 +360,7 @@
 .density-options button.active {
   color: var(--accent);
   border-color: var(--accent);
-  background: var(--accent2);
+  background: var(--accent-2);
 }
 .density-comfortable .topbar { height: 50px; padding-inline: 12px; gap: 6px; }
 .density-comfortable .workspace-rail { width: 48px; gap: 9px; }
@@ -576,7 +516,7 @@
 .topbar-save {
   padding: 3px 7px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent2) 55%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 55%, transparent);
 }
 .left-panel,
 .right-panel {
@@ -650,10 +590,10 @@
   border-radius: 7px;
 }
 .chapter-row:hover {
-  background: color-mix(in srgb, var(--accent2) 42%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 42%, transparent);
 }
 .chapter-row.active {
-  background: var(--accent2);
+  background: var(--accent-2);
   box-shadow: inset 2px 0 var(--accent);
 }
 .chapter-row:focus-visible {
@@ -769,7 +709,7 @@
 }
 .context-box > summary:hover,
 .quick-prompt-box > summary:hover {
-  background: color-mix(in srgb, var(--accent2) 38%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 38%, transparent);
 }
 .context-content {
   padding: 0 10px 9px;
@@ -794,7 +734,7 @@
   margin-left: 46px;
   padding: 9px 11px;
   border-radius: 11px 11px 3px 11px;
-  background: color-mix(in srgb, var(--accent2) 82%, var(--paper));
+  background: color-mix(in srgb, var(--accent-2) 82%, var(--paper));
 }
 .message.assistant {
   margin-right: 12px;
@@ -888,7 +828,7 @@
 .search-progress i {
   position: absolute;
   inset: 0 auto 0 0;
-  background: color-mix(in srgb, var(--accent2) 86%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 86%, transparent);
   transition: width 140ms ease;
 }
 .search-progress span {
@@ -916,7 +856,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--accent2);
+  background: var(--accent-2);
   transition: width 120ms ease;
 }
 .library-detail-surface {

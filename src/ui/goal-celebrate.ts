@@ -12,6 +12,19 @@ export function goalScopeKey(novelId: string | null | undefined) {
   return novelId ? `novel:${novelId}` : "all";
 }
 
+/**
+ * 统计范围的可读名称。
+ * 首页统计全部作品、工作台只统计当前作品，两者数值天然不同；
+ * 界面必须标注范围，否则同一个「今日」会看起来自相矛盾。
+ */
+export function goalScopeLabel(
+  novelId: string | null | undefined,
+  language: "zh-CN" | "en" = "zh-CN",
+) {
+  if (novelId) return language === "en" ? "This book" : "本书";
+  return language === "en" ? "All novels" : "全部作品";
+}
+
 export function celebrateKey(
   scope: string,
   date: string,

@@ -3,6 +3,7 @@ import { api, useAiSessionStore, Empty, AnyRow, UiLanguage, UiLanguageContext } 
 import { CreativeHome } from "./ui/home";
 import { Onboarding } from "./ui/onboarding";
 import { patchAppearance, markOnboardingDone } from "./ui/prefs";
+import { applyReduceMotion } from "./ui/motion";
 
 const Workspace = lazy(() => import("./ui/workspace"));
 const AiPanel = lazy(() =>
@@ -54,6 +55,7 @@ export default function App() {
         "reduce-transparency",
         Boolean(result.data.reduceTransparency),
       );
+      applyReduceMotion(Boolean(result.data.reduceMotion));
     });
     api<AnyRow>("preferences:get", "onboarding").then((r) => {
       if (r.ok && !r.data?.done) setOnboarding(true);
@@ -156,6 +158,7 @@ export function AiFloatApp() {
       }
       if (result.ok && result.data?.reduceTransparency)
         document.documentElement.classList.add("reduce-transparency");
+      if (result.ok) applyReduceMotion(Boolean(result.data?.reduceMotion));
     });
   }, []);
   return (

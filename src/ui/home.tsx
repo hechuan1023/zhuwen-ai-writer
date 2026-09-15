@@ -5,6 +5,7 @@ import { NovelEdit } from "./novel-edit";
 import { DailyGoalMeter } from "./daily-goal";
 import { WritingStatsCenter } from "./stats-center";
 import { patchAppearance, patchWriting } from "./prefs";
+import { applyReduceMotion } from "./motion";
 import { Select } from "./select";
 
 type Props = {
@@ -54,6 +55,7 @@ export function CreativeHome({
         "reduce-transparency",
         Boolean(r.data.reduceTransparency),
       );
+      applyReduceMotion(Boolean(r.data.reduceMotion));
     });
     api<AnyRow>("preferences:get", "writing").then((r) => {
       if (r.ok && typeof r.data?.dailyGoal === "number")
@@ -174,7 +176,7 @@ export function CreativeHome({
             <h3>{tr("今日创作", "Today")}</h3>
             <div className="big tabular">
               {fmt(today)}
-              <span>{tr("字净增（全部作品）", "net words · all novels")}</span>
+              <span>{tr("字净增", "net words")}</span>
             </div>
             <DailyGoalMeter
               today={today}

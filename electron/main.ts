@@ -382,6 +382,15 @@ function createMainWindow() {
     win.webContents.once("did-finish-load", async () => {
       const js = (code: string) => win!.webContents.executeJavaScript(code);
       const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      const uiSmokeErrorFile = path.join(
+        process.cwd(),
+        "artifacts",
+        "ui-smoke-error.txt",
+      );
+      // 先清掉上一轮残留，避免陈旧错误文件冒充本次失败
+      try {
+        fs.rmSync(uiSmokeErrorFile, { force: true });
+      } catch {}
       try {
         await wait(500);
         // 首次引导：有则关闭，避免挡住首页操作
@@ -389,6 +398,10 @@ function createMainWindow() {
           `(()=>{const btn=[...document.querySelectorAll('.modal button')].find(b=>b.textContent.includes('开始写作')||b.textContent.includes('Start writing'));if(btn)btn.click();return true})()`,
         );
         await wait(200);
+        // 首页目标计必须标注「全部作品」，否则会与工作台的「本书」看起来互相矛盾
+        const homeGoalScopeOk = await js(
+          `(()=>{const el=document.querySelector('[data-fd-id="daily-goal-meter"]');if(!el)return false;const label=el.querySelector('.goal-meter__scope');return el.dataset.scope==='all'&&Boolean(label&&label.textContent.trim())})()`,
+        );
         await js(
           `(()=>{const btn=[...document.querySelectorAll('.home button, .home-shell button')].find(b=>b.textContent.includes('新建小说')||b.textContent.includes('New novel'));if(!btn)throw new Error('home create button missing');btn.click();return true})()`,
         );
@@ -421,6 +434,10 @@ function createMainWindow() {
         );
         const zoomOk = await js(
           `Boolean(document.querySelector('.status-zoom'))`,
+        );
+        // 工作台的目标计只统计当前作品，必须显式标注为「本书」
+        const goalScopeOk = await js(
+          `(()=>{const el=document.querySelector('.status [data-fd-id="daily-goal-meter"]');if(!el)return false;const label=el.querySelector('.goal-meter__scope');return el.dataset.scope.startsWith('novel:')&&Boolean(label&&label.textContent.trim())})()`,
         );
         await js(`(()=>{if(!document.querySelector('.right-panel'))document.querySelector('.topbar .primary.small')?.click()})()`);
         await wait(250);
@@ -506,6 +523,24 @@ function createMainWindow() {
         await wait(100);
         const appearanceOk = await js(
           `Boolean(document.querySelector('.appearance-settings')&&document.querySelector('.background-picker')&&document.querySelector('.density-options'))`,
+        );
+        await js(
+          `(()=>{const el=document.querySelector('[data-fd-id="settings-reduce-motion"]');if(!el)return false;el.click();return true})()`,
+        );
+        await wait(150);
+        const reduceMotionOk = await js(
+          `document.documentElement.classList.contains('reduce-motion')`,
+        );
+        // 「减少动态效果」与「减少透明效果」必须独立，不能互相带动
+        const reduceMotionIndependentOk = await js(
+          `document.documentElement.classList.contains('reduce-motion')&&!document.documentElement.classList.contains('reduce-transparency')`,
+        );
+        await js(
+          `(()=>{const el=document.querySelector('[data-fd-id="settings-reduce-motion"]');if(el)el.click();return true})()`,
+        );
+        await wait(150);
+        const reduceMotionOffOk = await js(
+          `!document.documentElement.classList.contains('reduce-motion')`,
         );
         await js(`document.querySelector('.modal > header button')?.click()`);
         await wait(150);
@@ -623,6 +658,11 @@ function createMainWindow() {
           bookSearchOk,
           bookSearchRunOk,
           statsOk,
+          homeGoalScopeOk,
+          goalScopeOk,
+          reduceMotionOk,
+          reduceMotionIndependentOk,
+          reduceMotionOffOk,
           mainShared,
           floatLoaded,
           floatShared,
@@ -651,11 +691,11 @@ function createMainWindow() {
           }
         }
         console.log(
-          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n reference_picker typography_settings daily_goal database_health find_bar book_search book_search_run writing_stats ai_float_shared summary_modal library_kinds relation_graph relation_expand library_detail ${status} ${out}`,
+          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n reference_picker typography_settings daily_goal database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent ai_float_shared summary_modal library_kinds relation_graph relation_expand library_detail ${status} ${out}`,
         );
         app.exit(0);
       } catch (e) {
-        try { fs.mkdirSync(path.join(process.cwd(), "artifacts"), { recursive: true }); fs.writeFileSync(path.join(process.cwd(), "artifacts", "ui-smoke-error.txt"), String(e instanceof Error ? e.stack || e.message : e)); } catch {}
+        try { fs.mkdirSync(path.dirname(uiSmokeErrorFile), { recursive: true }); fs.writeFileSync(uiSmokeErrorFile, String(e instanceof Error ? e.stack || e.message : e)); } catch {}
         console.error(
           `UI_SMOKE_FAIL ${e instanceof Error ? e.message : String(e)}`,
         );
