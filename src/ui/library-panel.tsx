@@ -1,6 +1,6 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { api, fmt, time, parseJson, parseTags, Empty, kinds, AnyRow, UiLanguage } from "./shared";
+import { api, time, parseJson, parseTags, Empty, ConfirmDialog, kinds, AnyRow, UiLanguage } from "./shared";
 import {
   editorToLibraryContent,
   libraryContentToEditor,
@@ -47,6 +47,7 @@ export function LibraryPanel({
     [saveBusy, setSaveBusy] = useState(false),
     [graphOpen, setGraphOpen] = useState(false),
     [listError, setListError] = useState(""),
+    [trashTarget, setTrashTarget] = useState<AnyRow | null>(null),
     [leavePrompt, setLeavePrompt] = useState<
       null | { resolve: (ok: boolean) => void }
     >(null);
@@ -203,6 +204,18 @@ export function LibraryPanel({
     return true;
   }
 
+  /** 软删除：只写 deleted_at，条目进入回收站，可恢复（trash:restore） */
+  async function trashItem(id: string) {
+    const result = await api("library:trash", id);
+    if (!result.ok) {
+      notify(result.error || tr("移入回收站失败", "Failed to move to trash"));
+      return false;
+    }
+    load();
+    notify(tr("已移入回收站", "Moved to trash"));
+    return true;
+  }
+
   const deferredSearch = useDeferredValue(search);
   const load = useCallback(() => {
     const seq = ++listSeq.current;
@@ -234,9 +247,14 @@ export function LibraryPanel({
     };
   }, [novel.id]);
   useEffect(() => {
-    if (!editing && !graphOpen) return;
+    if (!editing && !graphOpen && !trashTarget) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      // 确认弹窗优先关闭，避免连带触发后面的「未保存」提示
+      if (trashTarget) {
+        setTrashTarget(null);
+        return;
+      }
       if (graphOpen) {
         setGraphOpen(false);
         return;
@@ -247,7 +265,7 @@ export function LibraryPanel({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [Boolean(editing), graphOpen, saveBusy, dirty]);
+  }, [Boolean(editing), graphOpen, saveBusy, dirty, Boolean(trashTarget)]);
   // 出场统计在主进程完成，避免把全书正文拉进渲染进程
   useEffect(() => {
     let live = true;
@@ -498,7 +516,17 @@ export function LibraryPanel({
               <option key={n} value={n} />
             ))}
           </datalist>
-          <div className="row end">
+          <div className="row">
+            {editing.id && (
+              <button
+                className="danger-text"
+                data-fd-id="library-trash"
+                onClick={() => setTrashTarget(editing)}
+              >
+                {tr("移入回收站", "Move to trash")}
+              </button>
+            )}
+            <span className="spacer" />
             <button onClick={() => setEditing(null)}>{tr("取消", "Cancel")}</button>
             <button className="primary" disabled={saveBusy} onClick={() => saveThenMaybe()}>
               {saveBusy ? tr("保存中…", "Saving…") : tr("保存", "Save")}
@@ -650,6 +678,29 @@ export function LibraryPanel({
             </div>
           </div>
         </div>
+      )}
+      {trashTarget && (
+        <ConfirmDialog
+          title={tr("移入回收站", "Move to trash")}
+          message={tr(
+            `将「${trashTarget.title}」移入回收站？可在回收站恢复。`,
+            `Move “${trashTarget.title}” to trash? You can restore it later from the trash.`,
+          )}
+          confirmLabel={tr("移入回收站", "Move to trash")}
+          cancelLabel={tr("取消", "Cancel")}
+          danger
+          onCancel={() => setTrashTarget(null)}
+          onConfirm={async () => {
+            const target = trashTarget;
+            setTrashTarget(null);
+            // 仅删除成功才关闭编辑器，失败时保留现场让用户重试
+            if (await trashItem(target.id)) {
+              draftVersion.current += 1;
+              setEditing(null);
+              setBaseline(null);
+            }
+          }}
+        />
       )}
     </>
   );

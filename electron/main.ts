@@ -784,6 +784,15 @@ function createMainWindow() {
         await js(`document.querySelector('.library-list article')?.click()`);
         await wait(150);
         const libraryDetailOk = await js(`Boolean(document.querySelector('.editor-area > .library-detail-surface .library-edit'))`);
+        // 设定库删除入口（library:trash）：按钮存在 → 弹出确认 → 取消不删除
+        const libraryTrashBtnOk = await js(`Boolean(document.querySelector('[data-fd-id="library-trash"]'))`);
+        const libraryCountBefore = await js(`document.querySelectorAll('.library-list article').length`);
+        await js(`document.querySelector('[data-fd-id="library-trash"]')?.click()`);
+        await wait(200);
+        const libraryTrashDialogOk = await js(`Boolean(document.querySelector('[data-fd-id="confirm-ok"]'))`);
+        await js(`document.querySelector('.modal > header button')?.click()`);
+        await wait(200);
+        const libraryTrashCancelOk = await js(`document.querySelectorAll('.library-list article').length===${libraryCountBefore}`);
         await js(`document.querySelector('.library-detail-surface > header button')?.click()`);
         const checks = {
           createFormOk,
@@ -821,6 +830,9 @@ function createMainWindow() {
           relationOk,
           relationExpandOk,
           libraryDetailOk,
+          libraryTrashBtnOk,
+          libraryTrashDialogOk,
+          libraryTrashCancelOk,
         };
         const failedChecks = Object.entries(checks)
           .filter(([, v]) => !v)
@@ -848,7 +860,7 @@ function createMainWindow() {
         if (shotsFailed.length)
           console.log(`UI_SHOTS_FAIL ${shotsFailed.join(",")}`);
         console.log(
-          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n reference_picker typography_settings daily_goal database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared history_drawer summary_modal library_kinds relation_graph relation_expand library_detail ${status} ${out}`,
+          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n reference_picker typography_settings daily_goal database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared history_drawer summary_modal library_kinds relation_graph relation_expand library_detail library_trash ${status} ${out}`,
         );
         app.exit(0);
       } catch (e) {

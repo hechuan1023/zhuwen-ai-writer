@@ -21,6 +21,13 @@ try{
   assert.equal((db.prepare('SELECT COUNT(*) n FROM chapters WHERE novel_id=? AND deleted_at IS NULL').get(novel) as any).n,0,'软删除隐藏')
   db.prepare('UPDATE chapters SET deleted_at=NULL WHERE id=?').run(chapter)
   assert.equal((db.prepare('SELECT COUNT(*) n FROM chapters WHERE novel_id=? AND deleted_at IS NULL').get(novel) as any).n,1,'回收站恢复')
+  const item=newId()
+  db.prepare('INSERT INTO library_items(id,novel_id,kind,title,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(item,novel,'character','测试角色',t,t)
+  db.prepare('UPDATE library_items SET deleted_at=? WHERE id=?').run(timestamp(),item)
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM library_items WHERE novel_id=? AND deleted_at IS NULL').get(novel) as any).n,0,'设定库软删除后从列表隐藏')
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM library_items WHERE novel_id=? AND deleted_at IS NOT NULL').get(novel) as any).n,1,'设定库软删除后可在回收站读到')
+  db.prepare('UPDATE library_items SET deleted_at=NULL WHERE id=?').run(item)
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM library_items WHERE novel_id=? AND deleted_at IS NULL').get(novel) as any).n,1,'设定库回收站恢复')
   assert.equal(countText('你 好，世界！'),6,'空白不计且标点计数')
   assert.equal(countText('你 好，世界！',false),4,'可排除标点')
   assert.equal(localDate(new Date(2026,8,12,0,30)),'2026-09-12','写作日期使用本地日历日期')
@@ -65,7 +72,7 @@ try{
   const dbBytes=readFileSync(path).toString('utf8')
   assert.ok(!dbBytes.includes('sk-test-should-never-appear'),'数据库不含 API Key 测试串')
   db.close()
-  console.log('SMOKE_OK migration style_cards style_snapshot unicode_save optimistic_revision trash_restore word_count local_calendar_date secret_schema_absence novel_trash chapter_reorder ai_conversation cascade_purge summary_schema ai_indexes')
+  console.log('SMOKE_OK migration style_cards style_snapshot unicode_save optimistic_revision trash_restore library_trash word_count local_calendar_date secret_schema_absence novel_trash chapter_reorder ai_conversation cascade_purge summary_schema ai_indexes')
 }finally{
   try{rmSync(dir,{recursive:true,force:true,maxRetries:5,retryDelay:100})}catch{ /* temp cleanup is best-effort */ }
 }
