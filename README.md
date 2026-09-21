@@ -70,7 +70,15 @@ npm run build && npm run test:unit && npm run test && npm run test:ui
 - **自然化润色**：先在正文选择文字，在 AI 输入区任务菜单选择「自然化润色」，结果必须经过差异预览和人工采纳才会写回正文
 - **AI 历史**：AI 面板 → 历史
 - **统计**：更多 → 写作统计
-- **清理预览**：`node scripts/preview-release-cleanup.mjs`（默认不删）
+## 开发脚本
+
+| 脚本 | 用途 |
+|---|---|
+| `npm run icons`（`scripts/make-icon.js`） | 由 `build/icon.svg` 渲染出 `build/icon.png` 与 `build/icon.ico` |
+| `python scripts/make-installer-art.py` | 生成 NSIS 安装器插图 `build/installer-header.bmp` / `installer-sidebar.bmp`（需本机安装 Pillow） |
+| `node scripts/preview-release-cleanup.mjs` | 发布目录清理预览，**默认不删**；`--archive` 把可归档的变体目录移入 `release-archive/`（同盘移动，不释放空间） |
+
+以上脚本的产物均已入库，脚本保留用于重新生成或调整样式，不属于构建链的一环（`npm run build` 不调用它们）。
 
 ## 最近 AI 面板重构
 
