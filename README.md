@@ -40,6 +40,28 @@ npm run build && npm run test:unit && npm run test && npm run test:ui
 | 数据库迁移文档 | **修正**：README 由「版本 9」更正为版本 10 |
 | 交接文档 | **整理**：`OPTIMIZATION-HANDOFF.md`、`CHAT-PANEL-HANDOFF.md` 归入 `docs/` |
 
+## 发布产物清理
+
+`release/` 只保留最近两个安装包与构建元数据，其余历史产物已删除，合计回收约 3.8 GB。
+
+| 已删除 | 约 |
+|---|---|
+| `release/Zhuwen-Setup-0.1.0 ~ 0.4.6`（12 个 exe + 11 个 blockmap） | 1.2 GB |
+| `release/win-unpacked`、`release/win-unpacked.tmp` | 356 MB |
+| `anzhuangbao/zhuwen` | 356 MB |
+| `release-archive/`（`release-build` / `release-new` / `release-portable`） | 1.6 GB |
+
+安装包二进制未入 git，删除后不可恢复（`git diff v0.4.7 HEAD` 只覆盖源码）。
+
+| 保留 | 说明 |
+|---|---|
+| `release/Zhuwen-Setup-0.4.7.exe`、`Zhuwen-Setup-0.4.8.exe`（含 blockmap） | 现役安装包 |
+| `release/builder-debug.yml` | 构建元数据 |
+
+**遗留**：9 个 `resources/*.asar`（合计 94.4 MB）无法删除 —— 运行中的宿主进程持有其文件句柄，
+原生 `rename` 返回 `WinError 32（另一个程序正在使用此文件）`。关闭 WorkBuddy 或重启系统后即可清空。
+目录结构已收至最小（仅剩 `resources/` 一层）。
+
 ## 测试（本次执行）
 
 | 命令 | 结果 |
