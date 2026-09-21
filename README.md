@@ -2,9 +2,9 @@
 
 本地优先小说写作桌面应用。Electron + React + TipTap + SQLite。
 
-- 源码版本：**0.4.8**（当前工作区含未提交稳定性修复，**不等于**已有 0.4.8 安装包内容）
-- 最新安装包：`release/Zhuwen-Setup-0.4.8.exe`（历史构建，**未包含**本轮未提交改动）
-- 历史交接文档 `OPTIMIZATION-HANDOFF.md` 已归档，请以本文与源码为准
+- 源码版本：**0.4.8**（工作区已全部提交；现有 0.4.8 安装包为更早构建，**不含**后续清理改动）
+- 最新安装包：`release/Zhuwen-Setup-0.4.8.exe`（历史构建，**未包含**本轮改动）
+- 历史交接文档见 `docs/`（`docs/OPTIMIZATION-HANDOFF.md` 已归档，请以本文与源码为准）
 
 ## 开发
 
@@ -14,20 +14,31 @@ npm run dev
 npm run build && npm run test:unit && npm run test && npm run test:ui
 ```
 
-## 本轮已核实 / 修复（未提交）
+## 0.4.8 稳定性修复
 
 | 项 | 状态 |
 |---|---|
-| 类型检查 + 生产构建 | **通过** |
 | 非空草稿不因数量淘汰 | 已实现（100 条边界测试） |
 | 草稿原子写 / 备份 / 只读保护 | 已实现 |
-| 主+备份均损坏时保留原路径 | **本轮修复**（原先会改名隔离） |
-| 权限读取错误不当作空数据 | **本轮修复** |
-| 预设 envEffective 只依赖 preview 导致过期 | **本轮修复** |
-| 预设布局字段往返 | **本轮修复**（validate 保留 left/rightWidth） |
-| 预设预览操作栏 + 标签 | **本轮补充** |
-| onApply 类型契约 | **本轮修复** |
-| 清理脚本 .mjs 混入 TS 导致语法错误 | **本轮修复** |
+| 主+备份均损坏时保留原路径 | 已修复（原先会改名隔离） |
+| 权限读取错误不当作空数据 | 已修复 |
+| 预设 envEffective 只依赖 preview 导致过期 | 已修复 |
+| 预设布局字段往返 | 已修复（validate 保留 left/rightWidth） |
+| 预设预览操作栏 + 标签 | 已补充 |
+| onApply 类型契约 | 已修复 |
+| 清理脚本 .mjs 混入 TS 导致语法错误 | 已修复 |
+
+## 0.4.8 收尾清理（本轮）
+
+| 项 | 结果 |
+|---|---|
+| 设定库删除入口 | **新增**：`library:trash` 已接线，条目软删除进回收站，可在回收站恢复或永久删除 |
+| AI 连接删除 | **未接线**：商用版仅有一个被锁定的服务器连接，`connections:delete` 设计上不可达，已作为死通道移除 |
+| 孤儿 IPC 通道 | **清理**：85 → 81；注册数与白名单仍严格一致，无未登记、无未使用通道 |
+| 死 CSS | **清理**：21 个类 / 53 个规则块（`align-start` / `align-end` 为动态拼接，经核查保留） |
+| 一次性遗留代码 | `saveSecret` / `deleteSecret` 保留 —— 属密钥文件生命周期的一部分，商用版未走写入路径；确认不再需要可另行删除 |
+| 数据库迁移文档 | **修正**：README 由「版本 9」更正为版本 10 |
+| 交接文档 | **整理**：`OPTIMIZATION-HANDOFF.md`、`CHAT-PANEL-HANDOFF.md` 归入 `docs/` |
 
 ## 测试（本次执行）
 
@@ -35,10 +46,10 @@ npm run build && npm run test:unit && npm run test && npm run test:ui
 |---|---|
 | build | 通过 |
 | test:unit | **131/131** |
-| test | SMOKE_OK |
-| test:ui | UI_SMOKE_OK |
+| test | SMOKE_OK（含新增 `library_trash`） |
+| test:ui | UI_SMOKE_OK（28 项，含新增 `library_trash`） |
 
-本轮风格卡缺口修复新增数据库迁移到版本 9：自然化任务规则独立注入；三张附加风格卡实际包含完整自然叙事基础规则；自然化回复采用前强制差异比较；自定义卡可编辑；内置卡按版本升级且不覆盖自定义副本；消息保存任务类型与风格快照。
+数据库迁移当前为**版本 10**（v9 为 `ai_messages` 增加 `task_kind`；v10 增加 `selection_from` / `selection_to`，用于记录采纳来源选区）。本轮风格卡缺口修复：自然化任务规则独立注入；三张附加风格卡实际包含完整自然叙事基础规则；自然化回复采用前强制差异比较；自定义卡可编辑；内置卡按版本升级且不覆盖自定义副本；消息保存任务类型与风格快照。
 
 ## AI 聊天面板（本轮重构）
 
@@ -47,7 +58,7 @@ npm run build && npm run test:unit && npm run test && npm run test:ui
 - 回复操作：默认只显示「复制 · 采纳▾ · 更多」；采纳展开为插入光标 / 替换选区 / 追加到章末 / 逐句采纳 / 对比修改（按上下文启用并说明原因）。
 - 上下文：常驻长说明改为「上下文约 N」入口，弹窗展示引用/历史/输入占用拆分与实际发送内容。
 - 滚动：采用 use-stick-to-bottom（MIT，devDependencies），底部自动跟随、上翻暂停、显示回到底部。
-- 详细改动、选型依据（为何未采用 assistant-ui）与未验证项见 CHAT-PANEL-HANDOFF.md。
+- 详细改动、选型依据（为何未采用 assistant-ui）与未验证项见 `docs/CHAT-PANEL-HANDOFF.md`。
 
 ## 使用
 

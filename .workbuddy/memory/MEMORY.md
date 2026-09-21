@@ -15,13 +15,15 @@
 
 ## 硬性约定
 
-1. **新增 IPC 必须同步登记白名单**。`electron/preload.ts` 的 `allowedChannels` 是硬编码 Set，未登记的通道会被 `zhuwen.invoke` 直接 reject，前端表现为静默失败。
+1. **新增/删除 IPC 必须同步登记白名单**。`electron/preload.ts` 的 `allowedChannels` 是硬编码 Set——因沙箱化 preload 不能 require 本地相对模块，**必须内联，不要抽成 channels.ts**（`dist-electron/channels.js` 是历史上抽过又回退留下的陈旧产物）。未登记的通道会被 `zhuwen.invoke` 直接 reject，前端表现为静默失败。**注册数与白名单数必须严格一致**（2026-09-21 清理后为 81）。核对方法：解析 `ipcMain.handle("…")`、`allowedChannels` 条目与 `src/` 中的通道字面量，做三方差集；注意正则要允许大写与连字符（`library:listAll`、`ai:style-selection:get`）。
 2. **偏好写入一律走 merge**。前端用 `src/ui/prefs.ts` 的 `patchAppearance` / `patchWriting`（内部 `merge: true`）。主进程若整项替换会清空字体、背景、语言等未提交字段。
 3. **API Key 不得入库**。`api_connections` 表结构禁止出现 key/secret 列；密钥走独立 secret 文件。`electron/smoke.ts` 有防回归断言。
 4. **章节保存用乐观锁**（`revision` 比对），过期修订必须拒绝，不得改成无条件覆盖。
 5. **正文格式以 ProseMirror JSON 为准**，`plain_text` 与 `word_count` 是派生字段。
 6. **不接触用户真实稿件做测试**，一律使用隔离临时数据目录（`mkdtempSync`）。
 7. **不加遥测、CDN、在线字体、远程素材依赖**。应用是离线优先产品。
+8. **商用版只允许一个被锁定的 AI 连接**。`main.ts` 硬编码 `ZHUWEN_SERVER_CONNECTION_ID`（`zhuwen-server-longcat`）；`connections:list` 只返回该内置连接，`connections:save` 拒绝其它 id，`settings.tsx` 在存在锁定连接时隐藏「＋ 新连接」按钮并禁用全部字段。因此「无法新增/删除 AI 连接」是**设计如此，不是缺陷**，不要当 bug 修；删除类通道若无人可调用，属死代码。
+9. **设定库删除是软删除**。`library:trash` 只写 `deleted_at`；回收站的 `trash:list` / `trash:restore` / `trash:purge` 统一支持 `chapter` / `volume` / `library` / `novel` 四种 kind，永久删除需服务端校验确认词（`["永久删除","DELETE"]`，见 `src/ui/trash-confirm.ts`）。前端删除入口在资料编辑页脚（`data-fd-id="library-trash"`）。
 
 ## 验证习惯
 
@@ -39,6 +41,6 @@
 
 ## 参考
 
-- 分阶段任务书：`OPTIMIZATION-HANDOFF.md`（四阶段 + 商业化规划）
+- 分阶段任务书：`docs/OPTIMIZATION-HANDOFF.md`（四阶段 + 商业化规划，已归档）；聊天面板重构手记：`docs/CHAT-PANEL-HANDOFF.md`
 - 视觉参考：`C:\Users\hechuan\Desktop\text-gpt\index.html`
 - 版本与测试数记录在 `README.md`，需与实际一致。
