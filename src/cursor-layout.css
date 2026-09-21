@@ -176,41 +176,11 @@
 .right-panel .collapse-right {
   display: none;
 }
-.right-panel .quick-prompts {
-  flex-wrap: wrap;
-  max-height: 67px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  align-content: flex-start;
-}
-.right-panel .quick-prompts button {
-  flex: 0 0 auto;
-}
 .editor-area {
   position: relative;
   isolation: isolate;
   background: var(--editor-surface);
   overflow: hidden;
-}
-.writing-background {
-  position: absolute !important;
-  z-index: -2;
-  inset: -28px;
-  opacity: var(--writing-bg-opacity, 0.22);
-  filter: blur(var(--writing-bg-blur, 0));
-  background-position: center;
-  background-repeat: no-repeat;
-  pointer-events: none;
-}
-.writing-background.fit-cover {
-  background-size: cover;
-}
-.writing-background.fit-contain {
-  background-size: contain;
-}
-.writing-background.fit-tile {
-  background-size: auto;
-  background-repeat: repeat;
 }
 .editor-area.has-writing-bg .editor-scroll {
   background: rgba(255, 253, 248, var(--writing-paper-opacity, 0.9));
@@ -678,11 +648,6 @@
 .message > div:first-child {
   letter-spacing: .035em;
 }
-.right-panel .quick-prompts {
-  max-height: 88px;
-  padding-top: 3px;
-  border-top: 0;
-}
 .composer {
   padding: 8px 9px 10px;
   background: color-mix(in srgb, var(--chrome) 55%, transparent);
@@ -691,15 +656,6 @@
   border-color: color-mix(in srgb, var(--line) 85%, transparent);
   border-radius: 9px;
   box-shadow: 0 1px 2px #2430290a;
-}
-.ai-empty-conn {
-  margin: 8px 9px;
-  padding: 10px 11px;
-  text-align: left;
-  background: color-mix(in srgb, var(--paper) 50%, transparent);
-}
-.ai-empty-conn p {
-  font-size: 12px;
 }
 .shelf .book {
   content-visibility: auto;

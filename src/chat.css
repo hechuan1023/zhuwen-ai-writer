@@ -538,9 +538,6 @@
   min-width: 88px;
   max-width: 40%;
 }
-.zchat-model > .zchat-pill.wide {
-  max-width: 100%;
-}
 .zchat-pill.context {
   color: var(--muted, #8a8577);
   flex: none;
@@ -567,33 +564,6 @@
 }
 .zchat-context-ring.over { background: conic-gradient(#c84b4b 100%, rgba(127, 127, 127, .18) 0); }
 .zchat-context-limit { opacity: .62; font-size: 10px; margin-left: -2px; }
-.zchat-model {
-  position: relative;
-  display: inline-flex;
-  flex: 0 1 auto;
-  min-width: 88px;
-  max-width: 40%;
-}
-.zchat-model-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 130;
-}
-.zchat-model-pop {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  z-index: 140;
-  width: min(300px, 78vw);
-  padding: 8px;
-  background: var(--paper, #fff);
-  border: 1px solid var(--line, #e2ddd2);
-  border-radius: 9px;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
 .zchat-send {
   display: inline-flex;
   align-items: center;
@@ -948,8 +918,7 @@
 .reduce-transparency .zchat-menu,
 .reduce-transparency .zchat-drawer,
 .reduce-transparency .zchat-picker,
-.reduce-transparency .zchat-composer,
-.reduce-transparency .zchat-model-pop {
+.reduce-transparency .zchat-composer {
   background: var(--paper, #fff);
   backdrop-filter: none;
 }
@@ -989,7 +958,6 @@
   margin-right: 18px;
 }
 .zchat-style-entry { flex: none; padding: 0 10px 6px; min-width: 0; }
-.zchat-style-entry > .zchat-menu-trigger { max-width: 100%; }
 .zchat-style-list { display: grid; gap: 6px; margin: 12px 0; max-height: 48vh; overflow: auto; }
 .zchat-style-list > button, .zchat-style-row { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); text-align: left; }
 .zchat-style-list > button.active, .zchat-style-row.active { border-color: var(--accent); background: var(--accent-2); }

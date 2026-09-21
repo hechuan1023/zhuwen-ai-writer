@@ -47,8 +47,6 @@
 .has-app-background .workspace .left-panel .panel-head,
 .has-app-background .workspace .zchat-composer,
 .has-app-background .workspace .right-panel .panel-head,
-.has-app-background .workspace .left-panel .panel-body,
-.has-app-background .workspace .right-panel .panel-body,
 .has-app-background .workspace .zchat,
 .has-app-background .workspace .zchat-toolbar,
 .has-app-background .workspace .zchat-scroll,
@@ -65,8 +63,7 @@
 }
 /* Menus, dialogs and editable inputs remain opaque for reliable contrast. */
 .has-app-background .modal,
-.has-app-background .toolbar-menu,
-.has-app-background .zw-select-menu { background: var(--paper); }
+.has-app-background .toolbar-menu { background: var(--paper); }
 .app-background-solid .app-backdrop { display: none; }
 .app-background-solid .workspace,
 .app-background-solid .home,
@@ -115,8 +112,3 @@
 .stats-duration { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; max-width: 100%; }
 .stats-duration-part { display: inline-flex; align-items: baseline; white-space: nowrap; }
 .stats-duration-number { font-variant-numeric: tabular-nums; }
-
-/* AI 面板样式已迁移到 src/chat.css（.zchat 作用域）*/
-.ai-suggestions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 16px; width: min(100%, 360px); }
-.ai-suggestions button { min-height: 34px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); color: var(--ink); font-size: 11px; text-align: left; }
-.ai-suggestions button:hover { border-color: var(--accent); background: var(--accent-2); }

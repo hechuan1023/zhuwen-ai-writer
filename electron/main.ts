@@ -23,7 +23,7 @@ import {
   openDatabase,
   timestamp,
 } from "./database";
-import { FocusTracker, FOCUS_GAP_MS } from "./focus-tracker";
+import { FocusTracker } from "./focus-tracker";
 import { DraftStorage, draftKey, DraftRecord } from "./draft-storage";
 import { buildTaskAndStyleInstructions, effectiveStyleRules } from "./ai-style-cards";
 
@@ -1007,9 +1007,6 @@ async function readImportFile(
 }
 
 function registerIpc(userDir: string) {
-  ipcMain.handle("app:info", () =>
-    ok({ version: app.getVersion(), dataPath: userDir }),
-  );
   ipcMain.handle("database:health", () => {
     try {
       db.pragma("wal_checkpoint(PASSIVE)");
@@ -1452,14 +1449,6 @@ function registerIpc(userDir: string) {
     } catch (e) {
       return fail(e);
     }
-  });
-  ipcMain.handle("chapters:position", (_, p) => {
-    db.prepare("UPDATE chapters SET cursor_pos=?,scroll_pos=? WHERE id=?").run(
-      p.cursorPos || 0,
-      p.scrollPos || 0,
-      p.id,
-    );
-    return ok(true);
   });
   ipcMain.handle("writing:today", (_, novelId) => {
     const row = novelId
@@ -2035,12 +2024,6 @@ function registerIpc(userDir: string) {
       return fail(e);
     }
   });
-  ipcMain.handle("connections:delete", (_, id) => {
-    if (id === ZHUWEN_SERVER_CONNECTION_ID) return fail("服务器模型连接不可删除");
-    db.prepare("DELETE FROM api_connections WHERE id=?").run(id);
-    deleteSecret(userDir, id);
-    return ok(true);
-  });
   ipcMain.handle("connections:test", async (_, id) => {
     try {
       if (id !== ZHUWEN_SERVER_CONNECTION_ID) throw new Error("连接不存在");
@@ -2229,14 +2212,6 @@ function registerIpc(userDir: string) {
       }
     } catch {}
   }
-  ipcMain.handle("ai:messages", (_, conversationId) =>
-    ok(
-      all(
-        "SELECT * FROM ai_messages WHERE conversation_id=? ORDER BY created_at",
-        conversationId,
-      ),
-    ),
-  );
   ipcMain.handle("ai:conversation:update", (_, p) => {
     if (!p?.title?.trim()) return fail("会话名称不能为空");
     db.prepare(

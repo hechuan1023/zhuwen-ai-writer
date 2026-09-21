@@ -3,7 +3,7 @@ import { marked } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { joinSegments, splitSegments } from "../segments";
 import { relevantMaterials } from "../relevant";
-import { api, useAiSessionStore, fmt, time, kindNameFor, promptNameFor, kinds, parseJson, Empty, Modal, DiffModal, ConfirmDialog, PromptDialog, AnyRow, UiLanguage, aiDraftFlusher } from "./shared";
+import { api, useAiSessionStore, fmt, kindNameFor, promptNameFor, parseJson, Empty, Modal, DiffModal, ConfirmDialog, PromptDialog, AnyRow, UiLanguage, aiDraftFlusher } from "./shared";
 import { ChatToolbar } from "./chat/chat-toolbar";
 import { HistoryDrawer } from "./chat/history-drawer";
 import { MessageList, type ReplyActions } from "./chat/message-list";

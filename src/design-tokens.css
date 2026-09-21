@@ -557,51 +557,6 @@
   border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   color: var(--accent);
 }
-.stats-bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  height: 160px;
-  padding: 8px 4px 0;
-  border-bottom: 1px solid var(--line);
-  background: repeating-linear-gradient(
-    to top,
-    transparent 0,
-    transparent calc(25% - 1px),
-    var(--line) calc(25% - 1px),
-    var(--line) 25%
-  );
-  overflow-x: auto;
-}
-.stats-bars .bar {
-  flex: 1;
-  min-width: 8px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 4px;
-}
-.stats-bars .bar i {
-  display: block;
-  width: 100%;
-  border-radius: 3px 3px 0 0;
-  background: linear-gradient(to top, var(--accent-soft), var(--accent));
-  min-height: 2px;
-  transition: height var(--dur-slow) var(--ease);
-}
-.stats-bars .bar i.neg {
-  background: linear-gradient(to top, var(--danger-soft), var(--danger));
-}
-.stats-bars .bar span {
-  font-size: 9px;
-  color: var(--faint);
-  transform: rotate(-40deg);
-  transform-origin: center;
-  height: 28px;
-  white-space: nowrap;
-}
 .stats-calendar {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -794,59 +749,6 @@
   padding-right: 12px;
 }
 .zw-select.combobox .zw-select-value { display: none; }
-
-/* AI 历史抽屉 */
-.conv-current {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  text-align: left;
-}
-.conv-current .ellipsis {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.history-group-label {
-  font-size: 11px;
-  color: var(--muted);
-  padding: 6px 12px 2px;
-  letter-spacing: 0.04em;
-}
-.history-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 12px;
-  cursor: pointer;
-  border-radius: 8px;
-  margin: 0 6px;
-}
-.history-item:hover,
-.history-item:focus-visible {
-  background: var(--accent-soft);
-  outline: none;
-}
-.history-item.current {
-  background: var(--accent-soft);
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-.history-item b {
-  font-size: 13px;
-}
-.history-item small {
-  font-size: 11px;
-  color: var(--muted);
-}
-.history-item .ellipsis {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-
 /* 年度方格 */
 .year-grid-wrap {
   overflow-x: auto;
