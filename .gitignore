@@ -12,9 +12,13 @@ dist-electron/
 release/
 release-*/
 win-unpacked*/
+# 安装包解包验证目录（用于肉眼核对安装后内容，同 release 一样是产物）
+anzhuangbao/
 
 # ===== 测试产物（冒烟截图与日志）=====
 artifacts/
+# 一次性诊断脚本（渲染进程崩溃排查用，非项目资产）
+scripts/_diag.cjs
 
 # ===== 本地设计参考工作区 =====
 .frontend-design/
