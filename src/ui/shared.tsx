@@ -22,6 +22,8 @@ export const api = <T = any,>(channel: string, payload?: unknown) =>
     data: undefined as T,
     error: error instanceof Error ? error.message : String(error),
   }));
+/** 退出前立即提交渲染端待发送的 AI 草稿（由 AiPanel 注册，App 在 before-close 时调用） */
+export const aiDraftFlusher = { current: () => {} };
 export function useAiSessionStore() {
   const [session, setSession] = useState<AnyRow | null>(null);
   useEffect(() => {

@@ -24,6 +24,8 @@ import {
   timestamp,
 } from "./database";
 import { FocusTracker, FOCUS_GAP_MS } from "./focus-tracker";
+import { DraftStorage, draftKey, DraftRecord } from "./draft-storage";
+import { buildTaskAndStyleInstructions, effectiveStyleRules } from "./ai-style-cards";
 
 let win: BrowserWindow | null = null;
 let floatWin: BrowserWindow | null = null;
@@ -36,6 +38,55 @@ const searchTasks = new Map<string, { cancelled: boolean }>();
 const importTasks = new Map<number, AbortController>();
 const importFiles = new Map<string, { file: string; createdAt: number }>();
 const IMPORT_SESSION_TTL = 30 * 60 * 1000;
+// 铸文商用版固定走服务器网关：客户端不保存 LongCat API Key，也不允许切换模型。
+// 这是封闭测试阶段的网关令牌；正式发售应替换为按激活码签发的短期令牌。
+const ZHUWEN_SERVER_CONNECTION_ID = "zhuwen-server-longcat";
+const ZHUWEN_SERVER_BASE_URL = "http://118.31.220.154/zhuwen-api/v1";
+const ZHUWEN_SERVER_MODEL = "LongCat-2.0";
+const ZHUWEN_SERVER_TOKEN = "REMOVED_FROM_GIT_HISTORY";
+const ZHUWEN_MAX_CONTEXT_CHARS = 300000;
+const ZHUWEN_MAX_OUTPUT_TOKENS = 20000;
+
+function serverConnection() {
+  const row: any = get(
+    "SELECT temperature,max_tokens,timeout_ms,streaming,reasoning_effort,created_at,updated_at FROM api_connections WHERE id=?",
+    ZHUWEN_SERVER_CONNECTION_ID,
+  );
+  return {
+    id: ZHUWEN_SERVER_CONNECTION_ID,
+    name: "铸文 AI",
+    base_url: ZHUWEN_SERVER_BASE_URL,
+    model: "铸文默认模型",
+    temperature: Number(row?.temperature ?? 0.7),
+    max_tokens: Math.min(Number(row?.max_tokens ?? 4096), ZHUWEN_MAX_OUTPUT_TOKENS),
+    timeout_ms: Number(row?.timeout_ms ?? 600000),
+    streaming: row?.streaming !== 0,
+    reasoning_effort: String(row?.reasoning_effort || ""),
+    locked: true,
+    max_context_chars: ZHUWEN_MAX_CONTEXT_CHARS,
+    created_at: row?.created_at || timestamp(),
+    updated_at: row?.updated_at || timestamp(),
+  };
+}
+
+function ensureServerConnection() {
+  const t = timestamp();
+  db.prepare(
+    "INSERT OR IGNORE INTO api_connections(id,name,base_url,model,temperature,max_tokens,timeout_ms,streaming,reasoning_effort,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+  ).run(
+    ZHUWEN_SERVER_CONNECTION_ID,
+    "铸文 AI",
+    ZHUWEN_SERVER_BASE_URL,
+    ZHUWEN_SERVER_MODEL,
+    0.7,
+    4096,
+    600000,
+    1,
+    "medium",
+    t,
+    t,
+  );
+}
 
 function registerImportFile(file: string) {
   const cutoff = Date.now() - IMPORT_SESSION_TTL;
@@ -65,6 +116,13 @@ type AiSession = {
   generating: boolean;
   requestId: string;
   generatingConversationId?: string;
+  /** AI 草稿持久化状态：渲染层据此区分保存中/已保存/失败 */
+  draftState?: {
+    status: "idle" | "saving" | "saved" | "error";
+    error?: string;
+    notices?: string[];
+    at: string;
+  };
 };
 const aiSession: AiSession = {
   novelId: null,
@@ -82,43 +140,55 @@ const aiSession: AiSession = {
 function aiSessionSnapshot() {
   return JSON.parse(JSON.stringify(aiSession));
 }
-/** 会话草稿：按 novelId + convId 隔离；空 convId 使用 draft 前缀 */
-type DraftRecord = {
-  novelId: string;
-  convId: string;
-  text: string;
-  contexts: any[];
-  version: number;
-  updatedAt: string;
-};
+/** 会话草稿：按 novelId + convId 隔离 */
 const conversationDrafts: Record<string, DraftRecord> = {};
-function draftKey(novelId: string, convId: string) {
-  return `${novelId}::${convId || "__new__"}`;
+/** 删除草稿的墓碑：key → 删除时的最高版本，防止延迟回调恢复已删除内容 */
+const draftTombstones: Record<string, number> = {};
+let draftStorage: DraftStorage | null = null;
+function setDraftState(
+  status: "idle" | "saving" | "saved" | "error",
+  error?: string,
+  notices?: string[],
+) {
+  aiSession.draftState = {
+    status,
+    ...(error ? { error } : {}),
+    ...(notices?.length ? { notices } : {}),
+    at: new Date().toISOString(),
+  };
 }
 function loadDraftsFromDisk(userDir: string) {
-  try {
-    const raw = fs.readFileSync(path.join(userDir, "ai-drafts.json"), "utf8");
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") Object.assign(conversationDrafts, parsed);
-  } catch {}
+  draftStorage = new DraftStorage(userDir);
+  const outcome = draftStorage.load();
+  Object.keys(conversationDrafts).forEach((k) => delete conversationDrafts[k]);
+  Object.assign(conversationDrafts, outcome.store.drafts);
+  Object.keys(draftTombstones).forEach((k) => delete draftTombstones[k]);
+  Object.assign(draftTombstones, outcome.store.tombstones || {});
+  setDraftState("idle", undefined, outcome.notices);
 }
-function persistDrafts(userDir: string) {
-  try {
-    const keys = Object.keys(conversationDrafts);
-    if (keys.length > 80) {
-      keys.sort((a, b) =>
-        String(conversationDrafts[a].updatedAt).localeCompare(
-          String(conversationDrafts[b].updatedAt),
-        ),
-      );
-      for (const k of keys.slice(0, keys.length - 80)) delete conversationDrafts[k];
-    }
-    fs.writeFileSync(
-      path.join(userDir, "ai-drafts.json"),
-      JSON.stringify(conversationDrafts),
-      "utf8",
-    );
-  } catch {}
+function persistDrafts() {
+  if (!draftStorage) return;
+  setDraftState("saving");
+  draftStorage
+    .saveAsync({
+      format: "zhuwen-ai-drafts",
+      version: 1,
+      drafts: { ...conversationDrafts },
+      tombstones: { ...draftTombstones },
+    })
+    .then(() => setDraftState("saved"))
+    .catch((e) => {
+      // 只记录错误与路径，不记录草稿正文/附件内容
+      setDraftState("error", String(e?.message || e));
+    });
+}
+/** 清除草稿并留下墓碑：此后任何 ≤ 该版本的延迟提交都会被拒绝 */
+function clearConversationDraft(novelId: string, convId: string) {
+  const key = draftKey(novelId, convId);
+  const prev = conversationDrafts[key];
+  draftTombstones[key] = Math.max(draftTombstones[key] || 0, prev?.version || 0);
+  delete conversationDrafts[key];
+  persistDrafts();
 }
 function saveConversationDraft(userDir: string) {
   const novelId = String(aiSession.novelId || "");
@@ -131,11 +201,12 @@ function saveConversationDraft(userDir: string) {
     convId,
     text: String(aiSession.text || ""),
     contexts: JSON.parse(JSON.stringify(aiSession.contexts || [])),
-    version: (prev?.version || 0) + 1,
+    version:
+      Math.max(prev?.version || 0, draftTombstones[key] || 0) + 1,
     updatedAt: new Date().toISOString(),
   };
   conversationDrafts[key] = next;
-  persistDrafts(userDir);
+  persistDrafts();
   return next;
 }
 function loadConversationDraft(novelId: string, convId: string) {
@@ -154,12 +225,11 @@ function applyDraftPatch(userDir: string, p: any) {
   // 目标必须仍是当前会话，否则丢弃过期延迟提交
   if (convId !== currentConv || (novelId && novelId !== currentNovel)) return false;
   const prev = conversationDrafts[key];
-  if (
-    p?.draftVersion != null &&
-    prev?.version != null &&
-    Number(p.draftVersion) < prev.version
-  )
-    return false;
+  const v = p?.draftVersion != null ? Number(p.draftVersion) : null;
+  const stale =
+    (v != null && prev?.version != null && v < prev.version) ||
+    (v != null && draftTombstones[key] != null && v <= draftTombstones[key]);
+  if (stale) return false;
   if (typeof p.text === "string") aiSession.text = p.text;
   if (Array.isArray(p.contexts)) aiSession.contexts = p.contexts;
   saveConversationDraft(userDir);
@@ -288,6 +358,7 @@ app.whenReady().then(() => {
     const check: any[] = db.prepare("PRAGMA quick_check").all();
     if (!check.length || check.some((row) => String(row.quick_check) !== "ok"))
       throw new Error("数据库完整性检查未通过");
+    ensureServerConnection();
   } catch (error) {
     dialog.showErrorBox(
       "铸文无法安全打开资料库",
@@ -382,6 +453,22 @@ function createMainWindow() {
     win.webContents.once("did-finish-load", async () => {
       const js = (code: string) => win!.webContents.executeJavaScript(code);
       const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      const shotsFailed: string[] = [];
+      const shotDir = path.join(process.cwd(), "artifacts", "chat-shots");
+      // capturePage 在合成器未就绪时会抛 UnknownVizError：重试几次并记录失败
+      const shot = async (name: string) => {
+        fs.mkdirSync(shotDir, { recursive: true });
+        for (let attempt = 0; attempt < 4; attempt++) {
+          try {
+            const img = await win!.webContents.capturePage();
+            fs.writeFileSync(path.join(shotDir, name + ".png"), img.toPNG());
+            return;
+          } catch {
+            await wait(350);
+          }
+        }
+        shotsFailed.push(name);
+      };
       const uiSmokeErrorFile = path.join(
         process.cwd(),
         "artifacts",
@@ -442,14 +529,38 @@ function createMainWindow() {
         await js(`(()=>{if(!document.querySelector('.right-panel'))document.querySelector('.topbar .primary.small')?.click()})()`);
         await wait(250);
         const aiOk = await js(
-          `Boolean(document.querySelector('.context-actions'))`,
+          `Boolean(document.querySelector('.zchat [data-fd-id="ai-composer"]')&&document.querySelector('[data-fd-id="ai-toolbar"]'))`,
         );
         await js(
-          `document.querySelectorAll('.context-actions button')[2]?.click()`,
+          `document.querySelector('[data-fd-id="ai-add-ref"]')?.click()`,
         );
         await wait(250);
+        await shot("02-ref-picker");
         const pickerOk = await js(
-          `Boolean(document.querySelector('.context-picker'))`,
+          `Boolean(document.querySelector('[data-fd-id="ai-ref-picker"]')&&document.querySelector('[data-fd-id="ai-picker-chapter"]'))`,
+        );
+        await shot("02-ref-picker-open");
+        await js(
+          `document.querySelector('[data-fd-id="ai-ref-picker"] .zchat-icon-btn')?.click()`,
+        );
+        await wait(250);
+        await shot("01-ai-empty");
+        await js(`(()=>{const f=document.querySelector('[data-fd-id="ai-input"]');if(!f)return false;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(f,'帮我想想第三章的场景推进');f.dispatchEvent(new Event('input',{bubbles:true}));return true})()`);
+        await wait(300);
+        await shot("05-composer-filled");
+        // 顶部会话栏：历史抽屉可开合
+        await js(`document.querySelector('[data-fd-id="ai-history-toggle"]')?.click()`);
+        await wait(250);
+        await shot("03-history-drawer");
+        const historyDrawerOk = await js(
+          `Boolean(document.querySelector('[data-fd-id="ai-history-drawer"]'))`,
+        );
+        await js(
+          `window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`,
+        );
+        await wait(200);
+        const historyClosedOk = await js(
+          `!document.querySelector('[data-fd-id="ai-history-drawer"]')`,
         );
         await js(
           `(()=>{document.querySelector('.toolbar-more').open=true;([...document.querySelectorAll('.toolbar-menu button')].find(b=>b.textContent.trim()==='设置'))?.click()})()`,
@@ -501,8 +612,17 @@ function createMainWindow() {
         const dialogOk = Boolean(
           dialogTriggeredOk && dialogOpenOk && dialogCloseOk,
         );
+        // 新面板顶部显示会话标题；用发送按钮的可访问名断言英文界面仍然生效
         const translatedAiPanelOk = await js(
-          `document.querySelector('.right-panel .panel-head strong')?.textContent.includes('AI Writing Assistant')`,
+          `(() => {
+             const send = document.querySelector('[data-fd-id="ai-send"]');
+             const toolbar = document.querySelector('[data-fd-id="ai-toolbar"]');
+             if (!send || !toolbar) return false;
+             const label = send.getAttribute('aria-label') || '';
+             const isEnglish = label === 'Send' || label === 'Generate continuation';
+             const noLegacyBar = !document.querySelector('.conversation-bar');
+             return isEnglish && noLegacyBar;
+           })()`,
         );
         await js(`document.querySelector('button[data-view="library"]')?.click()`);
         let translatedLibraryOk = false;
@@ -597,16 +717,21 @@ function createMainWindow() {
         }
         await js(`document.querySelector('.modal > header button')?.click()`);
         await wait(150);
-        await js(
-          `document.querySelectorAll('.context-actions button')[1]?.click()`,
-        );
+        await js(`document.querySelector('[data-fd-id="ai-add-ref"]')?.click()`);
+        await wait(200);
+        await js(`document.querySelector('[data-fd-id="ai-picker-chapter"]')?.click()`);
         await wait(300);
         const mainShared = await js(
-          `Boolean(document.querySelector('.context-chip'))`,
+          `Boolean(document.querySelector('[data-fd-id="ai-ref-chips"] .zchat-ref'))`,
         );
-        await js(
-          `([...document.querySelectorAll('.panel-head button')].find(b=>b.textContent.trim()==='浮窗'))?.click()`,
+        // 浮窗入口已迁入「更多」菜单（功能不变，仅入口变化）
+        await js(`document.querySelector('[data-fd-id="ai-more-menu"]')?.click()`);
+        await wait(200);
+        await shot("04-more-menu");
+        const moreMenuOk = await js(
+          `Boolean(document.querySelector('[data-fd-id="ai-menu-rename"]')&&document.querySelector('[data-fd-id="ai-menu-float"]'))`,
         );
+        await js(`document.querySelector('[data-fd-id="ai-menu-float"]')?.click()`);
         await wait(1600);
         const floatLoaded = Boolean(floatWin && !floatWin.isDestroyed());
         let floatShared = false;
@@ -614,7 +739,7 @@ function createMainWindow() {
           for (let i = 0; i < 8 && !floatShared; i++) {
             try {
               floatShared = await floatWin!.webContents.executeJavaScript(
-                `Boolean(document.querySelector('.float-window')&&document.querySelector('.context-chip'))`,
+                `Boolean(document.querySelector('.float-window')&&document.querySelector('.zchat'))`,
               );
             } catch {}
             if (!floatShared) await wait(500);
@@ -666,6 +791,8 @@ function createMainWindow() {
           zoomOk,
           aiOk,
           pickerOk,
+          historyDrawerOk,
+          historyClosedOk,
           typoOk,
           languageOk,
           translatedSettingsOk,
@@ -686,6 +813,7 @@ function createMainWindow() {
           reduceMotionIndependentOk,
           reduceMotionOffOk,
           mainShared,
+          moreMenuOk,
           floatLoaded,
           floatShared,
           summaryOk,
@@ -694,8 +822,13 @@ function createMainWindow() {
           relationExpandOk,
           libraryDetailOk,
         };
-        if (Object.values(checks).some((x) => !x))
-          throw new Error(`UI smoke feature failed ${JSON.stringify(checks)}`);
+        const failedChecks = Object.entries(checks)
+          .filter(([, v]) => !v)
+          .map(([k, v]) => `${k}=${String(v)}`);
+        if (failedChecks.length)
+          throw new Error(
+            `UI smoke feature failed: ${failedChecks.join(', ')} | ${JSON.stringify(checks)}`,
+          );
         try {
           if (floatWin && !floatWin.isDestroyed()) floatWin.close();
         } catch {}
@@ -712,8 +845,10 @@ function createMainWindow() {
             await wait(400);
           }
         }
+        if (shotsFailed.length)
+          console.log(`UI_SHOTS_FAIL ${shotsFailed.join(",")}`);
         console.log(
-          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n reference_picker typography_settings daily_goal database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared summary_modal library_kinds relation_graph relation_expand library_detail ${status} ${out}`,
+          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n reference_picker typography_settings daily_goal database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared history_drawer summary_modal library_kinds relation_graph relation_expand library_detail ${status} ${out}`,
         );
         app.exit(0);
       } catch (e) {
@@ -741,14 +876,55 @@ app.on("before-quit", (e) => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
-app.on("will-quit", () => {
+let quitFinalizing = false;
+app.on("will-quit", (e) => {
   cancelSessionBroadcast();
   try {
     focusTracker?.end();
   } catch {}
+  if (quitFinalizing) {
+    // 第二次进入：队列已等待完毕（或超时），安全收尾
+    try {
+      db?.close();
+    } catch {}
+    return;
+  }
+  // 首次 will-quit：有界等待草稿队列落盘，防止退出截断写入
+  e.preventDefault();
+  quitFinalizing = true;
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    try {
+      db?.close();
+    } catch {}
+    app.quit();
+  };
+  const timer = setTimeout(() => {
+    // 超时不是保存成功：状态层保留 error/saving，如实呈现
+    if (draftStorage && draftStorage.isSaving)
+      setDraftState("error", "退出等待超时，草稿可能未完成保存");
+    finish();
+  }, 2500);
   try {
-    db?.close();
-  } catch {}
+    draftStorage
+      ?.flush(2000)
+      .then((r) => {
+        if (!r.flushed && draftStorage?.isSaving)
+          setDraftState("error", "退出等待超时，草稿可能未完成保存");
+      })
+      .catch((err) => {
+        setDraftState("error", String(err?.message || err));
+      })
+      .finally(() => {
+        clearTimeout(timer);
+        finish();
+      });
+  } catch {
+    clearTimeout(timer);
+    finish();
+  }
 });
 
 function all(sql: string, ...args: any[]) {
@@ -785,6 +961,22 @@ function conversationHistory(conversationId: string) {
       content: (prefix ? `${prefix}\n\n` : "") + row.content,
     };
   });
+}
+function styleCardRow(id: string) {
+  const row: any = id ? get("SELECT * FROM ai_style_cards WHERE id=?", id) : null;
+  if (!row) return null;
+  let tasks: string[] = [];
+  try { tasks = JSON.parse(row.tasks_json || "[]"); } catch {}
+  const card = { ...row, tasks, version: Number(row.builtin_version || 1) };
+  return { ...card, rules: effectiveStyleRules(card) };
+}
+function requestStyle(p: any) {
+  const id = String(p?.styleId || "");
+  const task = String(p?.taskKind || "chat");
+  const card = styleCardRow(id);
+  if (task === "chat" || task === "check") return { card: null, instruction: "" };
+  const usableCard = card && (card.tasks.includes(task) || task === "polish" || task === "naturalize") ? card : null;
+  return { card: usableCard, instruction: buildTaskAndStyleInstructions(usableCard, task) };
 }
 const ok = <T>(data: T) => ({ ok: true, data });
 const fail = (e: unknown) => ({
@@ -1802,15 +1994,13 @@ function registerIpc(userDir: string) {
     return ok(true);
   });
 
-  ipcMain.handle("connections:list", () =>
-    ok(all("SELECT * FROM api_connections ORDER BY updated_at DESC")),
-  );
+  ipcMain.handle("connections:list", () => ok([serverConnection()]));
   ipcMain.handle("connections:save", (_, p) => {
     try {
       if (!p || typeof p !== "object") throw new Error("连接配置无效");
+      if (String(p.id || "") !== ZHUWEN_SERVER_CONNECTION_ID)
+        throw new Error("铸文商用版仅支持内置 AI 服务");
       if (!String(p.name || "").trim()) throw new Error("请填写连接名称");
-      if (!String(p.model || "").trim()) throw new Error("请填写模型 ID");
-      validateBaseUrl(p.baseUrl);
       const temperature = Number(p.temperature);
       const maxTokens = Number(p.maxTokens);
       const timeoutMs = Number(p.timeoutMs);
@@ -1820,21 +2010,19 @@ function registerIpc(userDir: string) {
         throw new Error("最大输出 tokens 必须是 1 到 200000 的整数");
       if (!Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000)
         throw new Error("超时必须在 1000 到 600000 毫秒之间");
-      const t = timestamp(),
-        id = p.id || newId();
+      const t = timestamp(), id = ZHUWEN_SERVER_CONNECTION_ID;
       const reasoningEffort = ["", "low", "medium", "high"].includes(
         String(p.reasoningEffort || ""),
       )
         ? String(p.reasoningEffort || "")
         : "";
-      if (p.apiKey) saveSecret(userDir, id, p.apiKey);
       db.prepare(
         `INSERT INTO api_connections(id,name,base_url,model,temperature,max_tokens,timeout_ms,streaming,reasoning_effort,created_at,updated_at) VALUES(@id,@name,@baseUrl,@model,@temperature,@maxTokens,@timeoutMs,@streaming,@reasoningEffort,@t,@t) ON CONFLICT(id) DO UPDATE SET name=@name,base_url=@baseUrl,model=@model,temperature=@temperature,max_tokens=@maxTokens,timeout_ms=@timeoutMs,streaming=@streaming,reasoning_effort=@reasoningEffort,updated_at=@t,data_version=data_version+1`,
       ).run({
         id,
-        name: String(p.name).trim(),
-        baseUrl: p.baseUrl,
-        model: String(p.model).trim(),
+        name: "铸文 AI",
+        baseUrl: ZHUWEN_SERVER_BASE_URL,
+        model: ZHUWEN_SERVER_MODEL,
         temperature,
         maxTokens,
         timeoutMs,
@@ -1848,18 +2036,18 @@ function registerIpc(userDir: string) {
     }
   });
   ipcMain.handle("connections:delete", (_, id) => {
+    if (id === ZHUWEN_SERVER_CONNECTION_ID) return fail("服务器模型连接不可删除");
     db.prepare("DELETE FROM api_connections WHERE id=?").run(id);
     deleteSecret(userDir, id);
     return ok(true);
   });
   ipcMain.handle("connections:test", async (_, id) => {
     try {
-      const c: any = get("SELECT * FROM api_connections WHERE id=?", id);
-      const key = readSecret(userDir, id);
-      if (!key) throw new Error("尚未保存 API Key");
+      if (id !== ZHUWEN_SERVER_CONNECTION_ID) throw new Error("连接不存在");
+      const c: any = serverConnection();
       await chatRequest(
         c,
-        key,
+        ZHUWEN_SERVER_TOKEN,
         [{ role: "user", content: "请只回复：连接成功" }],
         false,
         new AbortController(),
@@ -1872,6 +2060,8 @@ function registerIpc(userDir: string) {
   });
   ipcMain.handle("connections:models", async (_, p) => {
     try {
+      if (p?.connectionId === ZHUWEN_SERVER_CONNECTION_ID || String(p?.baseUrl || "").includes("118.31.220.154:8100"))
+        return ok([ZHUWEN_SERVER_MODEL]);
       const base = String(p?.baseUrl || "");
       validateBaseUrl(base);
       const key =
@@ -1924,6 +2114,62 @@ function registerIpc(userDir: string) {
         ins.run(newId(), name, content, t, t);
       return ok(true);
     })();
+  });
+  ipcMain.handle("ai:styles:list", () =>
+    ok(
+      all("SELECT * FROM ai_style_cards ORDER BY builtin DESC, created_at").map((row: any) => {
+        let tasks: string[] = [];
+        try { tasks = JSON.parse(row.tasks_json || "[]"); } catch {}
+        const card = { ...row, tasks, version: Number(row.builtin_version || 1) };
+        return { ...card, rules: effectiveStyleRules(card) };
+      }),
+    ),
+  );
+  ipcMain.handle("ai:style-selection:get", (_, novelId) => {
+    const row: any = get(
+      "SELECT style_id FROM novel_ai_styles WHERE novel_id=?",
+      String(novelId || ""),
+    );
+    const card = row?.style_id ? styleCardRow(row.style_id) : null;
+    return ok(card ? { styleId: card.id, card } : { styleId: "", card: null });
+  });
+  ipcMain.handle("ai:style-selection:set", (_, p) => {
+    const novelId = String(p?.novelId || "");
+    const styleId = String(p?.styleId || "");
+    if (!get("SELECT id FROM novels WHERE id=?", novelId)) return fail("作品不存在");
+    if (styleId && !styleCardRow(styleId)) return fail("写作风格不存在");
+    db.prepare(
+      "INSERT INTO novel_ai_styles(novel_id,style_id,updated_at) VALUES(?,?,?) ON CONFLICT(novel_id) DO UPDATE SET style_id=excluded.style_id,updated_at=excluded.updated_at,data_version=data_version+1",
+    ).run(novelId, styleId || null, timestamp());
+    return ok({ styleId, card: styleId ? styleCardRow(styleId) : null });
+  });
+  ipcMain.handle("ai:style:estimate", (_, p) => {
+    const style = requestStyle(p);
+    return ok({ chars: style.instruction.length, styleId: style.card?.id || "", taskKind: p?.taskKind || "chat" });
+  });
+  ipcMain.handle("ai:style:save", (_, p) => {
+    const name = String(p?.name || "").trim();
+    const rules = String(p?.rules || "").trim();
+    if (!name || name.length > 80) return fail("风格名称需为 1 到 80 个字符");
+    if (!rules || rules.length > 20000) return fail("风格规则需为 1 到 20000 个字符");
+    const id = String(p?.id || newId());
+    const old: any = get("SELECT builtin FROM ai_style_cards WHERE id=?", id);
+    if (old?.builtin) return fail("内置风格不能直接修改，请先复制为自定义风格");
+    const t = timestamp();
+    db.prepare(
+      "INSERT INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,0,1,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,tasks_json=excluded.tasks_json,rules=excluded.rules,updated_at=excluded.updated_at,data_version=data_version+1",
+    ).run(id, name, String(p?.description || "").slice(0, 240), JSON.stringify(Array.isArray(p?.tasks) ? p.tasks : ["continue", "polish"]), rules, t, t);
+    return ok({ id });
+  });
+  ipcMain.handle("ai:style:delete", (_, id) => {
+    const row: any = get("SELECT builtin FROM ai_style_cards WHERE id=?", String(id || ""));
+    if (!row) return fail("写作风格不存在");
+    if (row.builtin) return fail("内置风格不能删除");
+    db.transaction(() => {
+      db.prepare("UPDATE novel_ai_styles SET style_id=NULL,updated_at=? WHERE style_id=?").run(timestamp(), id);
+      db.prepare("DELETE FROM ai_style_cards WHERE id=?").run(id);
+    })();
+    return ok(true);
   });
   ipcMain.handle("ai:conversations", (_, p) => {
     const novelId = typeof p === "string" ? p : String(p?.novelId || "");
@@ -1999,9 +2245,15 @@ function registerIpc(userDir: string) {
     return ok(true);
   });
   ipcMain.handle("ai:conversation:trash", (_, id) => {
+    const conv: any = get(
+      "SELECT novel_id FROM ai_conversations WHERE id=?",
+      id,
+    );
     db.prepare(
       "UPDATE ai_conversations SET deleted_at=?,updated_at=? WHERE id=?",
     ).run(timestamp(), timestamp(), id);
+    if (conv?.novel_id)
+      clearConversationDraft(String(conv.novel_id), String(id));
     if (aiSession.conversationId === id) {
       // 删除正在生成的会话：停止请求
       if (aiSession.requestId) requests.get(aiSession.requestId)?.abort();
@@ -2017,6 +2269,8 @@ function registerIpc(userDir: string) {
   ipcMain.handle("ai:previewRequest", (_, p) => {
     const history = conversationHistory(String(p?.conversationId || ""));
     const prefix = contextText(p?.contexts || []);
+    const style = requestStyle(p);
+    if (style.instruction) history.unshift({ role: "system", content: style.instruction });
     history.push({
       role: "user",
       content: (prefix ? `${prefix}\n\n` : "") + String(p?.prompt || ""),
@@ -2029,6 +2283,7 @@ function registerIpc(userDir: string) {
     let conv = String(p.conversationId || "");
     let content = "";
     let connection: any = null;
+    const style = requestStyle(p);
     let assistantSaved = false;
     requests.set(requestId, controller);
     try {
@@ -2049,7 +2304,7 @@ function registerIpc(userDir: string) {
       const uid = newId(),
         t = timestamp();
       db.prepare(
-        "INSERT INTO ai_messages(id,conversation_id,role,content,model,connection_id,chapter_id,source_revision,selection_text,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO ai_messages(id,conversation_id,role,content,model,connection_id,chapter_id,source_revision,selection_text,selection_from,selection_to,task_kind,style_id,style_name,style_version,style_rules,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       ).run(
         uid,
         conv,
@@ -2060,6 +2315,13 @@ function registerIpc(userDir: string) {
         p.chapterId ?? null,
         p.sourceRevision ?? null,
         p.selectionText ?? "",
+        p.selectionFrom ?? null,
+        p.selectionTo ?? null,
+        p.taskKind || "chat",
+        style.card?.id || null,
+        style.card?.name || null,
+        style.card?.version || null,
+        style.instruction || null,
         t,
       );
       aiSession.novelId = p.novelId ?? aiSession.novelId;
@@ -2080,13 +2342,17 @@ function registerIpc(userDir: string) {
         db.prepare(
           "INSERT INTO message_context_snapshots VALUES(?,?,?,?,?,?,?,1)",
         ).run(newId(), uid, x.label, x.kind, x.content, x.sourceId || null, t);
+      // 规则只在本次请求的内存快照中加入一次，不写入对话历史，避免逐轮累积。
       const history = conversationHistory(conv);
-      connection = get(
-        "SELECT * FROM api_connections WHERE id=?",
-        p.connectionId,
-      );
-      const
-        key = readSecret(userDir, p.connectionId);
+      if (style.instruction) history.unshift({ role: "system", content: style.instruction });
+      connection =
+        p.connectionId === ZHUWEN_SERVER_CONNECTION_ID
+          ? serverConnection()
+          : get("SELECT * FROM api_connections WHERE id=?", p.connectionId);
+      const key =
+        p.connectionId === ZHUWEN_SERVER_CONNECTION_ID
+          ? ZHUWEN_SERVER_TOKEN
+          : readSecret(userDir, p.connectionId);
       if (!connection || !key) throw new Error("AI 连接或 API Key 未配置");
       for (let attempt = 0; ; attempt++) {
         try {
@@ -2203,11 +2469,14 @@ function registerIpc(userDir: string) {
         p.chapterId,
       );
       if (!c) throw new Error("章节不存在");
-      const conn: any = get(
-        "SELECT * FROM api_connections WHERE id=?",
-        p.connectionId,
-      );
-      const key = readSecret(userDir, p.connectionId);
+      const conn: any =
+        p.connectionId === ZHUWEN_SERVER_CONNECTION_ID
+          ? serverConnection()
+          : get("SELECT * FROM api_connections WHERE id=?", p.connectionId);
+      const key =
+        p.connectionId === ZHUWEN_SERVER_CONNECTION_ID
+          ? ZHUWEN_SERVER_TOKEN
+          : readSecret(userDir, p.connectionId);
       if (!conn || !key) throw new Error("AI 连接或 API Key 未配置");
       const text = String(c.plain_text || "")
         .slice(0, 12000)
@@ -2857,6 +3126,11 @@ function buildBackup(novelId: string) {
         ...messageIds,
       )
     : [];
+  const selectedStyle: any = get("SELECT style_id FROM novel_ai_styles WHERE novel_id=?", novelId);
+  bundle.styleSelection = selectedStyle?.style_id || "";
+  bundle.styleCards = selectedStyle?.style_id
+    ? all("SELECT * FROM ai_style_cards WHERE id=? AND builtin=0", selectedStyle.style_id)
+    : [];
   bundle.checksum = createHash("sha256")
     .update(JSON.stringify(bundle))
     .digest("hex");
@@ -2873,7 +3147,8 @@ function verifyBackup(b: any) {
     !Array.isArray(b.library) ||
     !Array.isArray(b.conversations) ||
     !Array.isArray(b.messages) ||
-    !Array.isArray(b.contexts)
+    !Array.isArray(b.contexts) ||
+    (b.styleCards !== undefined && !Array.isArray(b.styleCards))
   )
     throw new Error("备份格式或版本不受支持");
   for (const key of [
@@ -3009,7 +3284,7 @@ function restoreBackupAsCopy(b: any) {
       const id = newId();
       messageMap.set(m.id, id);
       db.prepare(
-        "INSERT INTO ai_messages(id,conversation_id,role,content,model,connection_id,chapter_id,source_revision,selection_text,incomplete,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO ai_messages(id,conversation_id,role,content,model,connection_id,chapter_id,source_revision,selection_text,incomplete,task_kind,style_id,style_name,style_version,style_rules,selection_from,selection_to,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       ).run(
         id,
         convMap.get(m.conversation_id)!,
@@ -3021,6 +3296,13 @@ function restoreBackupAsCopy(b: any) {
         m.source_revision,
         m.selection_text,
         m.incomplete || 0,
+        m.task_kind || "chat",
+        m.style_id || null,
+        m.style_name || null,
+        m.style_version || null,
+        m.style_rules || null,
+        m.selection_from ?? null,
+        m.selection_to ?? null,
         m.created_at || t,
       );
     }
@@ -3040,6 +3322,26 @@ function restoreBackupAsCopy(b: any) {
             null,
           x.created_at || t,
         );
+    let restoredStyleId = String(b.styleSelection || "");
+    if (Array.isArray(b.styleCards) && b.styleCards.length) {
+      const source = b.styleCards[0];
+      restoredStyleId = newId();
+      db.prepare(
+        "INSERT INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,0,1,?,?)",
+      ).run(
+        restoredStyleId,
+        source.name,
+        source.description || "",
+        source.tasks_json || "[]",
+        source.rules || "",
+        t,
+        t,
+      );
+    } else if (restoredStyleId && !styleCardRow(restoredStyleId)) {
+      restoredStyleId = "";
+    }
+    if (restoredStyleId)
+      db.prepare("INSERT INTO novel_ai_styles(novel_id,style_id,updated_at) VALUES(?,?,?)").run(novelId, restoredStyleId, t);
     return novelId;
   })();
 }

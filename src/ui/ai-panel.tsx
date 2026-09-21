@@ -3,8 +3,18 @@ import { marked } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { joinSegments, splitSegments } from "../segments";
 import { relevantMaterials } from "../relevant";
-import { api, useAiSessionStore, fmt, time, kindNameFor, promptNameFor, kinds, parseJson, Empty, Modal, DiffModal, ConfirmDialog, PromptDialog, AnyRow, UiLanguage } from "./shared";
-import { Select } from "./select";
+import { api, useAiSessionStore, fmt, time, kindNameFor, promptNameFor, kinds, parseJson, Empty, Modal, DiffModal, ConfirmDialog, PromptDialog, AnyRow, UiLanguage, aiDraftFlusher } from "./shared";
+import { ChatToolbar } from "./chat/chat-toolbar";
+import { HistoryDrawer } from "./chat/history-drawer";
+import { MessageList, type ReplyActions } from "./chat/message-list";
+import { Composer, type ComposerTask } from "./chat/composer";
+import { RefPicker } from "./chat/ref-picker";
+import { ContextDialog } from "./chat/context-dialog";
+import { StyleCardPanel, type StyleCard } from "./chat/style-card-panel";
+import {
+  contextBreakdown,
+  markInvalidRefs,
+} from "./chat/chat-model";
 
 export function MdView({ text }: { text: string }) {
   const html = useMemo(
@@ -32,6 +42,8 @@ export function AiPanel({
   float,
   onOpenSettings,
   language = "zh-CN",
+  expanded,
+  onToggleExpand,
 }: {
   novel: AnyRow;
   chapter: AnyRow | null;
@@ -41,6 +53,9 @@ export function AiPanel({
   float?: boolean;
   onOpenSettings?: () => void;
   language?: UiLanguage;
+  /** 主窗口内展开聊天区（与独立浮窗区分） */
+  expanded?: boolean;
+  onToggleExpand?: (next: boolean) => void;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const [session, patch] = useAiSessionStore();
@@ -49,14 +64,16 @@ export function AiPanel({
     [conversations, setConversations] = useState<AnyRow[]>([]),
     [libraryAll, setLibraryAll] = useState<AnyRow[]>([]),
     [bookChapters, setBookChapters] = useState<AnyRow[]>([]),
+    [styleCards, setStyleCards] = useState<StyleCard[]>([]),
     [pickerOpen, setPickerOpen] = useState(false),
     [compare, setCompare] = useState<{ msg: AnyRow; original: string } | null>(
       null,
     ),
     [segments, setSegments] = useState<{ msg: AnyRow } | null>(null);
   const autoSelected = useRef("");
-  const [mode, setMode] = useState<"chat" | "continue">("chat");
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [mode, setMode] = useState<"chat" | "continue" | "naturalize">("chat");
+  const [styleId, setStyleId] = useState("");
+  const [styleRuleChars, setStyleRuleChars] = useState(0);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [previewMessages, setPreviewMessages] = useState<AnyRow[]>([]);
@@ -90,6 +107,15 @@ export function AiPanel({
     setDraft(text);
   }, [text]);
   useEffect(() => () => window.clearTimeout(draftTimer.current), []);
+  // 退出前由 App 调用：立即提交 400ms 防抖中未发送的草稿
+  const flushDraftRef = useRef<() => void>(() => {});
+  flushDraftRef.current = flushDraft;
+  useEffect(() => {
+    aiDraftFlusher.current = () => flushDraftRef.current();
+    return () => {
+      aiDraftFlusher.current = () => {};
+    };
+  }, []);
   function patchDraft(value: string, convId: string, version: number) {
     void patch({
       text: value,
@@ -133,6 +159,7 @@ export function AiPanel({
   const [historyQuery, setHistoryQuery] = useState("");
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const HISTORY_PAGE = 50;
   const historySeq = useRef(0);
   const loadConversations = useCallback(
@@ -142,6 +169,7 @@ export function AiPanel({
       const search = opts?.search ?? historyQuery;
       const seq = ++historySeq.current;
       setHistoryLoading(true);
+      setHistoryError(null);
       api("ai:conversations", {
         novelId,
         limit: HISTORY_PAGE,
@@ -150,7 +178,10 @@ export function AiPanel({
       }).then((r) => {
         if (seq !== historySeq.current) return;
         setHistoryLoading(false);
-        if (!r.ok) return;
+        if (!r.ok) {
+          setHistoryError(r.error || "load failed");
+          return;
+        }
         const rows = r.data?.rows || [];
         setHistoryHasMore(Boolean(r.data?.hasMore));
         setConversations((prev) => {
@@ -167,11 +198,31 @@ export function AiPanel({
     loadConversations();
     api("connections:list").then((r) => r.ok && setConnections(r.data));
     api("prompts:list").then((r) => r.ok && setPrompts(r.data));
+    api<StyleCard[]>("ai:styles:list").then((r) => r.ok && setStyleCards(r.data || []));
+    api<any>("ai:style-selection:get", novelId).then((r) => r.ok && setStyleId(r.data?.styleId || ""));
     api("novels:open", novelId).then(
       (r) => r.ok && setBookChapters(r.data.chapters),
     );
     api("library:listAll", novelId).then((r) => r.ok && setLibraryAll(r.data));
   }, [novelId]);
+  async function reloadStyleCards() {
+    const r = await api<StyleCard[]>("ai:styles:list");
+    if (r.ok) setStyleCards(r.data || []);
+    const selected = await api<any>("ai:style-selection:get", novelId);
+    if (selected.ok) setStyleId(selected.data?.styleId || "");
+  }
+  async function selectStyle(next: string) {
+    const r = await api("ai:style-selection:set", { novelId, styleId: next });
+    if (r.ok) setStyleId(next);
+    else notify(r.error || tr("写作风格保存失败", "Could not save writing style"));
+  }
+  useEffect(() => {
+    let live = true;
+    api<any>("ai:style:estimate", { styleId, taskKind: mode }).then((r) => {
+      if (live && r.ok) setStyleRuleChars(Number(r.data?.chars || 0));
+    });
+    return () => { live = false; };
+  }, [styleId, mode]);
   useEffect(() => {
     const off = window.zhuwen.onAiConversations((payload) => {
       const rows = Array.isArray(payload) ? payload : payload?.rows;
@@ -252,12 +303,18 @@ export function AiPanel({
   }
   function addSelection() {
     let selected = "";
+    let selectionFrom: number | null = null;
+    let selectionTo: number | null = null;
     if (editor)
+      {
+      selectionFrom = editor.state.selection.from;
+      selectionTo = editor.state.selection.to;
       selected = editor.state.doc.textBetween(
         editor.state.selection.from,
         editor.state.selection.to,
         "\n",
       );
+    }
     if (!selected) selected = selectionText;
     if (!selected) return notify(tr("请先在正文中选择文字", "Select text in the manuscript first"));
     setContexts((xs) => [
@@ -267,6 +324,8 @@ export function AiPanel({
         kind: "selection",
         content: selected,
         sourceId: chapterId || "",
+        from: selectionFrom,
+        to: selectionTo,
       },
     ]);
   }
@@ -413,6 +472,18 @@ export function AiPanel({
     | { contexts: AnyRow[]; prompt: string; ask: string }
     | null {
     const ask = draftRef.current.trim();
+    if (mode === "naturalize") {
+      const selected = contexts.find((x) => x.kind === "selection");
+      if (!selected) return null;
+      const resolved = resolveTemplateVars(contexts, ask);
+      return {
+        contexts: resolved.contexts,
+        prompt: ask
+          ? `请对引用的选区执行自然化润色。保留原有情节顺序、叙述视角、关键线索、人物决定和已知设定。只输出修改后的正文。\n\n补充要求：${resolved.prompt}`
+          : "请对引用的选区执行自然化润色。只输出修改后的正文。",
+        ask,
+      };
+    }
     if (mode === "continue") {
       const cont = continuationContext();
       if (!cont.content) return null;
@@ -431,26 +502,21 @@ export function AiPanel({
     const resolved = resolveTemplateVars(contexts, ask);
     return { contexts: resolved.contexts, prompt: resolved.prompt, ask };
   }
-  async function openSendPreview() {
-    flushDraft();
-    const plan = buildSendPlan();
-    if (!plan) return notify(tr("当前章节还没有正文，无法预览续写请求", "The current chapter is empty, so there is no continuation request to preview"));
-    const result = await api<AnyRow[]>("ai:previewRequest", {
-      conversationId: conversation,
-      contexts: plan.contexts,
-      prompt: plan.prompt,
-    });
-    if (!result.ok) return notify(result.error || tr("无法生成发送预览", "Could not build the request preview"));
-    setPreviewMessages(result.data);
-    setPreviewOpen(true);
-  }
   async function send() {
     if (!connection || !chapterId || generating) return;
     flushDraft();
     const continuing = mode === "continue";
     const plan = buildSendPlan();
-    if (!plan) return notify(tr("当前章节还没有正文，无法续写", "The current chapter is empty and cannot be continued"));
-    if (!continuing && !plan.ask) return;
+    if (!plan) return notify(mode === "naturalize" ? tr("请先添加正文选区，再执行自然化润色", "Select a manuscript excerpt before naturalizing") : tr("当前章节还没有正文，无法续写", "The current chapter is empty and cannot be continued"));
+    if (!continuing && mode !== "naturalize" && !plan.ask) return;
+    const plannedChars = plan.contexts.reduce((n, x) => n + String(x.content || "").length, 0)
+      + historyChars + draftRef.current.length + styleRuleChars;
+    if (plannedChars > contextLimitChars) {
+      return notify(tr(
+        `上下文已超过 30 万字上限（当前约 ${fmt(plannedChars)} 字），请减少引用或历史消息。`,
+        `Context exceeds the 300k-character limit (about ${fmt(plannedChars)} chars). Remove references or older messages.`,
+      ));
+    }
     if (!float && save && !(await save(true))) return;
     const id = crypto.randomUUID();
     patch({ contexts: plan.contexts });
@@ -465,9 +531,13 @@ export function AiPanel({
       sourceRevision: session?.chapter?.revision ?? chapter?.revision,
       selectionText:
         plan.contexts.find((x) => x.kind === "selection")?.content || "",
+      selectionFrom: plan.contexts.find((x) => x.kind === "selection")?.from ?? editor?.state.selection.from ?? null,
+      selectionTo: plan.contexts.find((x) => x.kind === "selection")?.to ?? editor?.state.selection.to ?? null,
       connectionId: connection,
       prompt: plan.prompt,
       contexts: plan.contexts,
+      styleId,
+      taskKind: mode,
     });
     if (!r.ok) {
       pendingContinue.current = false;
@@ -479,15 +549,21 @@ export function AiPanel({
     mode: "insert" | "replace",
     content: string,
     sourceRevision?: number,
+    savedSelection?: string,
+    savedFrom?: number | null,
+    savedTo?: number | null,
   ) {
     if (!editor || !chapter || !content) return;
-    const selected = contexts.find((x) => x.kind === "selection")?.content;
-    if (
-      mode === "replace" &&
-      (!selected ||
-        (chapter.revision !== sourceRevision && sourceRevision != null))
-    )
+    const selected = savedSelection ?? contexts.find((x) => x.kind === "selection")?.content;
+    if (mode === "replace" && (!selected || (chapter.revision !== sourceRevision && sourceRevision != null)))
       return notify(tr("正文已发生变化，请重新选择原文后再替换", "The manuscript changed. Select the original text again before replacing it"));
+    if (mode === "replace") {
+      const currentSelection = editor.state.selection;
+      if (savedFrom != null && savedTo != null && (currentSelection.from !== savedFrom || currentSelection.to !== savedTo))
+        return notify(tr("原选区位置已变化，请重新选择并比较后再采用", "The original selection moved. Select it again and compare before adopting"));
+      if (editor.state.doc.textBetween(currentSelection.from, currentSelection.to, "\n") !== selected)
+        return notify(tr("当前选区与原文不一致，未执行替换", "The current selection no longer matches the original, so nothing was replaced"));
+    }
     if (save && !(await save(true)))
       return notify(tr("正文尚未保存，已取消写入 AI 内容", "The manuscript could not be saved, so the AI text was not inserted"));
     const snapshot = await api("revisions:create", {
@@ -501,9 +577,6 @@ export function AiPanel({
     if (mode === "insert") editor.commands.insertContent(content);
     else {
       const { from, to } = editor.state.selection;
-      const current = editor.state.doc.textBetween(from, to, "\n");
-      if (current !== selected)
-        return notify(tr("当前选区与原文不一致，未执行替换", "The current selection no longer matches the original, so nothing was replaced"));
       if (editor?.storage?.zhuwen?.markProgrammatic)
         editor.storage.zhuwen.markProgrammatic();
       editor
@@ -546,548 +619,367 @@ export function AiPanel({
     0,
   );
   const draftChars = draftRef.current.length;
-  const estimate = Math.ceil((contextChars + historyChars + draftChars) / 2);
+  const estimate = Math.ceil((contextChars + historyChars + draftChars + styleRuleChars) / 2);
   const contextOnlyEstimate = Math.ceil(contextChars / 2);
+  const historyCount = messages.filter((m) => !m.streaming).length;
+  const generatingConvTitle =
+    conversations.find(
+      (c) => c.id === (session?.generatingConversationId || conversation),
+    )?.title || "";
+  const refsForUi: AnyRow[] = markInvalidRefs(contexts, {
+    chapterId,
+    chapterSummary: chapter?.summary,
+    bookChapters,
+    selectionText,
+    hasChapterText: Boolean(chapterText().trim()),
+  });
+  const breakdown = contextBreakdown(
+    contexts,
+    messages.filter((m) => !m.streaming).length,
+    historyChars,
+    draftChars,
+    styleRuleChars,
+  );
+  const contextLimitChars = 300000;
+  const contextPercent = Math.round((breakdown.totalChars / contextLimitChars) * 100);
+  const [contextOpen, setContextOpen] = useState(false);
+  const [refPreview, setRefPreview] = useState<AnyRow | null>(null);
+  const previewSeq = useRef(0);
+  async function openContext() {
+    setContextOpen(true);
+    const seq = ++previewSeq.current;
+    const plan = buildSendPlan();
+    if (!plan) {
+      setPreviewMessages([]);
+      return;
+    }
+    const result = await api<AnyRow[]>("ai:previewRequest", {
+      conversationId: conversation,
+      contexts: plan.contexts,
+      prompt: plan.prompt,
+      styleId,
+      taskKind: mode,
+    });
+    if (seq !== previewSeq.current) return;
+    setPreviewMessages(result.ok ? result.data || [] : []);
+  }
+  function handleAddFromPicker(item: {
+    label: string;
+    kind: string;
+    content: string;
+    sourceId: string;
+  }) {
+    if (item.kind === "__selection__") return addSelection();
+    if (item.kind === "__chapter__") return addChapter();
+    if (item.kind === "__summary__") return addSummary();
+    addContext(item);
+  }
+  const canApplyFromReply = !float && Boolean(editor) && Boolean(chapter);
+  const applyDisabledReason = !canApplyFromReply
+    ? tr("主窗口中才能修改正文", "Apply from the main window")
+    : undefined;
+  const tasks: ComposerTask[] = [
+    {
+      kind: "chat",
+      label: tr("讨论剧情", "Discuss"),
+      hint: tr(
+        "普通对话默认不附带正文，只发送你添加的引用。",
+        "Chat sends only the references you add.",
+      ),
+    },
+    {
+      kind: "continue",
+      label: tr("续写", "Continue"),
+      hint: tr(
+        "自动引用本章结尾（最后 4000 字），生成后可追加到章末。",
+        "Auto-references the last 4,000 characters; append after generating.",
+      ),
+    },
+    {
+      kind: "naturalize",
+      label: tr("自然化润色", "Naturalize"),
+      hint: tr("先添加正文选区；结果会进入 AI 面板，确认后才修改正文。", "Add a manuscript selection first; nothing changes until you adopt the result."),
+    },
+  ];
+  const actionsFor = useCallback(
+    (m: AnyRow): ReplyActions => {
+      const naturalize = m.task_kind === "naturalize";
+      const openComparison = () => {
+        const saved = m.selection_text || contexts.find((x) => x.kind === "selection")?.content;
+        if (!saved) {
+          notify(tr("这条历史消息没有保存原始选区，无法安全比较；可复制结果后重新选择正文。", "This message has no saved selection snapshot, so it cannot be compared safely. Copy the result and select the text again."));
+          return;
+        }
+        setCompare({ msg: m, original: saved });
+      };
+      return ({
+      canApply: canApplyFromReply,
+      applyDisabledReason,
+      canAppendToEnd: !float && m.id === continuationId,
+      requiresComparison: naturalize,
+      onInsertCursor: () => naturalize ? openComparison() : void apply("insert", m.content, m.source_revision),
+      onReplaceSelection: () =>
+        naturalize ? openComparison() : void apply("replace", m.content, m.source_revision),
+      onAppendToEnd: () => naturalize ? openComparison() : void applyEnd(m.content),
+      onSegments: () => naturalize ? openComparison() : setSegments({ msg: m }),
+      onCompare: openComparison,
+      onSaveInspiration: () => {
+        void api("library:save", {
+          novelId,
+          kind: "inspiration",
+          title: tr("AI 灵感", "AI idea"),
+          content: { body: m.content },
+          status: "idea",
+          chapterId,
+        }).then((r) =>
+          notify(
+            r.ok
+              ? tr("已保存为待确认灵感", "Saved as an unconfirmed idea")
+              : r.error || tr("灵感保存失败", "Could not save idea"),
+          ),
+        );
+      },
+      floatOnlyHint: float,
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [contexts, chapterId, continuationId, editor, float, language, novelId],
+  );
+  const renderMarkdown = useCallback(
+    (text: string) => <MdView text={text} />,
+    [],
+  );
+  const currentTitle =
+    conversations.find((c) => c.id === conversation)?.title ||
+    tr("新对话", "New conversation");
   return (
-    <>
-      <div className="panel-head">
-        <strong>{float ? tr("AI 助手 · 浮窗", "AI Assistant · Floating") : tr("AI 写作助手", "AI Writing Assistant")}</strong>
-        <Select
-          size="compact"
-          value={connection}
-          aria-label={tr("选择连接", "Select connection")}
-          placeholder={tr("选择连接", "Select connection")}
-          searchable={connections.length > 8}
-          onValueChange={(v) => patch({ connectionId: v })}
-          options={[
-            { value: "", label: tr("选择连接", "Select connection") },
-            ...connections.map((c) => ({
-              value: c.id as string,
-              label: `${c.name} · ${c.model}`,
-            })),
-          ]}
-        />
-        {float ? (
-          <button title={tr("收起浮窗", "Close floating window")} onClick={() => api("ai:float:close")}>
-            {tr("收起", "Close")}
-          </button>
-        ) : (
-          <button
-            title={tr("在独立窗口打开，便于放到第二块显示器", "Open in a separate window for a second display")}
-            onClick={() => api("ai:float:open")}
-          >
-            {tr("浮窗", "Float")}
-          </button>
-        )}
-      </div>
+    <div className={`zchat ${expanded ? "expanded" : ""}`} data-fd-id="ai-panel">
+      <ChatToolbar
+        title={currentTitle}
+        language={language}
+        float={float}
+        canExpand={!float}
+        expanded={expanded}
+        canRenameDelete={Boolean(conversation)}
+        generatingLabel={
+          generating
+            ? tr(
+                `正在生成${generatingConvTitle ? `：${generatingConvTitle}` : ""}`,
+                `Generating${generatingConvTitle ? `: ${generatingConvTitle}` : ""}`,
+              )
+            : null
+        }
+        onNew={() => selectConversation("")}
+        onToggleHistory={() => {
+          if (!historyOpen) loadConversations();
+          setHistoryOpen((v) => !v);
+        }}
+        historyOpen={historyOpen}
+        onToggleExpand={() => onToggleExpand?.(!expanded)}
+        onRename={renameConversation}
+        onDelete={deleteConversation}
+        onOpenFloat={() => api("ai:float:open")}
+        onCloseFloat={() => api("ai:float:close")}
+      />
       {!connections.length && (
-        <div className="ai-empty-conn">
+        <div className="zchat-notice" data-fd-id="ai-no-connection">
           <p>{tr("尚未配置 AI 连接", "No AI connection configured")}</p>
           <small className="hint">
-            {tr("在设置中添加 OpenAI 兼容接口后即可开始使用。", "Add an OpenAI-compatible endpoint in Settings to get started.")}
+            {tr(
+              "你仍然可以浏览历史对话与草稿；配置连接后即可发送。",
+              "You can still browse history and drafts; configure a connection to send.",
+            )}
           </small>
           {!float && onOpenSettings && (
-            <button className="primary" onClick={onOpenSettings}>
+            <button type="button" className="primary" onClick={onOpenSettings}>
               {tr("去配置 AI 连接", "Configure AI connection")}
             </button>
           )}
         </div>
       )}
-      <div className="conversation-bar">
-        <button
-          type="button"
-          className="conv-current"
-          title={tr("打开历史会话", "Open conversation history")}
-          onClick={() => {
-            loadConversations();
-            setHistoryOpen((v) => !v);
-          }}
-        >
-          <span className="ellipsis">
-            {conversations.find((c) => c.id === conversation)?.title ||
-              tr("新会话", "New conversation")}
-          </span>
-          <span className="hint">{tr("历史", "History")}</span>
-        </button>
-        <button title={tr("新建会话", "New conversation")} onClick={() => selectConversation("")}>
-          ＋
-        </button>
-        <button
-          title={tr("重命名会话", "Rename conversation")}
-          disabled={!conversation}
-          onClick={renameConversation}
-        >
-          {tr("改名", "Rename")}
-        </button>
-        <button
-          title={tr("删除会话", "Delete conversation")}
-          className="danger-text"
-          disabled={!conversation}
-          onClick={deleteConversation}
-        >
-          {tr("删除", "Delete")}
-        </button>
-      </div>
-      {generating && (
-        <small className="hint" style={{ padding: "0 10px" }}>
-          {tr(
-            `正在生成：${conversations.find((c) => c.id === (session?.generatingConversationId || conversation))?.title || "当前会话"}`,
-            `Generating in: ${conversations.find((c) => c.id === (session?.generatingConversationId || conversation))?.title || "current"}`,
-          )}
-        </small>
-      )}
-      {historyOpen && (
-        <div className="history-drawer" data-fd-id="ai-history-drawer">
-          <div className="history-drawer-head">
-            <input
-              placeholder={tr("搜索全部历史会话", "Search all conversations")}
-              value={historyQuery}
-              onChange={(e) => {
-                setHistoryQuery(e.target.value);
-                loadConversations({ search: e.target.value, offset: 0 });
-              }}
-              autoFocus
-            />
-            <button onClick={() => selectConversation("")}>
-              {tr("新建对话", "New chat")}
-            </button>
-            <button onClick={() => setHistoryOpen(false)} aria-label={tr("关闭历史", "Close history")}>
-              ×
-            </button>
-          </div>
-          {historyLoading && !conversations.length && (
-            <p className="hint" style={{ padding: 12 }}>{tr("载入中…", "Loading…")}</p>
-          )}
-          {(() => {
-            const q = historyQuery.trim().toLowerCase();
-            const filtered = conversations.filter((c) =>
-              !q ||
-              String(c.title || "").toLowerCase().includes(q) ||
-              String(c.last_snippet || "").toLowerCase().includes(q),
-            );
-            if (!conversations.length)
-              return (
-                <p className="hint" style={{ padding: 12 }}>
-                  {tr("还没有历史会话。发送第一条消息后会出现在这里。", "No conversations yet. The first send will appear here.")}
-                </p>
-              );
-            if (!filtered.length)
-              return (
-                <p className="hint" style={{ padding: 12 }}>
-                  {tr("没有匹配的会话", "No matching conversations")}
-                </p>
-              );
-            const groups: Record<string, AnyRow[]> = {
-              today: [],
-              yesterday: [],
-              earlier: [],
-            };
-            const now = new Date();
-            const y0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            const y1 = new Date(y0);
-            y1.setDate(y1.getDate() - 1);
-            for (const c of filtered) {
-              const t = new Date(c.updated_at);
-              if (t >= y0) groups.today.push(c);
-              else if (t >= y1) groups.yesterday.push(c);
-              else groups.earlier.push(c);
-            }
-            const renderGroup = (label: string, rows: AnyRow[]) =>
-              rows.length ? (
-                <div key={label} className="history-group">
-                  <div className="history-group-label">{label}</div>
-                  {rows.map((c) => (
-                    <div
-                      key={c.id}
-                      className={`history-item ${c.id === conversation ? "current" : ""}`}
-                      role="button"
-                      tabIndex={0}
-                      title={c.title}
-                      onClick={() => {
-                        selectConversation(c.id);
-                        setHistoryOpen(false);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          selectConversation(c.id);
-                          setHistoryOpen(false);
-                        }
-                      }}
-                    >
-                      <b className="ellipsis">{c.title || tr("未命名会话", "Untitled")}</b>
-                      <small className="ellipsis">
-                        {c.last_incomplete
-                          ? tr("未完整回答 · ", "Incomplete · ")
-                          : ""}
-                        {c.last_snippet || tr("（无消息）", "(no messages)")}
-                      </small>
-                      <small className="hint">
-                        {time(c.updated_at, language)}
-                        {session?.generatingConversationId === c.id
-                          ? ` · ${tr("生成中", "Generating")}`
-                          : ""}
-                      </small>
-                    </div>
-                  ))}
-                </div>
-              ) : null;
-            return (
-              <>
-                {renderGroup(tr("今天", "Today"), groups.today)}
-                {renderGroup(tr("昨天", "Yesterday"), groups.yesterday)}
-                {renderGroup(tr("更早", "Earlier"), groups.earlier)}
-                {historyHasMore && (
-                  <div style={{ padding: 10, textAlign: "center" }}>
-                    <button
-                      type="button"
-                      disabled={historyLoading}
-                      onClick={() =>
-                        loadConversations({
-                          offset: conversations.length,
-                          append: true,
-                          search: historyQuery,
-                        })
-                      }
-                    >
-                      {historyLoading
-                        ? tr("载入中…", "Loading…")
-                        : tr("加载更多", "Load more")}
-                    </button>
-                  </div>
-                )}
-              </>
-            );
-          })()}
-        </div>
-      )}
-      <details className="context-box">
-        <summary>
-          <span>
-            <b>{tr("引用资料", "References")}</b>
-            <em>{contexts.length ? tr(`已选 ${contexts.length} 项 · ${fmt(contextChars)} 字`, `${contexts.length} selected · ${fmt(contextChars)} chars`) : tr("默认不发送正文", "Manuscript not sent by default")}</em>
-          </span>
-          <small
-            title={tr(
-              `引用约 ${fmt(contextOnlyEstimate)} + 历史约 ${fmt(Math.ceil(historyChars / 2))} + 输入约 ${fmt(Math.ceil(draftChars / 2))} tokens（估算）`,
-              `Refs ~${fmt(contextOnlyEstimate)} + history ~${fmt(Math.ceil(historyChars / 2))} + input ~${fmt(Math.ceil(draftChars / 2))} tokens (estimate)`,
+      <MessageList
+        messages={messages}
+        language={language}
+        conversationId={conversation}
+        renderMarkdown={renderMarkdown}
+        actionsFor={actionsFor}
+        emptyState={
+          <Empty
+            title={tr("今天想写些什么？", "What would you like to write today?")}
+            text={tr(
+              "只有你明确添加的引用内容才会发送给 AI。先从一个方向开始。",
+              "Only references you explicitly add are sent. Start with a direction.",
             )}
-          >
-            {tr("上下文约", "Context ~")} {fmt(estimate)} tokens
-          </small>
-        </summary>
-        <div className="context-content">
-        <div className="context-actions">
-          <button onClick={addSelection}>＋ {tr("选中文字", "Selection")}</button>
-          <button onClick={addChapter}>＋ {tr("当前章节", "Current chapter")}</button>
-          {chapter?.summary && (
-            <button onClick={addSummary}>＋ {tr("本章摘要", "Chapter summary")}</button>
-          )}
-          <button onClick={() => setPickerOpen((x) => !x)}>
-            {pickerOpen ? tr("收起资料", "Hide references") : tr("＋ 引用资料", "+ Add reference")}
-          </button>
-          <button
-            title={tr("查看本次请求实际会发送的内容", "View the exact content that will be sent")}
-            onClick={openSendPreview}
-          >
-            {tr("预览发送", "Preview request")}
-          </button>
-        </div>
-        {pickerOpen && (
-          <div className="context-picker">
-            <div className="picker-group">
-              <b>{tr("智能推荐 · 与本章相关", "Suggested · Relevant to this chapter")}</b>
-              <div className="picker-items">
-                {suggestions.map((s) => (
+            action={
+              <div className="zchat-suggestions">
+                {prompts.slice(0, 4).map((p) => (
                   <button
-                    key={`${s.kind}:${s.id}`}
-                    title={tr(`正文提及「${s.matched}」${s.count} 次`, `Mentioned ${s.count} times as “${s.matched}”`)}
-                    onClick={() =>
-                      addContext({
-                        label: s.title,
-                        kind: s.kind,
-                        content: s.content || s.title,
-                        sourceId: s.id,
-                      })
-                    }
+                    type="button"
+                    key={p.id}
+                    onClick={() => updateDraft(p.content, true)}
                   >
-                    {s.title}
-                    <small>{s.count} 次</small>
+                    {promptNameFor(p.name, p.builtin, language)}
                   </button>
                 ))}
-                {!suggestions.length && (
-                  <small>{tr("未在正文中发现资料关键词，可从下方手动选择。", "No story-bible keywords were found; choose a reference below.")}</small>
-                )}
               </div>
-            </div>
-            <div className="picker-group">
-              <b>{tr("其他章节", "Other chapters")}</b>
-              <div className="picker-items">
-                {bookChapters
-                  .filter((c) => c.id !== chapter?.id)
-                  .map((c) => (
-                    <span className="picker-row" key={c.id}>
-                      <button
-                        title={tr("引用该章正文（点击后按需读取）", "Reference this chapter (loaded on demand)")}
-                        onClick={async () => {
-                          const r = await api<any>("chapters:get", c.id);
-                          if (r.ok)
-                            addContext({
-                              label: c.title,
-                              kind: "chapter",
-                              content: r.data?.plain_text || "",
-                              sourceId: c.id,
-                            });
-                          else notify(r.error || tr("读取章节失败", "Could not load chapter"));
-                        }}
-                      >
-                        {c.title}
-                        <small>{fmt(c.word_count)} {tr("字", "words")}</small>
-                      </button>
-                      {c.summary && (
-                        <button
-                          title={tr("引用该章摘要", "Reference this chapter summary")}
-                          onClick={() =>
-                            addContext({
-                              label: `${c.title} · 摘要`,
-                              kind: "summary",
-                              content: c.summary,
-                              sourceId: c.id,
-                            })
-                          }
-                        >
-                          {tr("摘要", "Summary")}
-                        </button>
-                      )}
-                    </span>
-                  ))}
-                {bookChapters.filter((c) => c.id !== chapter?.id).length ===
-                  0 && <small>{tr("暂无其他章节", "No other chapters")}</small>}
-              </div>
-            </div>
-            {kinds.map(([k, label]) => {
-              const items = libraryAll.filter((x) => x.kind === k);
-              if (!items.length) return null;
-              return (
-                <div className="picker-group" key={k}>
-                  <b>{label}</b>
-                  <div className="picker-items">
-                    {items.map((x) => (
-                      <button
-                        key={x.id}
-                        onClick={() =>
-                          addContext({
-                            label: x.title,
-                            kind: k,
-                            content: parseJson(x.content_json).body || "",
-                            sourceId: x.id,
-                          })
-                        }
-                      >
-                        {x.title}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {contexts.map((x, i) => (
-          <div className="context-chip" key={i}>
-            <span>
-              {x.label} · {kindNameFor(x.kind, language)}
-            </span>
-            <button
-              onClick={() => setContexts((xs) => xs.filter((_, j) => j !== i))}
-            >
-              ×
-            </button>
-            <details>
-              <summary>{tr("查看内容", "View content")}</summary>
-              <pre>{x.content}</pre>
-            </details>
-          </div>
-        ))}
-          {!contexts.length && <small>{tr("普通聊天默认不会发送正文。", "Normal chat does not send manuscript text by default.")}</small>}
-        </div>
-      </details>
-      <div className="messages">
-        {messages.map((m, i) => (
-          <div className={`message ${m.role}`} key={m.id || i}>
-            <div>
-              {m.role === "user" ? tr("你", "You") : "AI"}
-              {m.incomplete && <em>{tr("（未完整回答）", " (incomplete response)")}</em>}
-            </div>
-            <p>
-              <MdView text={m.content} />
-              {m.streaming && <i className="cursor" />}
-            </p>
-            {m.role === "assistant" && !m.streaming && (
-              <div className="message-actions">
-                <button
-                  onClick={() => navigator.clipboard.writeText(m.content)}
-                >
-                  {tr("复制", "Copy")}
-                </button>
-                {!float && (
-                  <>
-                    <button
-                      onClick={() =>
-                        apply("insert", m.content, m.source_revision)
-                      }
-                    >
-                      {tr("插入光标", "Insert at cursor")}
-                    </button>
-                    {m.id === continuationId && (
-                      <button
-                        className="primary"
-                        onClick={() => applyEnd(m.content)}
-                      >
-                        {tr("追加到章末", "Append to chapter")}
-                      </button>
-                    )}
-                    <button onClick={() => setSegments({ msg: m })}>
-                      {tr("逐句采纳", "Adopt by sentence")}
-                    </button>
-                    <button
-                      disabled={!contexts.some((x) => x.kind === "selection")}
-                      onClick={() => {
-                        const sel = contexts.find(
-                          (x) => x.kind === "selection",
-                        );
-                        if (sel) setCompare({ msg: m, original: sel.content });
-                      }}
-                    >
-                      {tr("对比", "Compare")}
-                    </button>
-                    <button
-                      onClick={() =>
-                        apply("replace", m.content, m.source_revision)
-                      }
-                    >
-                      {tr("替换选区", "Replace selection")}
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={async () => {
-                    const r = await api("library:save", {
-                      novelId,
-                      kind: "inspiration",
-                      title: tr("AI 灵感", "AI idea"),
-                      content: { body: m.content },
-                      status: "idea",
-                      chapterId,
-                    });
-                    notify(r.ok ? tr("已保存为待确认灵感", "Saved as an unconfirmed idea") : r.error || tr("灵感保存失败", "Could not save idea"));
-                  }}
-                >
-                  {tr("存为灵感", "Save as idea")}
-                </button>
-                {float && (
-                  <span className="hint">{tr("采纳修改请在主窗口正文中操作", "Apply changes from the main manuscript window")}</span>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
-        {!messages.length && (
-          <Empty
-            title={tr("与作品一起思考", "Think alongside your story")}
-            text={tr("只有你明确添加的引用内容才会发送给 AI。", "Only references you explicitly add are sent to AI.")}
+            }
           />
+        }
+      />
+      <StyleCardPanel
+        language={language}
+        cards={styleCards}
+        selectedId={styleId}
+        onSelect={selectStyle}
+        onReload={() => void reloadStyleCards()}
+        compact
+      />
+      <Composer
+        language={language}
+        float={float}
+        refs={refsForUi}
+        onRemoveRef={(i) => setContexts((xs) => xs.filter((_, j) => j !== i))}
+        onPreviewRef={(i) => setRefPreview(refsForUi[i])}
+        onOpenRefPicker={() => setPickerOpen(true)}
+        tasks={tasks}
+        activeTaskKind={mode}
+        onSelectTask={(kind) => {
+          // 切换任务不覆盖已有草稿：只切换任务本身
+          setMode(kind === "continue" ? "continue" : "chat");
+        }}
+        draft={draft}
+        onDraftChange={(v) => updateDraft(v)}
+        onSend={() => void send()}
+        generating={generating}
+        onStop={() => api("ai:cancel", requestId)}
+        canSend={
+          Boolean(connection) &&
+          !generating &&
+          (mode === "continue" || mode === "naturalize" ? (mode === "naturalize" ? contexts.some((x) => x.kind === "selection") : true) : Boolean(draft.trim()))
+        }
+        contextSummary={tr(
+          `上下文约 ${fmt(estimate)}`,
+          `~${fmt(estimate)} tokens`,
         )}
-      </div>
-      <details className="quick-prompt-box">
-        <summary>{tr("快捷指令", "Quick prompts")}</summary>
-        <div className="quick-prompts">
-          {prompts.slice(0, 6).map((p) => (
-            <button
-              title={p.content}
-              key={p.id}
-              onClick={() => updateDraft(p.content, true)}
+        contextPercent={contextPercent}
+        contextLimitLabel={tr("/30万字", "/300k")}
+        onOpenContext={() => void openContext()}
+        autoRefNotice={
+          mode === "continue"
+            ? tr(
+                `将自动引用「${chapterTitle || "当前章节"}」结尾（最多 4000 字）`,
+                `Will auto-reference the end of "${chapterTitle || "this chapter"}" (max 4,000 chars)`,
+              )
+            : null
+        }
+        statusLine={(() => {
+          const ds = session?.draftState;
+          if (!ds || ds.status === "idle") return null;
+          const label =
+            ds.status === "saving"
+              ? tr("草稿保存中…", "Saving draft…")
+              : ds.status === "saved"
+                ? tr("草稿已保存", "Draft saved")
+                : tr(
+                    `草稿保存失败：${ds.error || "未知错误"}`,
+                    `Draft save failed: ${ds.error || "unknown"}`,
+                  );
+          return (
+            <span
+              className={`zchat-draft-state ${ds.status}`}
+              role="status"
+              aria-live="polite"
+              title={label}
+              data-fd-id="draft-state"
             >
-              {promptNameFor(p.name, p.builtin, language)}
-            </button>
-          ))}
-        </div>
-      </details>
-      <div className="composer-mode">
-        <div className="mode-toggle" role="tablist">
-          <button
-            className={mode === "chat" ? "active" : ""}
-            onClick={() => setMode("chat")}
-          >
-            {tr("对话", "Chat")}
-          </button>
-          <button
-            className={mode === "continue" ? "active" : ""}
-            onClick={() => setMode("continue")}
-          >
-            {tr("续写", "Continue")}
-          </button>
-        </div>
-        {mode === "continue" && (
-          <small className="hint">
-            {tr("自动引用本章结尾（最后 4000 字），生成后可一键追加到章末；采纳前自动创建历史快照。", "Uses the last 4,000 characters of this chapter. The result can be appended with one click after an automatic history snapshot.")}
-          </small>
-        )}
-      </div>
-      <div className="composer">
-        <textarea
-          placeholder={
-            mode === "continue"
-              ? float
-                ? tr("续写要求可留空。Enter 生成，结果在主窗口采纳", "Continuation instructions are optional. Press Enter to generate, then apply in the main window")
-                : tr("可选：写下续写要求，留空则顺着上文推进。Enter 生成", "Optional: describe how to continue, or leave blank. Press Enter to generate")
-              : float
-                ? tr("输入问题，与主窗口共享同一会话。Enter 发送，Shift+Enter 换行", "Ask a question in the shared conversation. Enter to send; Shift+Enter for a new line")
-                : tr("输入问题。Enter 发送，Shift+Enter 换行", "Ask a question. Enter to send; Shift+Enter for a new line")
-          }
-          value={draft}
-          onChange={(e) => updateDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (
-              e.key === "Enter" &&
-              !e.shiftKey &&
-              !e.nativeEvent.isComposing
-            ) {
-              e.preventDefault();
-              send();
-            }
-          }}
+              {label}
+              {ds.status === "error" && (
+                <button
+                  type="button"
+                  className="zchat-draft-retry"
+                  data-fd-id="draft-retry"
+                  onClick={() => updateDraft(draftRef.current, true)}
+                >
+                  {tr("重试", "Retry")}
+                </button>
+              )}
+            </span>
+          );
+        })()}
+      />
+      {pickerOpen && (
+        <RefPicker
+          language={language}
+          chapterId={chapterId}
+          chapterTitle={chapterTitle}
+          summary={chapter?.summary}
+          bookChapters={bookChapters}
+          libraryAll={libraryAll}
+          suggestions={suggestions}
+          onAdd={handleAddFromPicker}
+          onClose={() => setPickerOpen(false)}
         />
-        {generating ? (
-          <button
-            className="danger"
-            onClick={() => api("ai:cancel", requestId)}
-          >
-            {tr("停止", "Stop")}
-          </button>
-        ) : (
-          <button
-            className="primary"
-            disabled={!connection || (mode === "chat" && !draft.trim())}
-            title={
-              !connection
-                ? tr("请先在设置 → AI 模型中配置连接", "Configure a connection in Settings → AI models first")
-                : mode === "continue"
-                  ? tr("生成续写", "Generate continuation")
-                  : tr("发送", "Send")
-            }
-            onClick={send}
-          >
-            {mode === "continue" ? tr("生成续写", "Generate") : tr("发送", "Send")}
-          </button>
-        )}
-      </div>
-      <div className="composer-meta hint" style={{ padding: "0 10px 8px", fontSize: 11 }}>
-        {tr(
-          `上下文约 ${fmt(estimate)} tokens（引用 ${fmt(contextChars)} 字 · 历史 ${fmt(historyChars)} 字 · 输入 ${fmt(draftChars)} 字）· 估算值，非服务商精确计费`,
-          `~${fmt(estimate)} tokens context (refs ${fmt(contextChars)} · history ${fmt(historyChars)} · input ${fmt(draftChars)} chars) · estimate only`,
-        )}
-      </div>
+      )}
+      {historyOpen && (
+        <HistoryDrawer
+          language={language}
+          conversations={conversations}
+          currentId={conversation}
+          query={historyQuery}
+          loading={historyLoading}
+          error={historyError}
+          hasMore={historyHasMore}
+          onQuery={(q) => {
+            setHistoryQuery(q);
+            loadConversations({ search: q, offset: 0 });
+          }}
+          onNew={() => {
+            selectConversation("");
+            setHistoryOpen(false);
+          }}
+          onSelect={(id) => {
+            selectConversation(id);
+            setHistoryOpen(false);
+          }}
+          onLoadMore={() =>
+            loadConversations({
+              offset: conversations.length,
+              search: historyQuery,
+              append: true,
+            })
+          }
+          onRetry={() => loadConversations({ search: historyQuery, offset: 0 })}
+          onClose={() => setHistoryOpen(false)}
+        />
+      )}
+      {contextOpen && (
+        <ContextDialog
+          language={language}
+          refs={refsForUi}
+          historyChars={historyChars}
+          draftChars={draftChars}
+          historyCount={historyCount}
+          ruleChars={styleRuleChars}
+          estimateTokens={estimate}
+          previewMessages={previewMessages.length ? previewMessages : null}
+          onClose={() => setContextOpen(false)}
+        />
+      )}
+      {refPreview && (
+        <Modal
+          title={refPreview.label || tr("引用内容", "Reference content")}
+          close={() => setRefPreview(null)}
+        >
+          <div className="zchat-ref-preview">
+            <p className="hint">
+              {kindNameFor(refPreview.kind, language as never)} ·{" "}
+              {fmt(String(refPreview.content || "").length)}{" "}
+              {tr("字", "chars")}
+            </p>
+            <pre>{refPreview.content}</pre>
+          </div>
+        </Modal>
+      )}
       {compare && (
         <DiffModal
           title={tr("对比原文与 AI 建议", "Compare manuscript and AI suggestion")}
@@ -1100,7 +992,7 @@ export function AiPanel({
           onApply={async () => {
             const msg = compare.msg;
             setCompare(null);
-            await apply("replace", msg.content, msg.source_revision);
+            await apply("replace", msg.content, msg.source_revision, compare.original, msg.selection_from, msg.selection_to);
           }}
         />
       )}
@@ -1116,34 +1008,6 @@ export function AiPanel({
           }}
           language={language}
         />
-      )}
-      {previewOpen && (
-        <Modal
-          title={tr("预览：本次将发送给 AI 的内容", "Preview: content sent to AI")}
-          close={() => setPreviewOpen(false)}
-        >
-          <div className="send-preview">
-            <p className="hint">
-              {tr(
-                `以下是按实际顺序发送的完整消息，共 ${previewMessages.length} 条。历史引用也会随对应消息一起显示。`,
-                `These are the ${previewMessages.length} complete messages in send order. Earlier references appear with their original messages.`,
-              )}
-            </p>
-            {previewMessages.map((message, index) => (
-              <details
-                key={index}
-                className="preview-block"
-                open={index === previewMessages.length - 1}
-              >
-                <summary>
-                  {index + 1}. {message.role === "assistant" ? tr("AI 回复", "AI response") : tr("用户消息", "User message")}
-                  {tr(`（${fmt(message.content.length)} 字）`, ` (${fmt(message.content.length)} characters)`) }
-                </summary>
-                <pre>{message.content || tr("（空）", "(empty)")}</pre>
-              </details>
-            ))}
-          </div>
-        </Modal>
       )}
       {renameOpen && (
         <PromptDialog
@@ -1194,7 +1058,7 @@ export function AiPanel({
           }}
         />
       )}
-    </>
+    </div>
   );
 }
 

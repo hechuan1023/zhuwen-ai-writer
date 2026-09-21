@@ -12,6 +12,7 @@ type Props = {
   language: UiLanguage;
   setLanguage: (l: UiLanguage) => void;
   novels: AnyRow[];
+  loading?: boolean;
   sort: string;
   setSort: (s: string) => void;
   archived: boolean;
@@ -25,6 +26,7 @@ export function CreativeHome({
   language,
   setLanguage,
   novels,
+  loading,
   sort,
   setSort,
   archived,
@@ -222,7 +224,12 @@ export function CreativeHome({
           <h3>{archived ? tr("归档作品", "Archived") : tr("全部作品", "Library")}</h3>
         </div>
 
-        {filtered.length ? (
+        {loading && !novels.length ? (
+          <Empty
+            title={tr("正在载入书架…", "Loading library…")}
+            text={tr("请稍候", "Please wait")}
+          />
+        ) : filtered.length ? (
           <div className="books-grid">
             {filtered.map((n) => (
               <article

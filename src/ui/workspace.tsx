@@ -1,3 +1,4 @@
+import { AppBackdrop } from "./app-backdrop";
 import {
   Suspense,
   lazy,
@@ -17,6 +18,8 @@ import { DailyGoalMeter } from "./daily-goal";
 import { WritingStatsCenter } from "./stats-center";
 import { Select } from "./select";
 import { applyReduceMotion } from "./motion";
+import { buildEnvironment, WritingEnvironment } from "./presets";
+import { patchAppearance } from "./prefs";
 
 const AiPanel = lazy(() => import("./ai-panel").then((m) => ({ default: m.AiPanel })));
 const LibraryPanel = lazy(() => import("./library-panel").then((m) => ({ default: m.LibraryPanel })));
@@ -106,6 +109,8 @@ export function Workspace({
     [chapter, setChapter] = useState<AnyRow | null>(null);
   const [left, setLeft] = useState(true),
     [right, setRight] = useState(true),
+    /** 主窗口内展开聊天区：会话/草稿/生成状态保留，仅改变宽度 */
+    [aiExpanded, setAiExpanded] = useState(false),
     [focus, setFocus] = useState(false),
     [leftView, setLeftView] = useState<
       "chapters" | "library" | "history" | "trash"
@@ -178,6 +183,7 @@ export function Workspace({
       "cover",
     ),
     [paperOpacity, setPaperOpacity] = useState(0.9),
+    [panelOpacity, setPanelOpacity] = useState(0.72),
     [reduceTransparency, setReduceTransparency] = useState(false),
     [reduceMotion, setReduceMotion] = useState(false);
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
@@ -205,6 +211,7 @@ export function Workspace({
     backgroundBlur,
     backgroundFit,
     paperOpacity,
+    panelOpacity,
     reduceTransparency,
     reduceMotion,
   });
@@ -228,6 +235,7 @@ export function Workspace({
     backgroundBlur,
     backgroundFit,
     paperOpacity,
+    panelOpacity,
     reduceTransparency,
     reduceMotion,
   };
@@ -256,6 +264,7 @@ export function Workspace({
     }
   }
   const persistAppearance = (over: Partial<typeof appearance.current> = {}) => {
+    if (envPreview) return; // 预览期间不落盘：防止预览值或混合状态被意外保存
     Object.assign(pendingAppearance.current, over);
     window.clearTimeout(persistTimer.current);
     persistTimer.current = window.setTimeout(() => {
@@ -267,6 +276,122 @@ export function Workspace({
       pendingAppearance.current = {};
     }, 350);
   };
+  // ── 环境预览状态机 ──────────────────────────────────────────────
+  // 预览：只改当前显示（envEffective 覆盖基础状态），不写任何持久化；
+  // 应用：先持久化成功，再更新基础状态；取消：把基础状态还原为预览前快照。
+  const [envPreview, setEnvPreview] = useState<WritingEnvironment | null>(null);
+  const [envPreviewLabel, setEnvPreviewLabel] = useState<string | null>(null);
+  const envOriginalRef = useRef<typeof appearance.current | null>(null);
+  // 必须依赖真实 state，不能只依赖 envPreview（否则普通外观修改不刷新）
+  const envBase = useMemo<AnyRow>(
+    () => ({
+      theme,
+      uiDensity,
+      focusZen,
+      leftWidth,
+      rightWidth,
+      fontFamily,
+      fontSize,
+      lineHeight,
+      paraSpacing,
+      readingWidth,
+      language,
+      typewriterMode,
+      editorZoom,
+      backgroundImage,
+      backgroundName,
+      backgroundOpacity,
+      backgroundBlur,
+      backgroundFit,
+      paperOpacity,
+      panelOpacity,
+      reduceTransparency,
+      reduceMotion,
+    }),
+    [
+      theme,
+      uiDensity,
+      focusZen,
+      leftWidth,
+      rightWidth,
+      fontFamily,
+      fontSize,
+      lineHeight,
+      paraSpacing,
+      readingWidth,
+      language,
+      typewriterMode,
+      editorZoom,
+      backgroundImage,
+      backgroundName,
+      backgroundOpacity,
+      backgroundBlur,
+      backgroundFit,
+      paperOpacity,
+      panelOpacity,
+      reduceTransparency,
+      reduceMotion,
+    ],
+  );
+  const envEffective = useMemo<AnyRow>(
+    () => (envPreview ? { ...envBase, ...envPreview } : envBase),
+    [envPreview, envBase],
+  );
+  function startEnvPreview(env: WritingEnvironment, label?: string) {
+    flushPendingPreferences();
+    if (!envOriginalRef.current) envOriginalRef.current = { ...appearance.current };
+    setEnvPreview(env);
+    setEnvPreviewLabel(label || null);
+  }
+  function applyEnvironmentToStates(env: WritingEnvironment) {
+    if (env.theme === "light" || env.theme === "warm" || env.theme === "dark")
+      setTheme(env.theme);
+    setUiDensity(env.uiDensity);
+    setFocusZen(env.focusZen);
+    setFontFamily(env.fontFamily);
+    setFontSize(env.fontSize);
+    setLineHeight(env.lineHeight);
+    setParaSpacing(env.paraSpacing);
+    setReadingWidth(env.readingWidth);
+    setTypewriterMode(env.typewriterMode);
+    setEditorZoom(env.editorZoom);
+    setBackgroundImage(env.backgroundImage);
+    setBackgroundName(env.backgroundName);
+    setBackgroundOpacity(env.backgroundOpacity);
+    setBackgroundBlur(env.backgroundBlur);
+    setBackgroundFit(env.backgroundFit as "cover" | "contain" | "tile");
+    setPaperOpacity(env.paperOpacity);
+    setPanelOpacity(env.panelOpacity);
+    setReduceTransparency(env.reduceTransparency);
+    if (env.leftWidth != null) setLeftWidth(env.leftWidth);
+    if (env.rightWidth != null) setRightWidth(env.rightWidth);
+  }
+  async function applyEnvPreview(env: WritingEnvironment): Promise<boolean> {
+    const r = await patchAppearance(env as AnyRow);
+    if (!r.ok) {
+      notify(r.error || tr("预设应用失败，设置未更改", "Could not apply preset; settings unchanged"));
+      return false;
+    }
+    applyEnvironmentToStates(env);
+    setEnvPreview(null);
+    setEnvPreviewLabel(null);
+    envOriginalRef.current = null;
+    notify(tr("环境已应用", "Environment applied"));
+    return true;
+  }
+  function cancelEnvPreview() {
+    const orig = envOriginalRef.current;
+    if (orig) applyEnvironmentToStates(orig as WritingEnvironment);
+    setEnvPreview(null);
+    setEnvPreviewLabel(null);
+    envOriginalRef.current = null;
+    notify(tr("已取消预览，恢复原设置", "Preview cancelled; previous settings restored"));
+  }
+  // 关闭设置时结束未确认的预览
+  useEffect(() => {
+    if (modal !== "settings" && envPreview) cancelEnvPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modal]);
   function updateTypo(
     t: Partial<{
       fontFamily: string;
@@ -368,6 +493,7 @@ export function Workspace({
         if (["cover", "contain", "tile"].includes(r.data.backgroundFit))
           setBackgroundFit(r.data.backgroundFit);
         setPaperOpacity(bounded(r.data.paperOpacity, 0.45, 1, 0.9));
+        setPanelOpacity(bounded(r.data.panelOpacity, 0.35, 1, 0.72));
         setReduceTransparency(Boolean(r.data.reduceTransparency));
         setReduceMotion(Boolean(r.data.reduceMotion));
       }
@@ -1059,21 +1185,22 @@ export function Workspace({
   return (
     <div
       ref={rootRef}
-      className={`workspace theme-${theme} density-${uiDensity} ${focus ? "focus" : ""} ${focus && focusZen ? "focus-minimal" : ""} ${typewriterMode ? "typewriter-on" : ""}`}
+      className={`workspace theme-${envEffective.theme} density-${envEffective.uiDensity} ${focus ? "focus" : ""} ${focus && envEffective.focusZen ? "focus-minimal" : ""} ${envEffective.typewriterMode ? "typewriter-on" : ""}${envPreview ? " env-previewing" : ""}`}
       style={
         {
-          "--reader-font": fontFamily,
-          "--reader-size": `${fontSize}px`,
-          "--reader-leading": String(lineHeight),
-          "--reader-para": `${paraSpacing}em`,
-          "--reader-width": `${readingWidth}px`,
-          "--editor-zoom": String(editorZoom),
-          "--writing-bg-opacity": String(backgroundOpacity),
-          "--writing-bg-blur": `${backgroundBlur}px`,
-          "--writing-paper-opacity": String(paperOpacity),
+          "--reader-font": envEffective.fontFamily,
+          "--reader-size": `${envEffective.fontSize}px`,
+          "--reader-leading": String(envEffective.lineHeight),
+          "--reader-para": `${envEffective.paraSpacing}em`,
+          "--reader-width": `${envEffective.readingWidth}px`,
+          "--editor-zoom": String(envEffective.editorZoom),
+          "--writing-bg-opacity": String(envEffective.backgroundOpacity),
+          "--writing-bg-blur": `${envEffective.backgroundBlur}px`,
+          "--writing-paper-opacity": String(envEffective.paperOpacity),
         } as React.CSSProperties
       }
     >
+      <AppBackdrop appearance={envEffective} />
       <header className="topbar" data-fd-id="workspace-topbar">
         <button className="topbar-back" onClick={back}>
           ← {tx(language, "shelf")}
@@ -1112,7 +1239,7 @@ export function Workspace({
           aria-label={tx(language, "searchBook")}
           onClick={() => setSearchOpen(true)}
         >
-          ⌕
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>
         </button>
         <button
           className={focus ? "active" : ""}
@@ -1122,7 +1249,8 @@ export function Workspace({
           {focus ? tx(language, "exitFocus") : tx(language, "focus")}
         </button>
         <button
-          className={`primary small ${right ? "active" : ""}`}
+          className={`topbar-ai ${right ? "active" : ""}`}
+          aria-pressed={right}
           onClick={() => {
             setRight((value) => !value);
           }}
@@ -1154,7 +1282,7 @@ export function Workspace({
         {left && !focus && (
           <aside
             className={`left-panel left-view-${leftView}`}
-            style={{ width: leftWidth }}
+            style={{ width: envEffective.leftWidth ?? leftWidth }}
             data-fd-id="workspace-left-panel"
           >
             <nav
@@ -1425,17 +1553,9 @@ export function Workspace({
           </aside>
         )}
         <main
-          className={`editor-area ${backgroundImage ? "has-writing-bg" : ""}`}
+          className={`editor-area ${envEffective.backgroundImage ? "has-writing-bg" : ""}`}
           data-fd-id="workspace-editor"
         >
-          {backgroundImage && (
-            <div
-              className={`writing-background fit-${backgroundFit}`}
-              style={{
-                backgroundImage: `url(${JSON.stringify(backgroundImage).slice(1, -1)})`,
-              }}
-            />
-          )}
           {chapter ? (
             <>
               <div className="chapter-title">
@@ -1624,7 +1744,7 @@ export function Workspace({
         {right && !focus && (
           <aside
             className="right-panel"
-            style={{ width: rightWidth }}
+            style={{ width: aiExpanded ? "min(72vw, 900px)" : (envEffective.rightWidth ?? rightWidth) }}
             data-fd-id="workspace-ai-panel"
           >
             <div
@@ -1639,6 +1759,8 @@ export function Workspace({
                 save={save}
                 notify={notify}
                 language={language}
+                expanded={aiExpanded}
+                onToggleExpand={setAiExpanded}
               />
             </Suspense>
             <button
@@ -1774,35 +1896,49 @@ export function Workspace({
           <Settings
             notify={notify}
             typography={{
-              fontFamily,
-              fontSize,
-              lineHeight,
-              paraSpacing,
-              readingWidth,
+              fontFamily: envEffective.fontFamily,
+              fontSize: envEffective.fontSize,
+              lineHeight: envEffective.lineHeight,
+              paraSpacing: envEffective.paraSpacing,
+              readingWidth: envEffective.readingWidth,
             }}
             onChangeTypography={updateTypo}
             dailyGoal={dailyGoal}
             onDailyGoal={updateWriting}
             language={language}
+            presetProps={{
+              environment: buildEnvironment(
+                envEffective,
+                envEffective,
+                { leftWidth: envEffective.leftWidth, rightWidth: envEffective.rightWidth },
+                true,
+              ),
+              previewing: Boolean(envPreview),
+              previewLabel: envPreviewLabel,
+              onPreview: startEnvPreview,
+              onApply: applyEnvPreview,
+              onCancelPreview: cancelEnvPreview,
+            }}
             onLanguage={(value) => {
               setLanguage(value);
               onLanguageChange(value);
               persistAppearance({ language: value });
             }}
             personalization={{
-              theme,
-              uiDensity,
-              focusZen,
-              typewriterMode,
-              editorZoom,
-              backgroundImage,
-              backgroundName,
-              backgroundOpacity,
-              backgroundBlur,
-              backgroundFit,
-              paperOpacity,
-              reduceTransparency,
-              reduceMotion,
+              theme: envEffective.theme,
+              uiDensity: envEffective.uiDensity,
+              focusZen: envEffective.focusZen,
+              typewriterMode: envEffective.typewriterMode,
+              editorZoom: envEffective.editorZoom,
+              backgroundImage: envEffective.backgroundImage,
+              backgroundName: envEffective.backgroundName,
+              backgroundOpacity: envEffective.backgroundOpacity,
+              backgroundBlur: envEffective.backgroundBlur,
+              backgroundFit: envEffective.backgroundFit,
+              paperOpacity: envEffective.paperOpacity,
+              panelOpacity: envEffective.panelOpacity,
+              reduceTransparency: envEffective.reduceTransparency,
+              reduceMotion: envEffective.reduceMotion,
             }}
             onPersonalization={(next) => {
               if (next.theme !== undefined) setTheme(next.theme);
@@ -1821,6 +1957,7 @@ export function Workspace({
                 setBackgroundBlur(next.backgroundBlur);
               if (next.backgroundFit !== undefined)
                 setBackgroundFit(next.backgroundFit);
+              if (next.panelOpacity !== undefined) setPanelOpacity(next.panelOpacity);
               if (next.paperOpacity !== undefined)
                 setPaperOpacity(next.paperOpacity);
               if ((next as any).reduceTransparency !== undefined)

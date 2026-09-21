@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { api, time, Modal, AnyRow, UiLanguage } from "./shared";
-import { Select } from "./select";
 
 export function SummaryModal({
   chapter,
@@ -56,19 +55,6 @@ export function SummaryModal({
           {tr("摘要在需要时手动生成，不会自动消耗接口用量；原文修改后旧摘要会标记为可能过期。摘要可加入 AI 引用，并记录来源章节与生成时间。", "Summaries are generated only on request and never consume API quota automatically. Changes to the manuscript mark older summaries as potentially stale, and summaries can be added to AI references.")}
         </p>
         <div className="row">
-          <Select
-            value={connection}
-            aria-label={tr("选择连接", "Select connection")}
-            placeholder={tr("选择连接", "Select connection")}
-            onValueChange={setConnection}
-            options={[
-              { value: "", label: tr("选择连接", "Select connection") },
-              ...connections.map((c) => ({
-                value: c.id as string,
-                label: `${c.name} · ${c.model}`,
-              })),
-            ]}
-          />
           <button
             className="primary"
             disabled={busy || !connection}

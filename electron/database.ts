@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { BUILTIN_STYLE_CARDS } from './ai-style-cards'
 
 type Statement = ReturnType<DatabaseSync['prepare']>
 
@@ -133,6 +134,58 @@ function migrate(db: Db) {
     `)
     db.prepare('INSERT INTO schema_migrations VALUES(7,?)').run(now())
   })()
+  if (version < 8) db.transaction(() => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ai_style_cards(
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        tasks_json TEXT NOT NULL DEFAULT '[]',
+        rules TEXT NOT NULL,
+        builtin INTEGER NOT NULL DEFAULT 0,
+        builtin_version INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        data_version INTEGER NOT NULL DEFAULT 1
+      );
+      CREATE TABLE IF NOT EXISTS novel_ai_styles(
+        novel_id TEXT PRIMARY KEY REFERENCES novels(id) ON DELETE CASCADE,
+        style_id TEXT REFERENCES ai_style_cards(id) ON DELETE SET NULL,
+        updated_at TEXT NOT NULL,
+        data_version INTEGER NOT NULL DEFAULT 1
+      );
+      ALTER TABLE ai_messages ADD COLUMN style_id TEXT;
+      ALTER TABLE ai_messages ADD COLUMN style_name TEXT;
+      ALTER TABLE ai_messages ADD COLUMN style_version INTEGER;
+      ALTER TABLE ai_messages ADD COLUMN style_rules TEXT;
+    `)
+    const insert = db.prepare('INSERT OR IGNORE INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')
+    const t = now()
+    for (const card of BUILTIN_STYLE_CARDS)
+      insert.run(card.id, card.name, card.description, JSON.stringify(card.tasks), card.rules, 1, card.version, t, t)
+    db.prepare('INSERT INTO schema_migrations VALUES(8,?)').run(t)
+  })()
+  if (version < 9) db.transaction(() => {
+    db.exec(`ALTER TABLE ai_messages ADD COLUMN task_kind TEXT NOT NULL DEFAULT 'chat';`)
+    db.prepare('INSERT INTO schema_migrations VALUES(9,?)').run(now())
+  })()
+  if (version < 10) db.transaction(() => {
+    db.exec(`ALTER TABLE ai_messages ADD COLUMN selection_from INTEGER; ALTER TABLE ai_messages ADD COLUMN selection_to INTEGER;`)
+    db.prepare('INSERT INTO schema_migrations VALUES(10,?)').run(now())
+  })()
+  // 已完成迁移的数据库也要能补齐或升级内置卡；不覆盖用户自定义记录。
+  {
+    const insert = db.prepare('INSERT OR IGNORE INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')
+    const update = db.prepare('UPDATE ai_style_cards SET name=?,description=?,tasks_json=?,rules=?,builtin_version=?,updated_at=?,data_version=data_version+1 WHERE id=? AND builtin=1 AND builtin_version<?')
+    const t = now()
+    const run = db.transaction(() => {
+      for (const card of BUILTIN_STYLE_CARDS) {
+        insert.run(card.id, card.name, card.description, JSON.stringify(card.tasks), card.rules, 1, card.version, t, t)
+        update.run(card.name, card.description, JSON.stringify(card.tasks), card.rules, card.version, t, card.id, card.version)
+      }
+    })
+    run()
+  }
 }
 
 export function countText(text: string, punctuation = true) {

@@ -568,37 +568,6 @@ button:disabled {
 .empty p {
   font-size: 13px;
 }
-.conversation-bar {
-  display: flex;
-  gap: 5px;
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--line);
-}
-.conversation-bar select {
-  flex: 1;
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 5px;
-  background: #faf9f5;
-}
-.conversation-bar button {
-  padding: 5px 7px;
-  font-size: 11px;
-  white-space: nowrap;
-}
-.context-box {
-  padding: 10px;
-  border-bottom: 1px solid var(--line);
-  font-size: 12px;
-}
-.context-box > div:first-child {
-  display: flex;
-  justify-content: space-between;
-}
-.context-box > div:first-child span {
-  color: var(--muted);
-}
 .context-actions {
   display: flex;
   gap: 5px;
@@ -606,10 +575,6 @@ button:disabled {
 }
 .context-actions button,
 .quick-prompts button,
-.message-actions button {
-  font-size: 11px;
-  padding: 4px 7px;
-}
 .context-chip {
   background: #f8f6ef;
   border: 1px solid var(--line);
@@ -632,15 +597,6 @@ button:disabled {
   overflow: auto;
   font-family: inherit;
   color: #555;
-}
-.context-picker {
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  margin-top: 7px;
-  max-height: 230px;
-  overflow: auto;
-  background: #fbfaf6;
-  padding: 8px;
 }
 .picker-group {
   margin-bottom: 9px;
@@ -792,12 +748,6 @@ button:disabled {
 }
 .message.assistant {
   margin-right: 20px;
-}
-.message-actions {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  margin-top: 7px;
 }
 .cursor {
   display: inline-block;
@@ -1349,12 +1299,6 @@ button:disabled {
   }
 }
 
-.composer-mode {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px 0;
-}
 .mode-toggle {
   display: inline-flex;
   border: 1px solid var(--line);
@@ -1373,10 +1317,6 @@ button:disabled {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
-}
-.composer-mode .hint {
-  font-size: 11px;
-  line-height: 1.4;
 }
 
 .menu-overlay {
@@ -1605,4 +1545,90 @@ button:disabled {
 
 .workspace.focus.focus-minimal {
   position: relative;
+}
+
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.preset-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #d8d4ca);
+  border-radius: 8px;
+  background: var(--paper, #fffdf8);
+}
+.preset-card.previewing {
+  border-color: var(--accent, #567166);
+  box-shadow: inset 0 0 0 1px var(--accent, #567166);
+}
+.preset-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.preset-main b {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preset-main small {
+  color: var(--muted, #8a8577);
+  font-size: 11px;
+}
+.preset-actions {
+  display: flex;
+  gap: 4px;
+  flex: none;
+  align-items: center;
+}
+.preset-actions .icon {
+  padding: 3px 7px;
+}
+.draft-state {
+  display: block;
+  font-size: 11px;
+  color: var(--muted, #8a8577);
+  padding: 0 2px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.draft-state.error {
+  color: var(--danger, #a33);
+  white-space: normal;
+}
+.draft-retry {
+  margin-left: 6px;
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  border-radius: 6px;
+  vertical-align: middle;
+}
+.env-previewing .editor-area::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent, #567166), transparent);
+  z-index: 25;
+  pointer-events: none;
+}
+
+.composer {
+  flex-wrap: wrap;
+}
+.composer .draft-state {
+  width: 100%;
+}
+.composer textarea {
+  min-width: 220px;
 }

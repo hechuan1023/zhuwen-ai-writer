@@ -94,8 +94,11 @@ export function Select({
     const minH = 120;
     const below = window.innerHeight - r.bottom - margin;
     const above = r.top - margin;
-    const openUp = below < Math.min(220, Math.max(minH, options.length * 36)) && above > below;
-    const maxHeight = Math.max(120, Math.min(openUp ? above : below, 320));
+    const ideal = Math.min(220, Math.max(minH, options.length * 36));
+    const openUp = below < ideal && above > below;
+    // 可用空间极小时贴边压缩，不因最小高度越界
+    const available = Math.max(openUp ? above : below, 0);
+    const maxHeight = Math.max(40, Math.min(available, 320));
     const width = Math.min(Math.max(r.width, 180), window.innerWidth - 24);
     let left = r.left;
     if (left + width > window.innerWidth - 12)
@@ -136,6 +139,16 @@ export function Select({
     };
     const onScroll = () => place();
     const onKey = (e: KeyboardEvent) => {
+      // 输入法合成中（拼音未上屏）：不处理方向键/Enter/打字，
+      // 避免选字回车被误当成确认选项；仅放行 Escape 关闭
+      if (e.isComposing || e.keyCode === 229) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          close();
+        }
+        return;
+      }
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();

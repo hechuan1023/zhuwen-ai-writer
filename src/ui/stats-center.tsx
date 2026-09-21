@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, fmt, Empty, AnyRow, UiLanguage, formatFocusDuration } from "./shared";
 import { StatsPayload } from "./prefs";
 import { Select } from "./select";
+import { StatsMonths } from "./stats-months";
+import { StatsTrend } from "./stats-trend";
+import { StatsDuration } from "./stats-duration";
 
 function localDateKey(d = new Date()) {
   const y = d.getFullYear();
@@ -118,6 +121,8 @@ export function WritingStatsCenter({
     let live = true;
     setLoading(true);
     setError("");
+    setTrend(null);
+    setRange(null);
     Promise.all([
       api<StatsPayload>("writing:stats", { novelId: filter || null, days }),
       api<StatsPayload>("writing:stats", { novelId: filter || null, days: 120 }),
@@ -191,22 +196,6 @@ export function WritingStatsCenter({
     };
   }, [rangeMap]);
 
-  const calendar = useMemo(() => {
-    const now = new Date();
-    const first = new Date(now.getFullYear(), now.getMonth(), 1);
-    const pad = (first.getDay() + 6) % 7;
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const cells: Array<{ key: string; day: number | null; total: number; today: boolean }> = [];
-    for (let i = 0; i < pad; i++) cells.push({ key: `p${i}`, day: null, total: 0, today: false });
-    const today = localDateKey();
-    for (let d = 1; d <= daysInMonth; d++) {
-      const key = localDateKey(new Date(now.getFullYear(), now.getMonth(), d));
-      cells.push({ key, day: d, total: rangeMap.get(key) || 0, today: key === today });
-    }
-    return cells;
-  }, [rangeMap]);
-
-  const maxAbs = Math.max(1, ...trendRows.map((r) => Math.abs(r.total)));
   const rangeLabel =
     days === 7 ? tr("近 7 个日历日", "7 calendar days") : days === 90 ? tr("近 90 个日历日", "90 calendar days") : tr("近 30 个日历日", "30 calendar days");
 
@@ -287,7 +276,7 @@ export function WritingStatsCenter({
           <div className="label">{tr("有效写作时长", "Focus time")}</div>
           <div className="value tabular">
             {overview
-              ? formatFocusDuration(overview.totalFocusMs || 0, language)
+              ? <StatsDuration ms={overview.totalFocusMs || 0} language={language} />
               : overviewLoading
                 ? "…"
                 : "—"}
@@ -297,7 +286,7 @@ export function WritingStatsCenter({
           <div className="label">{tr("最长单次有效写作", "Longest session")}</div>
           <div className="value tabular">
             {overview
-              ? formatFocusDuration(overview.maxSessionMs || 0, language)
+              ? <StatsDuration ms={overview.maxSessionMs || 0} language={language} />
               : overviewLoading
                 ? "…"
                 : "—"}
@@ -373,9 +362,14 @@ export function WritingStatsCenter({
             ];
             return (
               <>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--muted)", marginBottom: 4 }}>
-                  <span>{tr("一", "Mon")}</span>
-                  <span>{tr("日", "Sun")}</span>
+                <div className="year-months" aria-hidden="true">
+                  {cells.filter((c: any) => c.date.endsWith("-01")).map((c: any) => {
+                    const index = cells.findIndex((cell: any) => cell.date === c.date);
+                    const month = Number(c.date.slice(5, 7));
+                    return <span key={c.date} style={{ gridColumn: Math.floor((index + pad) / 7) + 1 }}>
+                      {language === "en" ? ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][month - 1] : `${month}月`}
+                    </span>;
+                  })}
                 </div>
                 <div className="year-grid" role="grid" aria-label={tr("年度活动方格图", "Yearly activity grid")}>
                   {list.map((c: any, idx: number) => {
@@ -540,20 +534,21 @@ export function WritingStatsCenter({
       )}
 
       <div>
-        <div className="home-section-title">
-          <h3>
-            {tr("趋势", "Trend")} · {rangeLabel}
-            {trend ? ` · ${trend.start} → ${trend.end}` : ""}
-          </h3>
-          <div className="stats-range">
+        <div className="home-section-title stats-trend-heading">
+          <div>
+            <h3>{tr("写作趋势", "Writing trend")}</h3>
+            <p className="stats-trend-subtitle">{rangeLabel}{trend ? ` · ${trend.start} — ${trend.end}` : ""}</p>
+          </div>
+          <div className="stats-range stats-trend-range" role="group" aria-label={tr("趋势时间范围", "Trend period")}>
             {[7, 30, 90].map((d) => (
               <button
                 key={d}
                 type="button"
                 className={days === d ? "active" : ""}
+                aria-pressed={days === d}
                 onClick={() => setDays(d)}
               >
-                {d}
+                {tr(`近${d}天`, `${d} days`)}
               </button>
             ))}
           </div>
@@ -561,74 +556,7 @@ export function WritingStatsCenter({
         {loading && !trendRows.length ? (
           <Empty title={tr("正在载入…", "Loading…")} text="" />
         ) : trendRows.length ? (
-          <div
-            className="stats-bars"
-            role="img"
-            aria-label={tr("每日净增字数柱状图（零基线，可向下）", "Daily net word chart with zero baseline")}
-            style={{ alignItems: "stretch" }}
-          >
-            {trendRows.map((d) => {
-              const h = Math.round((Math.abs(d.total) / maxAbs) * 70);
-              return (
-                <div
-                  className="bar"
-                  key={d.date}
-                  title={`${d.date}: ${fmt(d.total)}`}
-                  style={{ justifyContent: "center", position: "relative" }}
-                >
-                  <div
-                    style={{
-                      position: "relative",
-                      height: "100%",
-                      width: "100%",
-                      display: "flex",
-                      flexDirection: "column",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <div style={{ height: "50%", display: "flex", alignItems: "flex-end" }}>
-                      {d.total > 0 && (
-                        <i
-                          style={{
-                            height: `${h}%`,
-                            width: "100%",
-                            borderRadius: "3px 3px 0 0",
-                            background:
-                              "linear-gradient(to top, var(--accent-soft), var(--accent))",
-                          }}
-                        />
-                      )}
-                    </div>
-                    <div style={{ height: 1, background: "var(--line)" }} />
-                    <div style={{ height: "50%", display: "flex", alignItems: "flex-start" }}>
-                      {d.total < 0 && (
-                        <i
-                          className="neg"
-                          style={{
-                            height: `${h}%`,
-                            width: "100%",
-                            borderRadius: "0 0 3px 3px",
-                            background:
-                              "linear-gradient(to bottom, var(--danger-soft), var(--danger))",
-                          }}
-                        />
-                      )}
-                    </div>
-                  </div>
-                  <span
-                    style={{
-                      transform: "none",
-                      height: "auto",
-                      fontSize: 9,
-                      writingMode: "vertical-rl",
-                    }}
-                  >
-                    {d.date.slice(5)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          <StatsTrend rows={trendRows} language={language} />
         ) : (
           <Empty
             title={tr("暂无写作记录", "No writing activity")}
@@ -637,41 +565,7 @@ export function WritingStatsCenter({
         )}
       </div>
 
-      <div>
-        <div className="home-section-title">
-          <h3>
-            {tr("写作日历", "Calendar")} ·{" "}
-            {new Date().toLocaleDateString(language === "en" ? "en-US" : "zh-CN", {
-              year: "numeric",
-              month: "long",
-            })}
-          </h3>
-          <span>{tr("绿色为有净增记录", "Green = net growth recorded")}</span>
-        </div>
-        <div className="stats-calendar">
-          {(language === "en"
-            ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-            : ["一", "二", "三", "四", "五", "六", "日"]
-          ).map((d) => (
-            <div className="dow" key={d}>
-              {d}
-            </div>
-          ))}
-          {calendar.map((c) =>
-            c.day == null ? (
-              <div className="day empty" key={c.key} />
-            ) : (
-              <div
-                key={c.key}
-                className={`day ${c.total !== 0 ? "has" : ""} ${c.today ? "today" : ""}`}
-                title={`${c.key}: ${fmt(c.total)}`}
-              >
-                {c.day}
-              </div>
-            ),
-          )}
-        </div>
-      </div>
+      <StatsMonths totals={rangeMap} language={language} loading={loading || !range} error={error} key={filter} />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 {
   "name": "zhuwen",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "private": true,
   "description": "铸文——本地优先的小说写作桌面应用",
   "main": "dist-electron/main.js",
@@ -42,17 +42,52 @@
     "typescript": "^5.9.2",
     "vite": "^7.1.5",
     "vitest": "^3.2.4",
-    "wait-on": "^8.0.4"
+    "wait-on": "^8.0.4",
+    "use-stick-to-bottom": "^1.1.6"
   },
   "build": {
     "appId": "cn.zhuwen.app",
     "productName": "铸文",
     "asar": true,
     "electronDist": "node_modules/electron/dist",
-    "files": ["dist/**/*", "dist-electron/**/*", "package.json"],
-    "directories": { "output": "release" },
-    "win": { "target": "nsis", "icon": "build/icon.ico", "artifactName": "Zhuwen-Setup-${version}.${ext}" },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true, "installerIcon": "build/icon.ico", "uninstallerIcon": "build/icon.ico" },
-    "mac": { "target": ["dmg", "zip"], "category": "public.app-category.productivity", "icon": "build/icon.png", "artifactName": "Zhuwen-${version}-${arch}.${ext}" }
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico",
+      "artifactName": "Zhuwen-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "铸文",
+      "language": 2052,
+      "installerLanguages": ["zh_CN"],
+      "installerHeaderIcon": "build/icon.ico",
+      "installerHeader": "build/installer-header.bmp",
+      "installerSidebar": "build/installer-sidebar.bmp",
+      "include": "build/installer-custom.nsh",
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "artifactName": "Zhuwen-${version}-${arch}.${ext}"
+    }
   }
 }

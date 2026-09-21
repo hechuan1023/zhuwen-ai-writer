@@ -2,6 +2,18 @@ import { useEffect, useState } from "react";
 import { api, readerFonts, promptNameFor, ConfirmDialog, AnyRow, UiLanguage } from "./shared";
 import { PlanSection } from "./plan-section";
 import { Select, Combobox } from "./select";
+import { PresetSection } from "./preset-section";
+import { WritingEnvironment } from "./presets";
+
+export type PresetSectionProps = {
+  environment: WritingEnvironment;
+  previewing: boolean;
+  /** 预览目标 id/名称，用于操作栏提示 */
+  previewLabel?: string | null;
+  onPreview: (env: WritingEnvironment, label?: string) => void;
+  onApply: (env: WritingEnvironment) => void | Promise<void> | Promise<boolean>;
+  onCancelPreview: () => void;
+};
 
 export function Settings({
   notify,
@@ -13,6 +25,7 @@ export function Settings({
   onLanguage,
   personalization,
   onPersonalization,
+  presetProps,
 }: {
   notify: (s: string) => void;
   typography: {
@@ -37,6 +50,7 @@ export function Settings({
   onLanguage: (value: UiLanguage) => void;
   personalization: AnyRow;
   onPersonalization: (value: AnyRow) => void;
+  presetProps?: PresetSectionProps;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const [tab, setTab] = useState<"general" | "editor" | "appearance" | "ai">(
@@ -69,7 +83,26 @@ export function Settings({
     | null
   >(null);
   const load = () =>
-    api("connections:list").then((r) => r.ok && setConnections(r.data));
+    api("connections:list").then((r) => {
+      if (!r.ok) return;
+      setConnections(r.data);
+      const c = r.data?.[0];
+      if (c?.locked) {
+        setEdit((prev: any) => prev.id ? prev : {
+          id: c.id,
+          locked: true,
+          name: c.name,
+          baseUrl: c.base_url,
+          model: c.model,
+          temperature: c.temperature,
+          maxTokens: c.max_tokens,
+          timeoutMs: c.timeout_ms,
+          streaming: Boolean(c.streaming),
+          reasoningEffort: c.reasoning_effort || "medium",
+          apiKey: "",
+        });
+      }
+    });
   const loadPrompts = () =>
     api("prompts:list").then((r) => r.ok && setPrompts(r.data));
   useEffect(() => {
@@ -232,8 +265,8 @@ export function Settings({
             <h3>{tr("AI API 连接", "AI API connections")}</h3>
             <p className="hint">
               {tr(
-                "支持 OpenAI 兼容的 Chat Completions JSON/SSE。远程地址必须使用 HTTPS；密钥由系统加密保存。",
-                "Supports OpenAI-compatible Chat Completions JSON/SSE. Remote endpoints must use HTTPS; API keys are encrypted by the operating system.",
+                "铸文 AI 服务已启用。服务地址、模型和密钥由软件统一管理，用户无需选择连接；下面仅可调整思考深度、输出上限和流式体验。",
+                "Zhuwen AI is enabled. The service, model, and credentials are managed by the app; only reasoning, output, and streaming settings can be adjusted.",
               )}
             </p>
             <div className="connection-list">
@@ -252,6 +285,7 @@ export function Settings({
                       streaming: Boolean(c.streaming),
                       reasoningEffort: c.reasoning_effort || "",
                       apiKey: "",
+                      locked: Boolean(c.locked),
                     })
                   }
                 >
@@ -259,7 +293,7 @@ export function Settings({
                   <small>{c.model}</small>
                 </button>
               ))}
-              <button
+              {!connections.some((c) => c.locked) && <button
                 onClick={() =>
                   setEdit({
                     name: "",
@@ -274,11 +308,21 @@ export function Settings({
                 }
               >
                 {tr("＋ 新连接", "+ New connection")}
-              </button>
+              </button>}
             </div>
+            {edit.locked && (
+              <div className="data-health">
+                <div>
+                  <b>{tr("服务器模型已锁定", "Managed model locked")}</b>
+                  <small>{tr("由铸文服务器统一调用，客户端不保存供应商密钥。", "Routed through Zhuwen servers; provider credentials never reach the client.")}</small>
+                </div>
+                <span className="status-dot online" aria-label="online" />
+              </div>
+            )}
             <label>
               {tr("连接名称", "Connection name")}
               <input
+                disabled={Boolean(edit.locked)}
                 value={edit.name}
                 onChange={(e) => setEdit({ ...edit, name: e.target.value })}
               />
@@ -286,6 +330,7 @@ export function Settings({
             <label>
               {tr("API 基础地址", "API base URL")}
               <input
+                disabled={Boolean(edit.locked)}
                 value={edit.baseUrl}
                 onChange={(e) => setEdit({ ...edit, baseUrl: e.target.value })}
               />
@@ -293,6 +338,7 @@ export function Settings({
             <label>
               API Key
               <input
+                disabled={Boolean(edit.locked)}
                 type="password"
                 placeholder={
                   edit.id
@@ -306,6 +352,7 @@ export function Settings({
             <label>
               {tr("模型 ID", "Model ID")}
               <Combobox
+                disabled={Boolean(edit.locked)}
                 value={edit.model}
                 aria-label={tr("模型 ID", "Model ID")}
                 placeholder="gpt-4.1-mini"
@@ -314,7 +361,7 @@ export function Settings({
               />
             </label>
             <div className="row">
-              <button onClick={fetchModels} disabled={loadingModels}>
+              <button onClick={fetchModels} disabled={loadingModels || Boolean(edit.locked)}>
                 {loadingModels ? tr("获取中…", "Loading…") : tr("从服务获取模型列表", "Load models from service")}
               </button>
               {modelOptions.length > 0 && (
@@ -623,6 +670,7 @@ export function Settings({
             onChange={onPersonalization}
             notify={notify}
             language={language}
+            presetProps={presetProps}
           />
         )}
       </div>
@@ -695,16 +743,30 @@ export function AppearanceSettings({
   onChange,
   notify,
   language,
+  presetProps,
 }: {
   value: AnyRow;
   onChange: (x: AnyRow) => void;
   notify: (s: string) => void;
   language: UiLanguage;
+  presetProps?: PresetSectionProps;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const slider = (key: string, n: number) => onChange({ [key]: n });
   return (
     <section className="appearance-settings">
+      {presetProps && (
+        <PresetSection
+          language={language}
+          environment={presetProps.environment}
+          previewing={presetProps.previewing}
+          previewLabel={presetProps.previewLabel}
+          onPreview={presetProps.onPreview}
+          onApply={presetProps.onApply}
+          onCancelPreview={presetProps.onCancelPreview}
+          notify={notify}
+        />
+      )}
       <h3>{tr("界面主题", "Theme")}</h3>
       <div className="appearance-presets" role="group" aria-label={tr("界面主题", "Theme")}>
         {[
@@ -845,6 +907,18 @@ export function AppearanceSettings({
           onChange={(e) => slider("backgroundOpacity", +e.target.value)}
         />
       </label>
+      <p className="hint">{tr("图片覆盖整个应用；侧栏保持通透，正文使用独立遮罩。开启减少透明度时，面板恢复实色。", "The image spans the app. Panels and manuscript have separate opacity. Reduce transparency restores solid surfaces.")}</p>
+      <div className="row background-presets" role="group" aria-label={tr("背景风格", "Background style")}>
+        {[
+          { name: tr("清晰", "Clear"), backgroundOpacity: 0.8, backgroundBlur: 0, panelOpacity: 0.45, paperOpacity: 0.72 },
+          { name: tr("柔和", "Soft"), backgroundOpacity: 0.65, backgroundBlur: 8, panelOpacity: 0.65, paperOpacity: 0.86 },
+          { name: tr("专注", "Focus"), backgroundOpacity: 0.3, backgroundBlur: 16, panelOpacity: 0.88, paperOpacity: 0.97 },
+        ].map(({ name, ...values }) => <button key={name} type="button" onClick={() => onChange(values)}>{name}</button>)}
+      </div>
+      <label>
+        {tr("面板遮罩（越低越通透）", "Panel opacity")} <output>{Math.round((value.panelOpacity ?? 0.72) * 100)}%</output>
+        <input type="range" min="0.35" max="1" step="0.01" value={value.panelOpacity ?? 0.72} onChange={(e) => slider("panelOpacity", +e.target.value)} />
+      </label>
       <label>
         {tr("正文纸张遮罩", "Paper opacity")} <output>{Math.round(value.paperOpacity * 100)}%</output>
         <input
@@ -901,6 +975,7 @@ export function AppearanceSettings({
               backgroundBlur: 0,
               backgroundFit: "cover",
               paperOpacity: 0.9,
+              panelOpacity: 0.72,
             })
           }
         >

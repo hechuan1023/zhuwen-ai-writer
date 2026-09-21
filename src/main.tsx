@@ -5,5 +5,7 @@ import './styles.css'
 import './themes.css'
 import './design-tokens.css'
 import './cursor-layout.css'
+import './personalization.css'
+import './chat.css'
 const isFloat = window.location.hash.includes('ai-float')
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode>{isFloat ? <AiFloatApp/> : <App/>}</React.StrictMode>)

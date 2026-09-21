@@ -1,0 +1,122 @@
+/* Compact calendar: never stretch a date into a full-width dashboard tile. */
+.stats-calendar {
+  grid-template-columns: repeat(7, minmax(0, 38px));
+  gap: 6px;
+  width: min(100%, 302px);
+}
+.stats-calendar .day { width: 100%; max-height: 38px; font-size: 12px; border-radius: 6px; }
+.stats-calendar .dow { font-size: 11px; padding: 2px 0 5px; }
+.stats-center, .stats-center > div { min-width: 0; max-width: 100%; }
+.year-grid-wrap { min-width: 0; max-width: 100%; }
+.stats-center .home-section-title { flex-wrap: wrap; gap: 8px; }
+.stats-center .home-section-title > * { min-width: 0; }
+.stats-center .home-section-title > span { margin-left: 0; }
+
+/* One visual rhythm for the toolbar; status remains a quieter label. */
+.workspace .topbar > button,
+.workspace .topbar .toolbar-more > summary {
+  height: 32px; min-height: 32px; padding: 0 10px; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px; font-size: 12px; font-weight: 500; line-height: 1;
+  flex-shrink: 0; box-shadow: none;
+}
+.workspace .topbar > button.icon,
+.workspace .topbar .toolbar-more > summary { width: 32px; min-width: 32px; padding: 0; font-size: 16px; }
+.workspace .topbar > button.active { color: var(--accent); background: var(--accent-2); border-color: transparent; box-shadow: none; }
+.workspace .topbar > button.topbar-ai { background: transparent; color: inherit; border-color: transparent; }
+.workspace .topbar > button.topbar-ai.active { background: var(--accent-2); color: var(--accent); }
+.workspace .topbar > button:focus-visible,
+.workspace .topbar .toolbar-more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.workspace .topbar-save { font-size: 11px; white-space: nowrap; }
+
+/* The single backdrop sits below the application, not separately in each pane. */
+.app-backdrop { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: var(--bg); }
+.app-backdrop > div { position: absolute; inset: -24px; background-position: center; }
+.has-app-background #root { position: relative; z-index: 1; }
+.has-app-background .workspace,
+.has-app-background .workbody,
+.has-app-background .home,
+.has-app-background .editor-area { background: transparent; }
+.has-app-background .workspace .topbar,
+.has-app-background .workspace .left-panel,
+.has-app-background .workspace .right-panel,
+.has-app-background .workspace .status,
+.has-app-background .workspace .workspace-rail {
+  background: color-mix(in srgb, var(--paper) var(--app-panel-opacity, 72%), transparent);
+}
+.has-app-background .workspace .left-panel .panel-head,
+.has-app-background .workspace .zchat-composer,
+.has-app-background .workspace .right-panel .panel-head,
+.has-app-background .workspace .left-panel .panel-body,
+.has-app-background .workspace .right-panel .panel-body,
+.has-app-background .workspace .zchat,
+.has-app-background .workspace .zchat-toolbar,
+.has-app-background .workspace .zchat-scroll,
+.has-app-background .workspace .zchat-composer,
+.has-app-background .workspace .ai-panel { background: transparent; }
+.has-app-background .workspace .chapter-title,
+.has-app-background .workspace .editor-area.has-writing-bg .editor-scroll {
+  background: color-mix(in srgb, var(--editor-surface) var(--app-paper-opacity, 90%), transparent);
+}
+.has-app-background .home .glass-surface,
+.has-app-background .home .book-card,
+.has-app-background .home .home-tools {
+  background: color-mix(in srgb, var(--paper) var(--app-panel-opacity, 72%), transparent);
+}
+/* Menus, dialogs and editable inputs remain opaque for reliable contrast. */
+.has-app-background .modal,
+.has-app-background .toolbar-menu,
+.has-app-background .zw-select-menu { background: var(--paper); }
+.app-background-solid .app-backdrop { display: none; }
+.app-background-solid .workspace,
+.app-background-solid .home,
+.app-background-solid .editor-area { background: var(--bg); }
+.background-presets { flex-wrap: wrap; margin: 10px 0; }
+
+/* Scope calendar placeholders: the generic .empty component has large padding. */
+.stats-months { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 24px; align-items: start; }
+.stats-month { min-width: 0; }
+.stats-month > header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; margin: 12px 0; }
+.stats-month h4 { margin: 0; font-size: 14px; }
+.stats-month > header > span { font-size: 11px; color: var(--muted); }
+.stats-month > header b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+.stats-calendar-month { width: 100%; max-width: 350px; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: 22px; grid-auto-rows: 46px; gap: 5px; align-content: start; }
+.stats-calendar-month .calendar-pad { padding: 0; margin: 0; min-height: 0; }
+.stats-calendar-month .day { height: 46px; max-height: 46px; min-height: 0; min-width: 0; aspect-ratio: auto; padding: 4px 1px; gap: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.stats-calendar-month .day small { font-size: 9px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 14px; }
+.stats-calendar-month .day.negative { background: color-mix(in srgb, var(--danger) 12%, var(--panel)); color: var(--danger); }
+.stats-calendar-month .day.selected { outline: 1px solid var(--accent); outline-offset: 1px; }
+.stats-calendar-month .day:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.stats-calendar-month .day:disabled { opacity: 0.4; cursor: default; }
+.stats-calendar-detail { min-height: 20px; margin: 12px 0 0; color: var(--muted); font-size: 12px; }
+.stats-trend-plot, .stats-trend-axis { margin-left: 54px; }
+.stats-trend-guide em { position: absolute; right: calc(100% + 8px); top: -7px; font-size: 10px; font-style: normal; color: var(--muted); white-space: nowrap; }
+.stats-trend-empty { display: grid; place-content: center; text-align: center; gap: 8px; min-height: 120px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); font-size: 14px; }
+.stats-trend-empty small { font-size: 12px; padding: 0 16px; }
+
+/* UI text and CJK units must not inherit the monospace numeric fallback. */
+.stats-kpi .value {
+  font-family: var(--font-ui);
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+.stats-kpi .value small {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0;
+  vertical-align: baseline;
+  margin-left: 4px;
+}
+.stats-duration { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; max-width: 100%; }
+.stats-duration-part { display: inline-flex; align-items: baseline; white-space: nowrap; }
+.stats-duration-number { font-variant-numeric: tabular-nums; }
+
+/* AI 面板样式已迁移到 src/chat.css（.zchat 作用域）*/
+.ai-suggestions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 16px; width: min(100%, 360px); }
+.ai-suggestions button { min-height: 34px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); color: var(--ink); font-size: 11px; text-align: left; }
+.ai-suggestions button:hover { border-color: var(--accent); background: var(--accent-2); }

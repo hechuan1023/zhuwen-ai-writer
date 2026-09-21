@@ -1,0 +1,299 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AnyRow, kindNameFor } from "../shared";
+import { ChatMenu, type MenuItem } from "./menu";
+import {
+  IconChevronDown,
+  IconClose,
+  IconPlus,
+  IconQuote,
+  IconSend,
+  IconSparkle,
+  IconStop,
+} from "./icons";
+
+export type TaskKind = "chat" | "continue";
+
+export type ComposerTask = {
+  kind: string;
+  label: string;
+  /** 选择任务时准备的草稿内容（可选） */
+  draft?: string;
+  hint?: string;
+};
+
+/** 引用标签：名称 + 类型 + 单独移除 + 点击预览 */
+function RefChips({
+  refs,
+  language,
+  onRemove,
+  onPreview,
+  maxVisible = 4,
+}: {
+  refs: AnyRow[];
+  language: string;
+  onRemove: (i: number) => void;
+  onPreview: (i: number) => void;
+  maxVisible?: number;
+}) {
+  const tr = (zh: string, en: string) => (language === "en" ? en : zh);
+  const [expanded, setExpanded] = useState(false);
+  if (!refs.length) return null;
+  const shown = expanded ? refs : refs.slice(0, maxVisible);
+  const hidden = refs.length - shown.length;
+  return (
+    <div className="zchat-refs" data-fd-id="ai-ref-chips">
+      {shown.map((x, i) => {
+        const invalid = x.invalid === true;
+        return (
+          <span
+            className={`zchat-ref ${invalid ? "invalid" : ""}`}
+            key={`${x.kind}:${x.sourceId || i}`}
+            title={invalid ? tr("来源已删除或失效", "Source deleted or unavailable") : x.label}
+          >
+            <button
+              type="button"
+              className="zchat-ref-main"
+              onClick={() => onPreview(i)}
+              aria-label={tr(`查看引用：${x.label}`, `View reference: ${x.label}`)}
+            >
+              <IconQuote />
+              <span className="zchat-ellipsis">{x.label}</span>
+              <small>{kindNameFor(x.kind, language as never)}</small>
+            </button>
+            <button
+              type="button"
+              className="zchat-ref-remove"
+              aria-label={tr(`移除引用：${x.label}`, `Remove reference: ${x.label}`)}
+              title={tr("移除", "Remove")}
+              onClick={() => onRemove(i)}
+            >
+              <IconClose size={12} />
+            </button>
+          </span>
+        );
+      })}
+      {hidden > 0 && (
+        <button
+          type="button"
+          className="zchat-ref-more"
+          onClick={() => setExpanded(true)}
+          data-fd-id="ai-ref-more"
+        >
+          {tr(`还有 ${hidden} 项`, `+${hidden} more`)}
+        </button>
+      )}
+      {expanded && refs.length > maxVisible && (
+        <button type="button" className="zchat-ref-more" onClick={() => setExpanded(false)}>
+          {tr("收起", "Collapse")}
+        </button>
+      )}
+    </div>
+  );
+}
+
+export type ComposerProps = {
+  language: string;
+  float?: boolean;
+  /** 引用标签 */
+  refs: AnyRow[];
+  onRemoveRef: (i: number) => void;
+  onPreviewRef: (i: number) => void;
+  /** ＋ 引用选择器 */
+  onOpenRefPicker: () => void;
+  /** 任务（对话 / 续写 / 后续扩展） */
+  tasks: ComposerTask[];
+  activeTaskKind: string;
+  onSelectTask: (kind: string) => void;
+  /** 草稿 */
+  draft: string;
+  onDraftChange: (v: string) => void;
+  onSend: () => void;
+  generating: boolean;
+  onStop: () => void;
+  canSend: boolean;
+  /** 上下文入口 */
+  contextSummary: string;
+  contextPercent?: number;
+  contextLimitLabel?: string;
+  onOpenContext: () => void;
+  /** 保存状态或会话级错误 */
+  statusLine?: React.ReactNode;
+  /** 续写自动引用提示（可见、可查看范围） */
+  autoRefNotice?: string | null;
+};
+
+/**
+ * 统一输入组件：顶部引用标签、中间多行输入、底部工具行（＋ / 任务 / 模型 / 发送）。
+ * 不再有独立的任务横栏与常驻 Token 说明。
+ */
+export function Composer({
+  language,
+  float,
+  refs,
+  onRemoveRef,
+  onPreviewRef,
+  onOpenRefPicker,
+  tasks,
+  activeTaskKind,
+  onSelectTask,
+  draft,
+  onDraftChange,
+  onSend,
+  generating,
+  onStop,
+  canSend,
+  contextSummary,
+  contextPercent = 0,
+  contextLimitLabel,
+  onOpenContext,
+  statusLine,
+  autoRefNotice,
+}: ComposerProps) {
+  const tr = (zh: string, en: string) => (language === "en" ? en : zh);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const activeTask = tasks.find((t) => t.kind === activeTaskKind) || tasks[0];
+
+  // 自增高：两行起，到上限后内部滚动
+  useEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const max = 220;
+    const next = Math.min(el.scrollHeight, max);
+    el.style.height = `${Math.max(next, 56)}px`;
+    el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
+  }, [draft]);
+
+  const taskItems: MenuItem[] = useMemo(
+    () =>
+      tasks.map((t) => ({
+        id: `ai-task-${t.kind}`,
+        label: t.label,
+        hint: t.hint,
+        icon: t.kind === "continue" ? <IconSparkle /> : <IconQuote />,
+        onSelect: () => onSelectTask(t.kind),
+      })),
+    [tasks, onSelectTask],
+  );
+
+  return (
+    <div className="zchat-composer" data-fd-id="ai-composer">
+      <RefChips
+        refs={refs}
+        language={language}
+        onRemove={onRemoveRef}
+        onPreview={onPreviewRef}
+      />
+      {autoRefNotice ? (
+        <div className="zchat-autoref" data-fd-id="ai-autoref-notice">
+          <IconSparkle />
+          <span className="zchat-ellipsis">{autoRefNotice}</span>
+        </div>
+      ) : null}
+      <textarea
+        ref={taRef}
+        className="zchat-input"
+        data-fd-id="ai-input"
+        rows={2}
+        placeholder={
+          activeTaskKind === "continue"
+            ? tr("可选：写下续写要求，留空则顺着上文推进", "Optional: describe how to continue")
+            : float
+              ? tr("输入问题，与主窗口共享同一会话", "Ask a question in the shared conversation")
+              : tr("输入问题，或先添加引用资料", "Ask a question, or add references first")
+        }
+        value={draft}
+        onChange={(e) => onDraftChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            if (!generating) onSend();
+          }
+        }}
+      />
+      <div className="zchat-composer-bar">
+        <button
+          type="button"
+          className="zchat-pill"
+          data-fd-id="ai-add-ref"
+          aria-label={tr("添加引用", "Add reference")}
+          title={tr("添加引用资料", "Add reference material")}
+          onClick={onOpenRefPicker}
+        >
+          <IconPlus />
+        </button>
+        <ChatMenu
+          ariaLabel={tr("任务类型", "Task type")}
+          dataFdId="ai-task-menu"
+          trigger={
+            <>
+              <IconSparkle />
+              <span>{activeTask?.label || tr("对话", "Chat")}</span>
+              <IconChevronDown size={13} />
+            </>
+          }
+          triggerClassName="zchat-pill wide"
+          items={taskItems}
+        />
+        <button
+          type="button"
+          className="zchat-pill context"
+          data-fd-id="ai-context-entry"
+          aria-label={tr("查看上下文占用", "View context usage")}
+          title={tr("查看上下文占用与将要发送的内容", "View context usage and what will be sent")}
+          onClick={onOpenContext}
+        >
+          <span
+            className={`zchat-context-ring ${contextPercent >= 100 ? "over" : ""}`}
+            style={{ "--context-progress": `${Math.min(100, Math.max(0, contextPercent))}%` } as React.CSSProperties}
+            aria-hidden="true"
+          >
+            <i />
+          </span>
+          {contextSummary}
+          {contextLimitLabel ? <small className="zchat-context-limit">{contextLimitLabel}</small> : null}
+        </button>
+        {generating ? (
+          <button
+            type="button"
+            className="zchat-send stop"
+            data-fd-id="ai-stop"
+            aria-label={tr("停止生成", "Stop generating")}
+            title={tr("停止生成", "Stop generating")}
+            onClick={onStop}
+          >
+            <IconStop />
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="zchat-send"
+            data-fd-id="ai-send"
+            disabled={!canSend}
+            aria-label={
+              activeTaskKind === "continue"
+                ? tr("生成续写", "Generate continuation")
+                : tr("发送", "Send")
+            }
+            title={
+              canSend
+                ? activeTaskKind === "continue"
+                  ? tr("生成续写（Enter）", "Generate continuation (Enter)")
+                  : tr("发送（Enter）", "Send (Enter)")
+                : tr("请先输入内容或配置模型连接", "Type something or configure a connection first")
+            }
+            onClick={onSend}
+          >
+            <IconSend />
+          </button>
+        )}
+      </div>
+      {(statusLine || activeTask?.hint) && (
+        <div className="zchat-composer-status">
+          {statusLine}
+          {activeTask?.hint && !statusLine ? <span className="hint">{activeTask.hint}</span> : null}
+        </div>
+      )}
+    </div>
+  );
+}

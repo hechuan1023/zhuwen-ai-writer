@@ -1,5 +1,6 @@
+import { AppBackdrop } from "./ui/app-backdrop";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { api, useAiSessionStore, Empty, AnyRow, UiLanguage, UiLanguageContext } from "./ui/shared";
+import { api, useAiSessionStore, Empty, AnyRow, UiLanguage, UiLanguageContext, aiDraftFlusher } from "./ui/shared";
 import { CreativeHome } from "./ui/home";
 import { Onboarding } from "./ui/onboarding";
 import { patchAppearance, markOnboardingDone } from "./ui/prefs";
@@ -19,24 +20,36 @@ export default function App() {
   const [sort, setSort] = useState("recent"),
     [archived, setArchived] = useState(false);
   const [toast, setToast] = useState("");
+  const [shelfLoading, setShelfLoading] = useState(true);
   const [onboarding, setOnboarding] = useState(false);
+  const [homeAppearance, setHomeAppearance] = useState<AnyRow>({});
   const notify = useCallback((s: string) => {
     setToast(s);
-    setTimeout(() => setToast(""), 3500);
+    // 错误类提示多停留一会儿，避免还没读完就被抹掉
+    const ms = /失败|错误|无法|Cannot|failed|error/i.test(s) ? 5500 : 3500;
+    setTimeout(() => setToast((cur) => (cur === s ? "" : cur)), ms);
   }, []);
   const registerCloseGuard = useCallback((guard: () => Promise<boolean>) => {
     closeGuard.current = guard;
   }, []);
   const loadShelf = useCallback(async () => {
-    const r = await api("novels:list", { sort, archived });
-    if (r.ok) setNovels(r.data);
-  }, [sort, archived]);
+    setShelfLoading(true);
+    try {
+      const r = await api("novels:list", { sort, archived });
+      if (r.ok) setNovels(r.data);
+      else notify(r.error || (language === "en" ? "Could not load novels" : "作品列表加载失败"));
+    } finally {
+      setShelfLoading(false);
+    }
+  }, [sort, archived, language, notify]);
   useEffect(() => {
     loadShelf();
   }, [loadShelf]);
   useEffect(() => {
+    if (page !== "shelf") return;
     api<AnyRow>("preferences:get", "appearance").then((result) => {
       if (!result.ok || !result.data) return;
+      setHomeAppearance(result.data);
       if (result.data.language === "en" || result.data.language === "zh-CN")
         setLanguage(result.data.language);
       const theme =
@@ -60,10 +73,14 @@ export default function App() {
     api<AnyRow>("preferences:get", "onboarding").then((r) => {
       if (r.ok && !r.data?.done) setOnboarding(true);
     });
-  }, []);
+  }, [page]);
   useEffect(
     () =>
       window.zhuwen.onBeforeClose(async () => {
+        // 先提交渲染端防抖中的 AI 草稿，再做章节保存等收尾
+        try {
+          aiDraftFlusher.current();
+        } catch {}
         if (await closeGuard.current()) await api("app:close-ready");
       }),
     [],
@@ -78,10 +95,12 @@ export default function App() {
   if (page === "shelf")
     return (
       <UiLanguageContext.Provider value={language}>
+        <AppBackdrop appearance={homeAppearance} />
         <CreativeHome
           language={language}
           setLanguage={setLanguage}
           novels={novels}
+          loading={shelfLoading}
           sort={sort}
           setSort={setSort}
           archived={archived}
