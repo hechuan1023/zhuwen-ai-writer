@@ -681,10 +681,80 @@ export function AiPanel({
   const tasks: ComposerTask[] = [
     {
       kind: "chat",
-      label: tr("讨论剧情", "Discuss"),
+      label: tr("讨论剧情", "Discuss plot"),
+      draft: tr(
+        "请结合已添加的引用，指出本段的关键矛盾，并给出 3 种不改变既定事实的推进方案。",
+        "Using the attached references, identify the key conflict and offer 3 continuations that do not change established facts.",
+      ),
       hint: tr(
         "普通对话默认不附带正文，只发送你添加的引用。",
         "Chat sends only the references you add.",
+      ),
+    },
+    {
+      kind: "chat",
+      label: tr("润色段落", "Polish passage"),
+      draft: tr(
+        "请润色选中段落：保留事实、视角与人物关系，不扩写新情节。输出修改稿并说明改动理由。",
+        "Polish the selected passage: keep facts, POV, and relationships; do not invent new plot. Output the revision and briefly explain changes.",
+      ),
+      hint: tr("建议先在正文中选中段落并加入引用。", "Select text in the manuscript and add it as a reference first."),
+    },
+    {
+      kind: "chat",
+      label: tr("人物描写", "Character writing"),
+      draft: tr(
+        "请基于人物卡与场景引用，写一段贴合该人物语言习惯的行动/对话描写，保持视角一致。",
+        "Using the character card and scene references, write action/dialogue that fits their speech habits and keeps POV consistent.",
+      ),
+      hint: tr("可引用人物卡与相关章节。", "Reference character cards and related chapters."),
+    },
+    {
+      kind: "chat",
+      label: tr("推演后续", "Plot next"),
+      draft: tr(
+        "请推演接下来 2–3 个场景的可能走向：列出前提、风险与最自然的一条路径，不要直接替我写完整章。",
+        "Outline 2–3 possible next scenes: premises, risks, and the most natural path. Do not write the whole chapter for me.",
+      ),
+    },
+    {
+      kind: "chat",
+      label: tr("检查错别字", "Proofread"),
+      draft: tr(
+        "请检查引用文本中的错别字、标点与语病，逐条列出原句与建议，不要改写风格。",
+        "Check typos, punctuation, and grammar in the referenced text. List original vs suggestion; do not restyle.",
+      ),
+    },
+    {
+      kind: "chat",
+      label: tr("设定奠基", "Ground setting"),
+      draft: tr(
+        "请根据当前引用的世界设定与人物，列出本章必须遵守的 5–8 条事实约束（时间、空间、能力边界、已发生事件），供后续写作对照。",
+        "From the referenced world/character notes, list 5–8 facts this chapter must respect (time, space, abilities, past events).",
+      ),
+    },
+    {
+      kind: "chat",
+      label: tr("大纲规划", "Outline chapter"),
+      draft: tr(
+        "请为下一章拟细纲：剧情作用、出场人物、场景目标与冲突、爽点、章末钩子。用条目列出，不写正文。",
+        "Outline the next chapter: plot role, cast, scene goal/conflict, highlight, chapter-end hook. Bullets only; no full prose.",
+      ),
+    },
+    {
+      kind: "chat",
+      label: tr("扩写选区", "Expand selection"),
+      draft: tr(
+        "请在保持事实与视角不变的前提下扩写选区：补充感官与动作细节，不超过原文两倍长度。",
+        "Expand the selection without changing facts or POV; add sensory/action detail; keep under 2× length.",
+      ),
+    },
+    {
+      kind: "chat",
+      label: tr("改写选区", "Rewrite selection"),
+      draft: tr(
+        "请改写选区，使节奏更紧、语言更贴合人物语气；保留全部事实信息，并列出主要改动点。",
+        "Rewrite the selection for tighter pacing and character-true voice; keep all facts; list main changes.",
       ),
     },
     {
@@ -844,8 +914,11 @@ export function AiPanel({
         tasks={tasks}
         activeTaskKind={mode}
         onSelectTask={(kind) => {
-          // 切换任务不覆盖已有草稿：只切换任务本身
           setMode(kind === "continue" ? "continue" : "chat");
+          const task = tasks.find((t) => t.kind === kind);
+          if (task?.draft) {
+            updateDraft(task.draft, true);
+          }
         }}
         draft={draft}
         onDraftChange={(v) => updateDraft(v)}

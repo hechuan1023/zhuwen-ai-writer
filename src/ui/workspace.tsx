@@ -168,9 +168,10 @@ export function Workspace({
     [rightWidth, setRightWidth] = useState(380),
     [fontFamily, setFontFamily] = useState(readerFonts[0].value),
     [fontSize, setFontSize] = useState(17),
-    [lineHeight, setLineHeight] = useState(2),
-    [paraSpacing, setParaSpacing] = useState(0.45),
+    [lineHeight, setLineHeight] = useState(1.7),
+    [paraSpacing, setParaSpacing] = useState(0.25),
     [readingWidth, setReadingWidth] = useState(760),
+    [firstLineIndent, setFirstLineIndent] = useState(true),
     [dailyGoal, setDailyGoal] = useState(0),
     [language, setLanguage] = useState<UiLanguage>("zh-CN"),
     [typewriterMode, setTypewriterMode] = useState(false),
@@ -295,6 +296,7 @@ export function Workspace({
       lineHeight,
       paraSpacing,
       readingWidth,
+      firstLineIndent,
       language,
       typewriterMode,
       editorZoom,
@@ -319,6 +321,7 @@ export function Workspace({
       lineHeight,
       paraSpacing,
       readingWidth,
+      firstLineIndent,
       language,
       typewriterMode,
       editorZoom,
@@ -399,6 +402,7 @@ export function Workspace({
       lineHeight: number;
       paraSpacing: number;
       readingWidth: number;
+      firstLineIndent?: boolean;
     }>,
   ) {
     if (t.fontFamily !== undefined) setFontFamily(t.fontFamily);
@@ -406,7 +410,9 @@ export function Workspace({
     if (t.lineHeight !== undefined) setLineHeight(t.lineHeight);
     if (t.paraSpacing !== undefined) setParaSpacing(t.paraSpacing);
     if (t.readingWidth !== undefined) setReadingWidth(t.readingWidth);
-    persistAppearance(t);
+    if (t.firstLineIndent !== undefined)
+      setFirstLineIndent(t.firstLineIndent);
+    persistAppearance(t as any);
   }
   const dirty = useRef(false),
     timer = useRef<number | undefined>(undefined),
@@ -476,7 +482,10 @@ export function Workspace({
         if (readerFonts.some((font) => font.value === r.data.fontFamily))
           setFontFamily(r.data.fontFamily);
         setFontSize(bounded(r.data.fontSize, 14, 30, 17));
-        setLineHeight(bounded(r.data.lineHeight, 1.4, 3, 2));
+        setLineHeight(bounded(r.data.lineHeight, 1.4, 2.4, 1.7));
+        setParaSpacing(bounded(r.data.paraSpacing, 0, 1.2, 0.25));
+        setReadingWidth(bounded(r.data.readingWidth, 480, 1100, 760));
+        setFirstLineIndent(r.data.firstLineIndent !== false);
         setParaSpacing(bounded(r.data.paraSpacing, 0, 2, 0.45));
         setReadingWidth(bounded(r.data.readingWidth, 480, 1100, 760));
         if (r.data.language === "en" || r.data.language === "zh-CN")
@@ -1185,13 +1194,13 @@ export function Workspace({
   return (
     <div
       ref={rootRef}
-      className={`workspace theme-${envEffective.theme} density-${envEffective.uiDensity} ${focus ? "focus" : ""} ${focus && envEffective.focusZen ? "focus-minimal" : ""} ${envEffective.typewriterMode ? "typewriter-on" : ""}${envPreview ? " env-previewing" : ""}`}
+      className={`workspace theme-${envEffective.theme} density-${envEffective.uiDensity} ${focus ? "focus" : ""} ${focus && envEffective.focusZen ? "focus-minimal" : ""} ${envEffective.typewriterMode ? "typewriter-on" : ""}${firstLineIndent === false || (envPreview && (envPreview as any).firstLineIndent === false) ? " no-indent" : ""}${envPreview ? " env-previewing" : ""}`}
       style={
         {
           "--reader-font": envEffective.fontFamily,
           "--reader-size": `${envEffective.fontSize}px`,
-          "--reader-leading": String(envEffective.lineHeight),
-          "--reader-para": `${envEffective.paraSpacing}em`,
+          "--reader-leading": String(envEffective.lineHeight ?? 1.7),
+          "--reader-para": `${envEffective.paraSpacing ?? 0.25}em`,
           "--reader-width": `${envEffective.readingWidth}px`,
           "--editor-zoom": String(envEffective.editorZoom),
           "--writing-bg-opacity": String(envEffective.backgroundOpacity),
@@ -1686,14 +1695,26 @@ export function Workspace({
             {saveState === "error" && (
               <button onClick={() => save(true)}>{tr("重新保存", "Save again")}</button>
             )}
-            <span>{tx(language, "chapterWords")} {fmt(chapter?.word_count || 0)} {tx(language, "words")}</span>
-            <span>{tx(language, "bookWords")} {fmt(total)} {tx(language, "words")}</span>
+            {/* 整合字数：避免本章/全书/今日数字三处重复 */}
+            <span className="status-words" title={tr("本章 / 全书字数", "Chapter / book words")}>
+              {tr("本章", "Ch")} {fmt(chapter?.word_count || 0)}
+              {" · "}
+              {tr("全书", "Book")} {fmt(total)}
+              {today !== 0 && (
+                <>
+                  {" · "}
+                  {tr("今日", "Today")} {today > 0 ? "+" : ""}
+                  {fmt(today)}
+                </>
+              )}
+            </span>
             <SelectionWordCount editor={editor} language={language} />
             <DailyGoalMeter
               today={today}
               dailyGoal={dailyGoal}
               language={language}
               scope={novel.id}
+              compact
               onOpenStats={openStats}
             />
             <div className="status-tools">

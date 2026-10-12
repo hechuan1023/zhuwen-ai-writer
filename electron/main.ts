@@ -39,11 +39,11 @@ const importTasks = new Map<number, AbortController>();
 const importFiles = new Map<string, { file: string; createdAt: number }>();
 const IMPORT_SESSION_TTL = 30 * 60 * 1000;
 // 铸文商用版固定走服务器网关：客户端不保存 LongCat API Key，也不允许切换模型。
-// 这是封闭测试阶段的网关令牌；正式发售应替换为按激活码签发的短期令牌。
+// 网关令牌只允许通过运行环境注入，禁止写入源码或安装包。
 const ZHUWEN_SERVER_CONNECTION_ID = "zhuwen-server-longcat";
 const ZHUWEN_SERVER_BASE_URL = "http://118.31.220.154/zhuwen-api/v1";
 const ZHUWEN_SERVER_MODEL = "LongCat-2.0";
-const ZHUWEN_SERVER_TOKEN = "REMOVED_FROM_GIT_HISTORY";
+const ZHUWEN_SERVER_TOKEN = String(process.env.ZHUWEN_CLIENT_TOKEN || "").trim();
 const ZHUWEN_MAX_CONTEXT_CHARS = 300000;
 const ZHUWEN_MAX_OUTPUT_TOKENS = 20000;
 
@@ -67,6 +67,12 @@ function serverConnection() {
     created_at: row?.created_at || timestamp(),
     updated_at: row?.updated_at || timestamp(),
   };
+}
+
+function requireServerToken() {
+  if (!ZHUWEN_SERVER_TOKEN)
+    throw new Error("铸文 AI 服务未配置运行令牌，请联系管理员完成激活");
+  return ZHUWEN_SERVER_TOKEN;
 }
 
 function ensureServerConnection() {
@@ -973,6 +979,20 @@ function conversationHistory(conversationId: string) {
       content: (prefix ? `${prefix}\n\n` : "") + row.content,
     };
   });
+}
+/** 铸文写作助手人设：不暴露底层模型/供应商信息 */
+const ZHUWEN_WRITER_PERSONA = [
+  "你是「铸文」内置的文学创作助手，面向长篇小说作者。",
+  "角色定位：专属写作灵感编审，专业、克制，贴合叙事节奏。",
+  "身份约束：不要提及底层模型名称、研发公司、服务器或 API；若被问及你是谁，只回答「我是铸文的写作助手」。",
+  "工作方式：优先依据用户明确添加的引用内容工作；无引用时不要编造正文细节。",
+  "语言：默认使用与用户输入一致的语言。",
+].join("\n");
+function withWriterPersona(messages: any[]) {
+  const list = Array.isArray(messages) ? [...messages] : [];
+  // 人配置置顶，风格卡规则紧随其后
+  list.unshift({ role: "system", content: ZHUWEN_WRITER_PERSONA });
+  return list;
 }
 function styleCardRow(id: string) {
   const row: any = id ? get("SELECT * FROM ai_style_cards WHERE id=?", id) : null;
@@ -2042,7 +2062,7 @@ function registerIpc(userDir: string) {
       const c: any = serverConnection();
       await chatRequest(
         c,
-        ZHUWEN_SERVER_TOKEN,
+        requireServerToken(),
         [{ role: "user", content: "请只回复：连接成功" }],
         false,
         new AbortController(),
@@ -2254,10 +2274,10 @@ function registerIpc(userDir: string) {
     return ok(true);
   });
   ipcMain.handle("ai:previewRequest", (_, p) => {
-    const history = conversationHistory(String(p?.conversationId || ""));
+    const history = withWriterPersona(conversationHistory(String(p?.conversationId || "")));
     const prefix = contextText(p?.contexts || []);
     const style = requestStyle(p);
-    if (style.instruction) history.unshift({ role: "system", content: style.instruction });
+    if (style.instruction) history.splice(1, 0, { role: "system", content: style.instruction });
     history.push({
       role: "user",
       content: (prefix ? `${prefix}\n\n` : "") + String(p?.prompt || ""),
@@ -2330,15 +2350,15 @@ function registerIpc(userDir: string) {
           "INSERT INTO message_context_snapshots VALUES(?,?,?,?,?,?,?,1)",
         ).run(newId(), uid, x.label, x.kind, x.content, x.sourceId || null, t);
       // 规则只在本次请求的内存快照中加入一次，不写入对话历史，避免逐轮累积。
-      const history = conversationHistory(conv);
-      if (style.instruction) history.unshift({ role: "system", content: style.instruction });
+      const history = withWriterPersona(conversationHistory(conv));
+      if (style.instruction) history.splice(1, 0, { role: "system", content: style.instruction });
       connection =
         p.connectionId === ZHUWEN_SERVER_CONNECTION_ID
           ? serverConnection()
           : get("SELECT * FROM api_connections WHERE id=?", p.connectionId);
       const key =
         p.connectionId === ZHUWEN_SERVER_CONNECTION_ID
-          ? ZHUWEN_SERVER_TOKEN
+          ? requireServerToken()
           : readSecret(userDir, p.connectionId);
       if (!connection || !key) throw new Error("AI 连接或 API Key 未配置");
       for (let attempt = 0; ; attempt++) {
@@ -2462,7 +2482,7 @@ function registerIpc(userDir: string) {
           : get("SELECT * FROM api_connections WHERE id=?", p.connectionId);
       const key =
         p.connectionId === ZHUWEN_SERVER_CONNECTION_ID
-          ? ZHUWEN_SERVER_TOKEN
+          ? requireServerToken()
           : readSecret(userDir, p.connectionId);
       if (!conn || !key) throw new Error("AI 连接或 API Key 未配置");
       const text = String(c.plain_text || "")

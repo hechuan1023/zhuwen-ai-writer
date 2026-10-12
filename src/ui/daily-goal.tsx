@@ -120,14 +120,10 @@ export function DailyGoalMeter({
         </span>
       )}
       <span className="goal-meter__label">
-        {!compact && (
-          <>
-            <span className="goal-meter__scope">{resolvedScopeLabel}</span>
-            <span className="goal-meter__sep" aria-hidden="true">
-              ·
-            </span>
-          </>
-        )}
+        <span className="goal-meter__scope">{resolvedScopeLabel}</span>
+        <span className="goal-meter__sep" aria-hidden="true">
+          ·
+        </span>
         {hasGoal ? (
           <>
             {tr("今日", "Today")} <strong>{fmt(display)}</strong>

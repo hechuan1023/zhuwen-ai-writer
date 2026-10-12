@@ -187,6 +187,11 @@
   transition: color var(--dur) var(--ease);
 }
 .goal-meter__scope {
+  margin-right: 4px;
+  opacity: 0.75;
+  font-size: 11px;
+}
+.goal-meter__scope {
   color: var(--faint);
   font-weight: 500;
 }
@@ -963,6 +968,45 @@
 .settings-detail {
   background: var(--paper);
   color: var(--ink);
+}
+
+/* 排版滑块 */
+.typo-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.typo-slider output {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 12px;
+}
+.typo-slider input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+/* AI 输入区紧凑 */
+.zchat-composer {
+  gap: 8px !important;
+}
+.zchat-refs {
+  max-height: 72px;
+  overflow: auto;
+}
+.zchat-draft-state {
+  font-size: 11px;
+  color: var(--muted);
+}
+.zchat-draft-state.error {
+  color: var(--danger);
+}
+.zchat-draft-retry {
+  margin-left: 6px;
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
 }
 
 /* 引导 */

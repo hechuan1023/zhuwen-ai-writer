@@ -388,28 +388,87 @@ button:disabled {
   background: var(--paper);
 }
 .chapter-title {
-  height: 52px;
+  height: 48px;
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 0 25px;
   border-bottom: 1px solid #eeeae2;
 }
 .chapter-title input {
   font-family: STKaiti, KaiTi, serif;
-  font-size: 20px;
+  font-size: 22px;
+  font-weight: 500;
   text-align: center;
   border: 0;
   background: transparent;
   width: min(500px, 70%);
+  letter-spacing: 0.06em;
 }
-.chapter-title select {
+.chapter-title select,
+.chapter-title .zw-select-trigger {
   font-size: 11px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 4px;
-  background: transparent;
+  opacity: 0.55;
+  border-color: transparent !important;
+  background: transparent !important;
+  min-height: 26px;
+  color: var(--muted);
+}
+.chapter-title select:hover,
+.chapter-title .zw-select-trigger:hover {
+  opacity: 0.9;
+}
+.manuscript p {
+  margin: 0 0 var(--reader-para, 0.25em);
+  text-indent: 2em;
+}
+.manuscript p.is-editor-empty:first-child:before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #aaa;
+  height: 0;
+  pointer-events: none;
+  text-indent: 2em;
+}
+.workspace.no-indent .manuscript p {
+  text-indent: 0;
+}
+.workspace.no-indent .manuscript p.is-editor-empty:first-child:before {
+  text-indent: 0;
+}
+.manuscript {
+  line-height: var(--reader-leading, 1.7);
+}
+.status {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 12px;
+  border-top: 1px solid #ece8df;
+  color: var(--muted);
+  font-size: 11px;
+  background: #fbfaf6;
+}
+.status .status-words {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.92;
+}
+.status .goal-meter__track {
+  width: 48px;
+  height: 2px;
+  border-radius: 2px;
+}
+.status .goal-meter {
+  gap: 6px;
+}
+.status .goal-meter__label {
+  font-size: 11px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .find-bar {
   display: flex;
@@ -1396,6 +1455,21 @@ button:disabled {
   white-space: nowrap;
   max-width: 100%;
   color: var(--muted);
+}
+.workspace.focus .topbar {
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  overflow: hidden;
+  border: 0;
+}
+.workspace.focus.reveal-top .topbar,
+.workspace.focus.focus-minimal.reveal-top .topbar {
+  opacity: 1;
+  pointer-events: auto;
+  height: 52px;
+  overflow: visible;
+  border-bottom: 1px solid var(--line);
 }
 .workspace.focus.focus-minimal .topbar,
 .workspace.focus.focus-minimal .status {

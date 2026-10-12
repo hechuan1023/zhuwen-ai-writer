@@ -5,6 +5,8 @@ import {
   editorToLibraryContent,
   libraryContentToEditor,
   normalizeLibraryDraft,
+  pickNames,
+  scanLibraryHealth,
 } from "./library-model";
 import { Select } from "./select";
 
@@ -47,6 +49,11 @@ export function LibraryPanel({
     [saveBusy, setSaveBusy] = useState(false),
     [graphOpen, setGraphOpen] = useState(false),
     [listError, setListError] = useState(""),
+    [healthOpen, setHealthOpen] = useState(false),
+    [healthIssues, setHealthIssues] = useState<ReturnType<typeof scanLibraryHealth>>([]),
+    [nameOpen, setNameOpen] = useState(false),
+    [nameKind, setNameKind] = useState("person"),
+    [names, setNames] = useState<string[]>([]),
     [trashTarget, setTrashTarget] = useState<AnyRow | null>(null),
     [leavePrompt, setLeavePrompt] = useState<
       null | { resolve: (ok: boolean) => void }
@@ -313,11 +320,88 @@ export function LibraryPanel({
       <div className="panel-head">
         <strong>{tr("小说资料库", "Story Bible")}</strong>
         <button
+          onClick={() => {
+            setHealthIssues(scanLibraryHealth(allItems, language));
+            setHealthOpen(true);
+          }}
+        >
+          {tr("体检", "Health")}
+        </button>
+        <button
+          onClick={() => {
+            setNames(pickNames(nameKind, 8));
+            setNameOpen(true);
+          }}
+        >
+          {tr("命名", "Names")}
+        </button>
+        <button
           onClick={() => openEditor(null)}
         >
           {tr("＋ 新建", "+ New")}
         </button>
       </div>
+      {healthOpen && (
+        <div className="modal-bg" role="dialog" aria-modal="true" data-fd-id="library-health">
+          <div className="modal" style={{ width: "min(480px, 92vw)" }}>
+            <header>
+              <h2>{tr("资料体检", "Story bible health")}</h2>
+              <button onClick={() => setHealthOpen(false)} aria-label={tr("关闭", "Close")}>×</button>
+            </header>
+            <div className="modal-content">
+              <p className="hint">{tr("仅检查资料字段，不读取或修改正文。", "Checks story-bible fields only; manuscript untouched.")}</p>
+              {healthIssues.length === 0 && (
+                <p className="hint">{tr("未发现问题", "No issues found")}</p>
+              )}
+              <ul style={{ paddingLeft: 16, margin: "8px 0" }}>
+                {healthIssues.map((issue, i) => (
+                  <li key={i} style={{ color: issue.level === "error" ? "var(--danger)" : issue.level === "warn" ? "var(--warning)" : "var(--muted)", marginBottom: 6 }}>
+                    {issue.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+      {nameOpen && (
+        <div className="modal-bg" role="dialog" aria-modal="true" data-fd-id="library-names">
+          <div className="modal" style={{ width: "min(420px, 92vw)" }}>
+            <header>
+              <h2>{tr("灵感命名", "Name generator")}</h2>
+              <button onClick={() => setNameOpen(false)} aria-label={tr("关闭", "Close")}>×</button>
+            </header>
+            <div className="modal-content">
+              <div className="row" style={{ marginBottom: 10 }}>
+                <Select
+                  size="compact"
+                  value={nameKind}
+                  aria-label={tr("命名类型", "Name type")}
+                  onValueChange={(v) => {
+                    setNameKind(v);
+                    setNames(pickNames(v, 8));
+                  }}
+                  options={Object.entries({
+                    person: tr("人名", "Characters"),
+                    place: tr("地名", "Places"),
+                    faction: tr("势力", "Factions"),
+                    item: tr("物品", "Items"),
+                    skill: tr("功法", "Skills"),
+                    monster: tr("怪物", "Creatures"),
+                  }).map(([value, label]) => ({ value, label }))}
+                />
+                <button onClick={() => setNames(pickNames(nameKind, 8))}>{tr("换一批", "Shuffle")}</button>
+              </div>
+              <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+                {names.map((n) => (
+                  <span key={n} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--panel-2)" }}>{n}</span>
+                ))}
+              </div>
+              <p className="hint" style={{ marginTop: 10 }}>{tr("本地词库离线可用，不会请求外部 AI。", "Local word bank; no external AI call.")}</p>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="kind-tabs">
         {kinds.map((k) => (
           <button
@@ -352,13 +436,33 @@ export function LibraryPanel({
             onChange={(e) => updateEditing({ title: e.target.value })}
           />
           {kind === "character" && (
-            <input
-              placeholder={tr("别名，用逗号分隔（智能推荐和出场统计都会匹配）", "Aliases, separated by commas (used for suggestions and presence statistics)")}
-              value={editing.alias || ""}
-              onChange={(e) =>
-                updateEditing({ alias: e.target.value })
-              }
-            />
+            <>
+              <input
+                placeholder={tr("别名，用逗号分隔", "Aliases, comma-separated")}
+                value={editing.alias || ""}
+                onChange={(e) => updateEditing({ alias: e.target.value })}
+              />
+              <input
+                placeholder={tr("核心气质 / 防崩关键词", "Core temperament / anti-collapse keywords")}
+                value={editing.temperament || ""}
+                onChange={(e) => updateEditing({ temperament: e.target.value })}
+              />
+              <input
+                placeholder={tr("知识边界（做不到/不知道的事）", "Knowledge bounds")}
+                value={editing.knowledge || ""}
+                onChange={(e) => updateEditing({ knowledge: e.target.value })}
+              />
+              <input
+                placeholder={tr("避雷/底线（不可为）", "Taboo / hard limits")}
+                value={editing.taboo || ""}
+                onChange={(e) => updateEditing({ taboo: e.target.value })}
+              />
+              <input
+                placeholder={tr("防崩清单（写作时对照）", "Consistency checklist")}
+                value={editing.checklist || ""}
+                onChange={(e) => updateEditing({ checklist: e.target.value })}
+              />
+            </>
           )}
           {kind === "world" && (
             <Select
@@ -375,6 +479,35 @@ export function LibraryPanel({
                 { value: "物品", label: tr("物品", "Object") },
               ]}
             />
+          )}
+          {kind === "scene" && (
+            <>
+              <input
+                placeholder={tr("关联章节/位置（如：第 3 章）", "Chapter / location")}
+                value={editing.when || ""}
+                onChange={(e) => updateEditing({ when: e.target.value })}
+              />
+              <input
+                placeholder={tr("剧情作用", "Plot role")}
+                value={editing.plotRole || ""}
+                onChange={(e) => updateEditing({ plotRole: e.target.value })}
+              />
+              <input
+                placeholder={tr("爽点 / 钩子", "Highlight / hook")}
+                value={editing.coolPoint || ""}
+                onChange={(e) => updateEditing({ coolPoint: e.target.value })}
+              />
+              <input
+                placeholder={tr("章末钩子", "Chapter-end hook")}
+                value={editing.hook || ""}
+                onChange={(e) => updateEditing({ hook: e.target.value })}
+              />
+              <input
+                placeholder={tr("出场人物（逗号分隔）", "Cast")}
+                value={editing.cast || ""}
+                onChange={(e) => updateEditing({ cast: e.target.value })}
+              />
+            </>
           )}
           {kind === "timeline" && (
             <input
@@ -407,7 +540,11 @@ export function LibraryPanel({
                 ? tr("关系说明（如：师徒 / 相互利用 / 旧识）", "Relationship (e.g. mentor / rivals / old friends)")
                 : kind === "timeline"
                   ? tr("事件描述", "Event description")
-                  : kind === "character"
+                  : kind === "scene"
+                    ? tr("场景细纲：目标、冲突、结果", "Scene outline: goal, conflict, outcome")
+                    : kind === "foreshadow"
+                      ? tr("伏笔内容（埋下什么）", "Foreshadow content (what is planted)")
+                      : kind === "character"
                     ? tr("身份背景 / 概述", "Background / overview")
                     : tr("内容", "Content")
             }

@@ -225,6 +225,7 @@ export function DiffModal({
 
 export const kinds = [
   ["outline", "故事大纲"],
+  ["scene", "章节细纲"],
   ["character", "人物卡"],
   ["world", "世界设定"],
   ["inspiration", "灵感笔记"],

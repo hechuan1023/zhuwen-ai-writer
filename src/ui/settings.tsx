@@ -595,37 +595,40 @@ export function Settings({
                   }))}
                 />
               </label>
-              <label>
-                {tr("字号（px）", "Font size (px)")}
+              <label className="typo-slider">
+                {tr("字号", "Font size")} <output className="tabular">{typography.fontSize}px</output>
                 <input
-                  type="number"
+                  type="range"
                   min="14"
                   max="30"
+                  step="1"
                   value={typography.fontSize}
                   onChange={(e) =>
                     onChangeTypography({ fontSize: +e.target.value })
                   }
                 />
               </label>
-              <label>
-                {tr("行距", "Line height")}
+              <label className="typo-slider">
+                {tr("行高（建议 1.5–1.8）", "Line height (1.5–1.8 recommended)")}{" "}
+                <output className="tabular">{typography.lineHeight}</output>
                 <input
-                  type="number"
+                  type="range"
                   min="1.4"
-                  max="3"
-                  step="0.1"
+                  max="2.4"
+                  step="0.05"
                   value={typography.lineHeight}
                   onChange={(e) =>
                     onChangeTypography({ lineHeight: +e.target.value })
                   }
                 />
               </label>
-              <label>
-                {tr("段间距（em）", "Paragraph spacing (em)")}
+              <label className="typo-slider">
+                {tr("段间距（em）", "Paragraph spacing (em)")}{" "}
+                <output className="tabular">{typography.paraSpacing}</output>
                 <input
-                  type="number"
+                  type="range"
                   min="0"
-                  max="2"
+                  max="1.2"
                   step="0.05"
                   value={typography.paraSpacing}
                   onChange={(e) =>
@@ -633,10 +636,26 @@ export function Settings({
                   }
                 />
               </label>
-              <label>
-                {tr("阅读宽度（px）", "Reading width (px)")}
+              <label className="setting-switch">
+                <span>
+                  <b>{tr("首行缩进 2 字符", "First-line indent 2 chars")}</b>
+                  <small>{tr("网文常用；仅影响显示，不写入正文空格", "Display only; does not insert spaces into the manuscript")}</small>
+                </span>
                 <input
-                  type="number"
+                  type="checkbox"
+                  checked={
+                    (typography as any).firstLineIndent !== false
+                  }
+                  onChange={(e) =>
+                    onChangeTypography({ firstLineIndent: e.target.checked } as any)
+                  }
+                />
+              </label>
+              <label className="typo-slider">
+                {tr("阅读宽度（px）", "Reading width (px)")}{" "}
+                <output className="tabular">{typography.readingWidth}</output>
+                <input
+                  type="range"
                   min="480"
                   max="1100"
                   step="10"
@@ -653,10 +672,11 @@ export function Settings({
                   onChangeTypography({
                     fontFamily: readerFonts[0].value,
                     fontSize: 17,
-                    lineHeight: 2,
-                    paraSpacing: 0.45,
+                    lineHeight: 1.7,
+                    paraSpacing: 0.25,
                     readingWidth: 760,
-                  })
+                    firstLineIndent: true,
+                  } as any)
                 }
               >
                 {tr("恢复默认排版", "Reset typography")}

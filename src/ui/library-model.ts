@@ -11,7 +11,6 @@ export function libraryContentToEditor(row: {
   const next: any = { ...row, ...c };
   const kind = row.kind || next.kind;
   if (kind === "relation") {
-    // ?? 而非 ||：区分「字段不存在」与「用户主动清空为空串」
     next.body = c.label ?? c.body ?? "";
     next.from = c.from ?? "";
     next.to = c.to ?? "";
@@ -30,12 +29,26 @@ export function editorToLibraryContent(kind: string, editing: any): any {
       body: editing.body || "",
       payoff: editing.payoff || "",
       resolved: Boolean(editing.resolved),
+      // 生命周期扩展（对齐长篇伏笔管理）
+      plantAt: editing.plantAt || "",
+      planAt: editing.planAt || "",
+      prereq: editing.prereq || "",
+      effect: editing.effect || "",
+      importance: editing.importance || "",
+    };
+  if (kind === "scene")
+    return {
+      body: editing.body || "",
+      hook: editing.hook || "",
+      plotRole: editing.plotRole || "",
+      coolPoint: editing.coolPoint || "",
+      cast: editing.cast || "",
+      when: editing.when || "",
     };
   if (kind === "relation")
     return {
       from: editing.from ?? "",
       to: editing.to ?? "",
-      // body 为唯一编辑源；空串表示用户清空，不得回退到旧 label
       label:
         typeof editing.body === "string"
           ? editing.body
@@ -54,6 +67,11 @@ export function editorToLibraryContent(kind: string, editing: any): any {
       conflict: editing.conflict || "",
       speech: editing.speech || "",
       note: editing.note || "",
+      // 防崩 / 扮演约束
+      temperament: editing.temperament || "",
+      taboo: editing.taboo || "",
+      knowledge: editing.knowledge || "",
+      checklist: editing.checklist || "",
     };
   if (kind === "world")
     return { body: editing.body || "", category: editing.category || "" };
@@ -73,6 +91,15 @@ export function normalizeLibraryDraft(kind: string, d: any) {
     to: String(d.to || ""),
     payoff: String(d.payoff || ""),
     resolved: Boolean(d.resolved),
+    plantAt: String(d.plantAt || ""),
+    planAt: String(d.planAt || ""),
+    prereq: String(d.prereq || ""),
+    effect: String(d.effect || ""),
+    importance: String(d.importance || ""),
+    hook: String(d.hook || ""),
+    plotRole: String(d.plotRole || ""),
+    coolPoint: String(d.coolPoint || ""),
+    cast: String(d.cast || ""),
     alias: String(d.alias || ""),
     appearance: String(d.appearance || ""),
     personality: String(d.personality || ""),
@@ -81,8 +108,107 @@ export function normalizeLibraryDraft(kind: string, d: any) {
     conflict: String(d.conflict || ""),
     speech: String(d.speech || ""),
     note: String(d.note || ""),
+    temperament: String(d.temperament || ""),
+    taboo: String(d.taboo || ""),
+    knowledge: String(d.knowledge || ""),
+    checklist: String(d.checklist || ""),
     category: String(d.category || ""),
     tagsText: String(d.tagsText || ""),
     chapterId: d.chapter_id || d.chapterId || "",
   });
+}
+
+/** 灵感命名：本地词库，不调用外部 AI */
+export const NAME_SEEDS: Record<string, { zh: string; en: string; items: string[] }> = {
+  person: {
+    zh: "人名",
+    en: "Character names",
+    items: ["沈砚清", "顾长风", "洛清欢", "萧景行", "叶知秋", "白微澜", "陆沉舟", "苏晚晴", "霍临川", "温言", "裴照", "江浸月"],
+  },
+  place: {
+    zh: "地名",
+    en: "Places",
+    items: ["青岚宗", "听雪城", "万剑冢", "落星滩", "无妄海", "长夜关", "白鹭书院", "鬼市", "沉香渡", "剑冢峰"],
+  },
+  faction: {
+    zh: "势力",
+    en: "Factions",
+    items: ["天机阁", "巡夜司", "药王谷", "铁衣卫", "无相殿", "商会总会", "守夜人", "剑心斋"],
+  },
+  item: {
+    zh: "物品/法宝",
+    en: "Items",
+    items: ["断水剑", "青玉盏", "玄铁令牌", "沧海镜", "九转金丹", "寒潭珠", "龙鳞甲", "追魂香"],
+  },
+  skill: {
+    zh: "功法/技能",
+    en: "Skills",
+    items: ["踏雪无痕", "听风辨位", "破军枪", "凝血诀", "空明掌", "引雷术", "缩地成寸"],
+  },
+  monster: {
+    zh: "怪物/异种",
+    en: "Creatures",
+    items: ["赤目狼王", "雾隐蟒", "噬魂鸦", "石傀", "夜叉", "冰魄蜂后"],
+  },
+};
+
+export function pickNames(kind: string, count = 8): string[] {
+  const pool = NAME_SEEDS[kind]?.items || NAME_SEEDS.person.items;
+  const out: string[] = [];
+  const used = new Set<string>();
+  while (out.length < Math.min(count, pool.length)) {
+    const x = pool[Math.floor(Math.random() * pool.length)];
+    if (used.has(x)) continue;
+    used.add(x);
+    out.push(x);
+  }
+  return out;
+}
+
+/** 资料体检：缺字段 / 重名 / 伏笔未回收 —— 不读正文 */
+export type HealthIssue = {
+  level: "info" | "warn" | "error";
+  message: string;
+};
+export function scanLibraryHealth(items: any[], language: "zh-CN" | "en" = "zh-CN"): HealthIssue[] {
+  const zh = language !== "en";
+  const issues: HealthIssue[] = [];
+  const seenTitle = new Map<string, number>();
+  for (const raw of items || []) {
+    const c = parseJson(raw.content_json || "{}");
+    const kind = raw.kind || "";
+    const title = String(raw.title || "").trim();
+    const key = `${kind}:${title}`;
+    seenTitle.set(key, (seenTitle.get(key) || 0) + 1);
+    if (!title)
+      issues.push({
+        level: "warn",
+        message: zh ? `${kind} 存在空标题条目` : `Empty title in ${kind}`,
+      });
+    if (kind === "character" && !String(c.alias || c.body || "").trim())
+      issues.push({
+        level: "info",
+        message: zh ? `人物「${title || "未命名"}」缺少别名或简介` : `Character "${title}" missing alias/summary`,
+      });
+    if (kind === "foreshadow" && !c.resolved && !String(c.payoff || c.planAt || "").trim())
+      issues.push({
+        level: "warn",
+        message: zh ? `伏笔「${title || "未命名"}」未回收且无回收说明` : `Foreshadow "${title}" unresolved without payoff note`,
+      });
+    if (kind === "relation" && !(c.from && c.to))
+      issues.push({
+        level: "error",
+        message: zh ? `人物关系「${title || "未命名"}」缺少双方` : `Relation "${title}" missing endpoints`,
+      });
+  }
+  for (const [key, n] of seenTitle) {
+    if (n > 1)
+      issues.push({
+        level: "info",
+        message: zh ? `存在 ${n} 条同名条目：${key.split(":").slice(1).join(":")}` : `${n} duplicate titles: ${key}`,
+      });
+  }
+  if (!items?.length)
+    issues.push({ level: "info", message: zh ? "资料库为空" : "Story bible is empty" });
+  return issues;
 }
