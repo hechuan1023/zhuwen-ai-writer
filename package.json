@@ -1,6 +1,6 @@
 {
   "name": "zhuwen",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "private": true,
   "description": "铸文——本地优先的小说写作桌面应用",
   "main": "dist-electron/main.js",

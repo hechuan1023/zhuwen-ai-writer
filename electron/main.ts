@@ -764,11 +764,39 @@ function createMainWindow() {
         await js(
           `document.querySelector('.workspace-rail button[data-view="library"]')?.click()`,
         );
+        // 资料库分类：8 个 tab（大纲/章节细纲/人物卡/世界设定/灵感笔记/时间线/伏笔/人物关系）
         let kindTabsOk = false;
         for (let i = 0; i < 15 && !kindTabsOk; i++) {
-          kindTabsOk = await js(`document.querySelectorAll('.kind-tabs button').length===7`);
+          kindTabsOk = await js(
+            `(()=>{const b=[...document.querySelectorAll('.kind-tabs button')].map(x=>x.textContent.trim());return b.length===8&&b.includes('章节细纲')&&b.includes('伏笔')})()`,
+          );
           if (!kindTabsOk) await wait(150);
         }
+        // 章节细纲分类：新建一条并落库，确认编辑器渲染的是该分类独有字段而非沿用上一分类
+        if (aiSession.novelId) {
+          await js(
+            `window.zhuwen.invoke('library:save',{novelId:${JSON.stringify(aiSession.novelId)},kind:'scene',title:'细纲场景',content:{plotRole:'转折',hook:'身份曝光',cast:'甲'},tags:[]})`,
+          );
+          await wait(200);
+        }
+        await js(
+          `([...document.querySelectorAll('.kind-tabs button')].find(b=>b.textContent.trim()==='章节细纲'))?.click()`,
+        );
+        let sceneListOk = false;
+        for (let i = 0; i < 15 && !sceneListOk; i++) {
+          sceneListOk = await js(`Boolean(document.querySelector('.library-list article'))`);
+          if (!sceneListOk) await wait(150);
+        }
+        await js(`document.querySelector('.library-list article')?.click()`);
+        let sceneKindOk = false;
+        for (let i = 0; i < 15 && !sceneKindOk; i++) {
+          sceneKindOk = await js(
+            `(()=>{const box=document.querySelector('.editor-area > .library-detail-surface .library-edit');if(!box)return false;const ph=[...box.querySelectorAll('input,textarea')].map(x=>x.placeholder||'');return ph.some(p=>p.includes('章末钩子'))&&ph.some(p=>p.includes('剧情作用'))&&!ph.some(p=>p.includes('防崩')||p.includes('回收说明'))})()`,
+          );
+          if (!sceneKindOk) await wait(150);
+        }
+        await js(`document.querySelector('.library-detail-surface > header button')?.click()`);
+        await wait(150);
         if (aiSession.novelId) {
           await js(
             `window.zhuwen.invoke('library:save',{novelId:${JSON.stringify(aiSession.novelId)},kind:'relation',title:'关系',content:{from:'甲',to:'乙',label:'师徒'},tags:[]})`,
@@ -833,6 +861,8 @@ function createMainWindow() {
           floatShared,
           summaryOk,
           kindTabsOk,
+          sceneListOk,
+          sceneKindOk,
           relationOk,
           relationExpandOk,
           libraryDetailOk,

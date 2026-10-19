@@ -36,7 +36,7 @@ export function LibraryPanel({
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const kindLabel = (key: string, fallback = key) =>
     language === "en"
-      ? ({ outline: "Outline", character: "Characters", world: "World", inspiration: "Ideas", timeline: "Timeline", foreshadow: "Foreshadowing", relation: "Relationships" } as Record<string, string>)[key] || fallback
+      ? ({ outline: "Outline", scene: "Scene outline", character: "Characters", world: "World", inspiration: "Ideas", timeline: "Timeline", foreshadow: "Foreshadowing", relation: "Relationships" } as Record<string, string>)[key] || fallback
       : fallback;
   const [kind, setKind] = useState("outline"),
     [items, setItems] = useState<AnyRow[]>([]),
@@ -613,12 +613,53 @@ export function LibraryPanel({
           )}
           {kind === "foreshadow" && (
             <>
+              <input
+                placeholder={tr("埋设位置（如：第 3 章·祠堂）", "Planted at (e.g. Ch.3 · shrine)")}
+                value={editing.plantAt || ""}
+                onChange={(e) =>
+                  updateEditing({ plantAt: e.target.value })
+                }
+              />
+              <input
+                placeholder={tr("计划回收（如：第 80 章）", "Planned payoff (e.g. Ch.80)")}
+                value={editing.planAt || ""}
+                onChange={(e) =>
+                  updateEditing({ planAt: e.target.value })
+                }
+              />
               <textarea
                 placeholder={tr("回收说明（何时、以何种方式回收）", "Payoff notes (when and how it is resolved)")}
                 value={editing.payoff || ""}
                 onChange={(e) =>
                   updateEditing({ payoff: e.target.value })
                 }
+              />
+              <textarea
+                rows={2}
+                placeholder={tr("前置条件（回收成立所需的前置）", "Prerequisites for the payoff")}
+                value={editing.prereq || ""}
+                onChange={(e) =>
+                  updateEditing({ prereq: e.target.value })
+                }
+              />
+              <textarea
+                rows={2}
+                placeholder={tr("回收后的效果（改变了什么）", "Effect after the payoff")}
+                value={editing.effect || ""}
+                onChange={(e) =>
+                  updateEditing({ effect: e.target.value })
+                }
+              />
+              <Select
+                value={editing.importance || ""}
+                aria-label={tr("伏笔重要度", "Foreshadow importance")}
+                onValueChange={(v) => updateEditing({ importance: v })}
+                options={[
+                  { value: "", label: tr("未标注", "Unrated") },
+                  { value: "高", label: tr("高", "High") },
+                  { value: "中", label: tr("中", "Medium") },
+                  { value: "低", label: tr("低", "Low") },
+                ]}
               />
               <label className="check">
                 <input
@@ -714,6 +755,17 @@ export function LibraryPanel({
                   {kind === "world" && c.category && (
                     <span className="badge idea">{c.category}</span>
                   )}
+                  {kind === "foreshadow" && c.importance && (
+                    <span className="badge idea">
+                      {c.importance === "高"
+                        ? tr("高", "High")
+                        : c.importance === "中"
+                          ? tr("中", "Medium")
+                          : c.importance === "低"
+                            ? tr("低", "Low")
+                            : c.importance}
+                    </span>
+                  )}
                   {pres && (
                     <span
                       className={`badge ${pres.appearances ? "confirmed" : "idea"}`}
@@ -735,6 +787,12 @@ export function LibraryPanel({
                     : c.body}
                 </p>
                 <small>
+                  {kind === "foreshadow" && (c.plantAt || c.planAt)
+                    ? tr(
+                        `埋设：${c.plantAt || "未填"} · 计划回收：${c.planAt || "未填"} · `,
+                        `Planted: ${c.plantAt || "—"} · Payoff: ${c.planAt || "—"} · `,
+                      )
+                    : ""}
                   {kind === "character" && c.alias
                     ? tr(`别名：${c.alias} · `, `Aliases: ${c.alias} · `)
                     : ""}

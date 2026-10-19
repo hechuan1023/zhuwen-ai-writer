@@ -102,6 +102,49 @@ describe("scene / foreshadow / health tools", () => {
     expect(content.payoff).toBe("重铸");
   });
 
+  it("foreshadow fields all editable in UI survive a no-op save", () => {
+    const stored = {
+      body: "剑身裂纹",
+      payoff: "重铸",
+      resolved: false,
+      plantAt: "第2章",
+      planAt: "第20章",
+      prereq: "主角取得玄铁",
+      effect: "旧门派重新归队",
+      importance: "高",
+    };
+    const model = libraryContentToEditor({
+      kind: "foreshadow",
+      title: "断剑",
+      content_json: JSON.stringify(stored),
+    });
+    const content = editorToLibraryContent("foreshadow", model);
+    for (const key of Object.keys(stored)) expect(content[key]).toBe(stored[key]);
+    // 只改标题，其余生命周期字段不得被清空
+    const retitled = editorToLibraryContent("foreshadow", { ...model, title: "断剑·改" });
+    for (const key of Object.keys(stored)) expect(retitled[key]).toBe(stored[key]);
+  });
+
+  it("health accepts a planned payoff without a written note", () => {
+    const withPlan = scanLibraryHealth([
+      {
+        kind: "foreshadow",
+        title: "裂剑",
+        content_json: JSON.stringify({ payoff: "", planAt: "第80章" }),
+      },
+    ]);
+    expect(withPlan.some((i) => i.message.includes("裂剑"))).toBe(false);
+
+    const importanceAlone = scanLibraryHealth([
+      {
+        kind: "foreshadow",
+        title: "裂剑",
+        content_json: JSON.stringify({ payoff: "", planAt: "", importance: "高" }),
+      },
+    ]);
+    expect(importanceAlone.some((i) => i.message.includes("裂剑"))).toBe(true);
+  });
+
   it("character extra fields preserved", () => {
     const model = libraryContentToEditor({
       kind: "character",

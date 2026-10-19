@@ -251,9 +251,13 @@ export const kindNames: Record<string, string> = {
   summary: "章节摘要",
   continuation: "续写上文",
   outline: "故事大纲",
+  scene: "章节细纲",
   character: "人物卡",
   world: "世界设定",
   inspiration: "灵感笔记",
+  timeline: "时间线",
+  foreshadow: "伏笔",
+  relation: "人物关系",
 };
 const kindNamesEn: Record<string, string> = {
   selection: "Selection",
@@ -261,6 +265,7 @@ const kindNamesEn: Record<string, string> = {
   summary: "Chapter summary",
   continuation: "Previous passage",
   outline: "Outline",
+  scene: "Scene outline",
   character: "Character",
   world: "Worldbuilding",
   inspiration: "Idea",

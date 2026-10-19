@@ -20,6 +20,22 @@ describe("localized writing terms", () => {
     expect(kindNameFor("character", "zh-CN")).toBe("人物卡");
   });
 
+  it("translates every story-bible kind in both languages", () => {
+    for (const [kind, zh, en] of [
+      ["outline", "故事大纲", "Outline"],
+      ["scene", "章节细纲", "Scene outline"],
+      ["character", "人物卡", "Character"],
+      ["world", "世界设定", "Worldbuilding"],
+      ["inspiration", "灵感笔记", "Idea"],
+      ["timeline", "时间线", "Timeline"],
+      ["foreshadow", "伏笔", "Foreshadowing"],
+      ["relation", "人物关系", "Relationship"],
+    ] as const) {
+      expect(kindNameFor(kind, "zh-CN")).toBe(zh);
+      expect(kindNameFor(kind, "en")).toBe(en);
+    }
+  });
+
   it("translates built-in prompt names without changing custom names", () => {
     expect(promptNameFor("检查逻辑", 1, "en")).toBe("Check logic");
     expect(promptNameFor("我的模板", 0, "en")).toBe("我的模板");
