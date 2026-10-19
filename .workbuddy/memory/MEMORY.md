@@ -8,10 +8,10 @@
 - `v0.4.7` 标签 = **优化前的基线快照**（由手工备份重建），不是原始构建提交。`git diff v0.4.7 HEAD` 查看 0.4.7 之后的全部改动。
 - 仓库**统一 LF**。`.gitattributes` 用 `* text=auto eol=lf` 覆盖 Git for Windows 默认的系统级 `core.autocrlf=true`；已实测克隆不产生 CRLF。**改 `.gitattributes` 前先想清楚**，破坏它会引发全文件级伪 diff。
 - `.gitignore` 排除：`node_modules/`、`dist/`、`dist-electron/`、`release*/`、`artifacts/`、`.frontend-design/`、`.backup/`、`*.tsbuildinfo`、`secrets.json`。
-- **发布产物只留最近两个安装包**：`release/` 保留 `Zhuwen-Setup-0.4.7.exe`、`0.4.8.exe`（含 blockmap）与 `builder-debug.yml`，`release-archive/`（归档变体）、`anzhuangbao/`（解包副本）、`release/win-unpacked*`（解包目录）均已清理。二进制不入 git，删除不可恢复。
-- 安装包二进制**不入库**，版本 / 大小 / SHA-256 记在 `README.md`。
+- **发布产物只留最近两个安装包**（2026-10-19 现状：`release/` 有 0.4.7、0.4.8、0.4.9 三个 exe + blockmap + `builder-debug.yml` + `latest.yml`；**0.4.7 已被定为待清理，需用户点名才删**）。`release/win-unpacked/`（约 356 MB）是 0.4.9 的解包目录，验证完可删。二进制不入 git，删除不可恢复。
+- 安装包二进制**不入库**，版本 / 大小 / SHA-256 / 构建日期 / 验证级别记在 `README.md`「安装包记录」小节。**必须区分「打包应用启动验证」与「安装器安装/升级验证」**——本项目只有前者验证过：解包后的 `release/win-unpacked/铸文.exe` 带 `ZHUWEN_UI_SMOKE=1` 跑完 40 项断言全绿（独立 profile），这不等于安装器装过。
 - 提交信息用 `feat:` / `fix:` / `chore:` / `refactor:` / `style:` / `docs:` 开头，正文说明改了什么、为什么、如何验证。
-- 尚未配置远端。推送属外部操作，未经用户明确同意不要执行。
+- 已配置远端：`origin` = `https://github.com/hechuan1023/zhuwen-ai-writer.git`（2026-10-12 提交时接入，`main` 已同步）。推送属外部操作，未经用户明确同意不要执行。
 - 手工备份仍在 `E:\AI-Project\write-tool-backup\20260915-1420-pre-optimize`（693 KB），保留作双保险。
 
 ## 硬性约定
@@ -25,6 +25,7 @@
 7. **不加遥测、CDN、在线字体、远程素材依赖**。应用是离线优先产品。
 8. **商用版只允许一个被锁定的 AI 连接**。`main.ts` 硬编码 `ZHUWEN_SERVER_CONNECTION_ID`（`zhuwen-server-longcat`）；`connections:list` 只返回该内置连接，`connections:save` 拒绝其它 id，`settings.tsx` 在存在锁定连接时隐藏「＋ 新连接」按钮并禁用全部字段。因此「无法新增/删除 AI 连接」是**设计如此，不是缺陷**，不要当 bug 修；删除类通道若无人可调用，属死代码。
 9. **设定库删除是软删除**。`library:trash` 只写 `deleted_at`；回收站的 `trash:list` / `trash:restore` / `trash:purge` 统一支持 `chapter` / `volume` / `library` / `novel` 四种 kind，永久删除需服务端校验确认词（`["永久删除","DELETE"]`，见 `src/ui/trash-confirm.ts`）。前端删除入口在资料编辑页脚（`data-fd-id="library-trash"`）。
+10. **资料库分类是 8 个不是 7 个**（`shared.tsx` 的 `kinds`）：大纲 / 章节细纲 / 人物卡 / 世界设定 / 灵感笔记 / 时间线 / 伏笔 / 人物关系。2026-10-12 起 `scene` 分类加入，此前 UI 冒烟把 tab 数写死 7 导致假红。**断言分类数量时按分类名断言，不要写死个数**。新增分类时三处同步：`shared.tsx` 的 `kinds` + `kindNames` + `kindNamesEn`，`library-panel.tsx` 的 EN `kindLabel` 映射，编辑器字段分支。
 
 ## 宿主安全删除垫片的脾气（删大目录前必读）
 
@@ -59,8 +60,10 @@
      必须先 `env -u ELECTRON_RUN_AS_NODE`。
   2. 无 GPU 时需 `--disable-gpu --no-sandbox --disable-gpu-compositing`，
      否则报 `GPU process isn't usable. Goodbye.`。
-  完整命令：`env -u ELECTRON_RUN_AS_NODE ZHUWEN_UI_SMOKE=1 ./node_modules/electron/dist/electron.exe . --disable-gpu --no-sandbox --disable-gpu-compositing`
-  （`npm run test:ui` 不含这两个开关，直接调用会失败。）
+   完整命令（bash）：`env -u ELECTRON_RUN_AS_NODE ZHUWEN_UI_SMOKE=1 ./node_modules/electron/dist/electron.exe . --disable-gpu --no-sandbox --disable-gpu-compositing`
+   （`npm run test:ui` 不含这两个开关，直接调用会失败。）
+   PowerShell 等价写法：`Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue; $env:ZHUWEN_UI_SMOKE="1"; & ".\node_modules\electron\dist\electron.exe" . --disable-gpu --no-sandbox --disable-gpu-compositing`
+   成功输出 `UI_SMOKE_OK ...`，截图落在 `artifacts/ui-smoke.png`（已在 .gitignore 内）。
 - macOS 构建与钥匙串**必须真机验证**，Windows 通过不代表 macOS 通过。
 - 打包后要报告文件名、大小、SHA-256、测试日期，并区分「打包应用启动验证」与「安装器安装/升级验证」。
 

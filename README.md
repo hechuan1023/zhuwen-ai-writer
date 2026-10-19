@@ -2,9 +2,22 @@
 
 本地优先小说写作桌面应用。Electron + React + TipTap + SQLite。
 
-- 源码版本：**0.4.8**（工作区已全部提交；现有 0.4.8 安装包为更早构建，**不含**后续清理改动）
-- 最新安装包：`release/Zhuwen-Setup-0.4.8.exe`（历史构建，**未包含**本轮改动）
+- 源码版本：**0.4.9**
+- 最新安装包：`release/Zhuwen-Setup-0.4.9.exe`（2026-10-19 构建，**包含** 10/12 与本轮全部改动）
 - 历史交接文档见 `docs/`（`docs/OPTIMIZATION-HANDOFF.md` 已归档，请以本文与源码为准）
+
+## 安装包记录
+
+| 项 | 值 |
+|---|---|
+| 文件名 | `release/Zhuwen-Setup-0.4.9.exe`（附 `.blockmap`，105,818 字节） |
+| 大小 | 101,127,236 字节（96.44 MB） |
+| SHA-256 | `c66a76ed80526550e502f4b322d0e357fc1e854f60c7ef6715c53bb001f56922` |
+| 构建日期 | 2026-10-19 |
+| **打包应用启动验证** | **已通过**：`release/win-unpacked/铸文.exe` 以 `ZHUWEN_UI_SMOKE=1` 启动，40 项界面断言全绿（独立 profile，不接触用户数据），随后正常退出 |
+| **安装器安装/升级验证** | **未验证**：本次未实际执行安装、覆盖安装、卸载与快捷方式创建；代码签名亦未验证（构建日志中的 signtool 为 electron-builder 的默认行为，未配置证书） |
+| macOS 构建 | **未验证**，需真机 |
+
 
 ## 开发
 
@@ -28,7 +41,7 @@ npm run build && npm run test:unit && npm run test && npm run test:ui
 | onApply 类型契约 | 已修复 |
 | 清理脚本 .mjs 混入 TS 导致语法错误 | 已修复 |
 
-## 0.4.8 收尾清理（本轮）
+## 0.4.8 收尾清理（2026-09-21 轮）
 
 | 项 | 结果 |
 |---|---|
@@ -40,9 +53,25 @@ npm run build && npm run test:unit && npm run test && npm run test:ui
 | 数据库迁移文档 | **修正**：README 由「版本 9」更正为版本 10 |
 | 交接文档 | **整理**：`OPTIMIZATION-HANDOFF.md`、`CHAT-PANEL-HANDOFF.md` 归入 `docs/` |
 
+## 资料库能力补齐（10/12 轮 + 本轮）
+
+资料库现有 **8 个分类**：故事大纲、章节细纲、人物卡、世界设定、灵感笔记、时间线、伏笔、人物关系。
+
+| 项 | 结果 |
+|---|---|
+| 章节细纲分类 | **可用**：剧情作用 / 爽点 / 章末钩子 / 出场人物 / 关联章节，字段随落库往返 |
+| 人物卡防崩约束 | **可用**：核心特质 / 知识边界 / 禁忌 / 一致性检查清单 |
+| 伏笔生命周期 | **本轮接线**：埋设位置、计划回收、回收说明、前置条件、回收后效果、重要度（高/中/低）全部进编辑器与卡片摘要；此前只有模型层支持、界面无法填写 |
+| 伏笔体检口径 | 未回收且既无回收说明也无计划回收位置才告警 |
+| 灵感命名 | AI 面板外置的本地词库入口，6 类人名/地名/势力/物品/功法/怪物，离线可用，不请求外部 AI |
+| 资料体检 | 空标题、缺别名、伏笔未回收、人物关系缺端点、同名条目 |
+| 中英文标签 | **本轮补齐**：`scene` 等分类此前在英文界面回退显示中文，现 8 个分类中英标签齐全 |
+| AI 写作助手人设 | 系统提示固定注入，禁止透露底层模型/供应商/服务器；隐藏供应商信息 |
+| 网关令牌 | `ZHUWEN_CLIENT_TOKEN` 由环境变量注入，缺失时报错而非静默走明文密钥；用法见 `server/README.md` |
+
 ## 发布产物清理
 
-`release/` 只保留最近两个安装包与构建元数据，其余历史产物已删除，合计回收约 3.8 GB。
+`release/` 现存三个安装包（0.4.7 / 0.4.8 / 0.4.9）与构建元数据，其余历史产物已删除，合计回收约 3.8 GB。0.4.7 是否随 0.4.9 一并清理由维护者决定。
 
 | 已删除 | 约 |
 |---|---|
@@ -55,21 +84,27 @@ npm run build && npm run test:unit && npm run test && npm run test:ui
 
 | 保留 | 说明 |
 |---|---|
-| `release/Zhuwen-Setup-0.4.7.exe`、`Zhuwen-Setup-0.4.8.exe`（含 blockmap） | 现役安装包 |
-| `release/builder-debug.yml` | 构建元数据 |
+| `release/Zhuwen-Setup-0.4.9.exe`（含 blockmap） | **现役安装包**，与当前源码一致 |
+| `release/Zhuwen-Setup-0.4.7.exe`、`Zhuwen-Setup-0.4.8.exe`（含 blockmap） | 历史安装包，**不含**后续改动，待清理 |
+| `release/builder-debug.yml`、`release/latest.yml` | 构建元数据 |
+
+`release/win-unpacked/` 是本次打包的解包目录（约 356 MB），验证完可删。
 
 **遗留**：9 个 `resources/*.asar`（合计 94.4 MB）无法删除 —— 运行中的宿主进程持有其文件句柄，
 原生 `rename` 返回 `WinError 32（另一个程序正在使用此文件）`。关闭 WorkBuddy 或重启系统后即可清空。
 目录结构已收至最小（仅剩 `resources/` 一层）。
 
-## 测试（本次执行）
+## 测试（最近一次执行：2026-10-19）
 
 | 命令 | 结果 |
 |---|---|
-| build | 通过 |
-| test:unit | **131/131** |
-| test | SMOKE_OK（含新增 `library_trash`） |
-| test:ui | UI_SMOKE_OK（28 项，含新增 `library_trash`） |
+| build | 通过（双 tsconfig 类型检查 + vite build） |
+| test:unit | **138/138**（20 文件） |
+| test | SMOKE_OK（含 `library_trash`） |
+| test:ui | UI_SMOKE_OK（**40 项**，含 `library_kinds` 8 分类 + 章节细纲字段断言） |
+| 打包应用启动 | `release/win-unpacked/铸文.exe` + `ZHUWEN_UI_SMOKE=1` → 同上 40 项全绿 |
+
+界面冒烟在本机需绕开两个坑：先 `Remove-Item Env:ELECTRON_RUN_AS_NODE`，并带 `--disable-gpu --no-sandbox --disable-gpu-compositing`；`npm run test:ui` 不含这两个开关，直接调用会失败。
 
 数据库迁移当前为**版本 10**（v9 为 `ai_messages` 增加 `task_kind`；v10 增加 `selection_from` / `selection_to`，用于记录采纳来源选区）。本轮风格卡缺口修复：自然化任务规则独立注入；三张附加风格卡实际包含完整自然叙事基础规则；自然化回复采用前强制差异比较；自定义卡可编辑；内置卡按版本升级且不覆盖自定义副本；消息保存任务类型与风格快照。
 
@@ -118,3 +153,4 @@ npm run build && npm run test:unit && npm run test && npm run test:ui
 
 - 安装器安装/升级、代码签名、macOS、DPI 矩阵
 - 退出保存的完整 Electron 生命周期实测
+- 伏笔生命周期字段与章节细纲字段的真实界面手测（本轮仅经自动化断言覆盖，截图见 `artifacts/ui-smoke.png`）
