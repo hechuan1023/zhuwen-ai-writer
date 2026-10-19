@@ -12,6 +12,7 @@
 - 安装包二进制**不入库**，版本 / 大小 / SHA-256 / 构建日期 / 验证级别记在 `README.md`「安装包记录」小节。**必须区分「打包应用启动验证」与「安装器安装/升级验证」**——本项目只有前者验证过：解包后的 `release/win-unpacked/铸文.exe` 带 `ZHUWEN_UI_SMOKE=1` 跑完 40 项断言全绿（独立 profile），这不等于安装器装过。
 - 提交信息用 `feat:` / `fix:` / `chore:` / `refactor:` / `style:` / `docs:` 开头，正文说明改了什么、为什么、如何验证。
 - 已配置远端：`origin` = `https://github.com/hechuan1023/zhuwen-ai-writer.git`（2026-10-12 提交时接入，`main` 已同步）。推送属外部操作，未经用户明确同意不要执行。
+- **git 全局配了代理 `http(s).proxy=http://127.0.0.1:7897`（Clash 类），代理没开时所有 push/pull 直接失败**，报 `Failed to connect to github.com port 443 via 127.0.0.1`，看起来像没网，其实直连是通的（已实测 443 可连）。解法：单次覆盖 `git -c http.proxy= -c https.proxy= push origin main`。**不要擅自改用户的 git 全局配置**，代理是否常开由用户决定。
 - 手工备份仍在 `E:\AI-Project\write-tool-backup\20260915-1420-pre-optimize`（693 KB），保留作双保险。
 
 ## 硬性约定
