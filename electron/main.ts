@@ -27,6 +27,7 @@ import {
 import { FocusTracker } from "./focus-tracker";
 import { DraftStorage, draftKey, DraftRecord } from "./draft-storage";
 import { buildTaskAndStyleInstructions, effectiveStyleRules } from "./ai-style-cards";
+import { parseStyleCompositionBundle } from "./ai-style-bundle";
 
 let win: BrowserWindow | null = null;
 let floatWin: BrowserWindow | null = null;
@@ -2487,6 +2488,74 @@ function registerIpc(userDir: string) {
     if (!row) return fail("技法组合不存在");
     db.prepare("DELETE FROM ai_style_compositions WHERE id=?").run(compositionId);
     return ok(true);
+  });
+  ipcMain.handle("ai:style-compositions:export", async (_, compositionId) => {
+    try {
+      const composition: any = get("SELECT id,name,description,style_ids_json FROM ai_style_compositions WHERE id=?", String(compositionId || ""));
+      if (!composition) return fail("技法组合不存在");
+      const styleIds: string[] = JSON.parse(composition.style_ids_json || "[]");
+      if (!Array.isArray(styleIds) || styleIds.length < 1 || styleIds.length > 6) throw new Error("组合中的技法卡数量无效");
+      const cards = styleIds.map((styleId) => {
+        const row: any = get("SELECT id,name,description,tasks_json,rules,builtin FROM ai_style_cards WHERE id=?", String(styleId));
+        if (!row) throw new Error("组合包含已不存在的技法卡，请先编辑组合");
+        return {
+          id: row.id,
+          builtin: Boolean(row.builtin),
+          name: row.name,
+          description: row.description || "",
+          tasks: JSON.parse(row.tasks_json || "[]"),
+          rules: row.rules || "",
+        };
+      });
+      const safeName = String(composition.name || "写作技法组合").replace(/[<>:"/\\|?*]/g, "_").slice(0, 70);
+      const target = await dialog.showSaveDialog({
+        title: "导出写作技法组合",
+        defaultPath: `${safeName}.zhuwen-style-set.json`,
+        filters: [{ name: "铸文写作技法组合", extensions: ["json"] }],
+      });
+      if (target.canceled || !target.filePath) return ok(null);
+      const bundle = {
+        format: "zhuwen-ai-style-composition",
+        version: 1,
+        composition: { name: composition.name, description: composition.description || "", cards },
+      };
+      await fs.promises.writeFile(target.filePath, `${JSON.stringify(bundle, null, 2)}\n`, "utf8");
+      return ok({ file: target.filePath });
+    } catch (e) {
+      return fail(e);
+    }
+  });
+  ipcMain.handle("ai:style-compositions:import", async () => {
+    try {
+      const target = await dialog.showOpenDialog({
+        title: "导入写作技法组合",
+        filters: [{ name: "铸文写作技法组合", extensions: ["json"] }],
+        properties: ["openFile"],
+      });
+      if (target.canceled || !target.filePaths[0]) return ok(null);
+      const file = target.filePaths[0];
+      if ((await fs.promises.stat(file)).size > 512 * 1024) throw new Error("技法组合文件过大，无法导入");
+      const bundle = parseStyleCompositionBundle(JSON.parse(await fs.promises.readFile(file, "utf8")));
+      const mapped = bundle.cards.map((card) => {
+        if (card.builtin && get("SELECT id FROM ai_style_cards WHERE id=? AND builtin=1", card.id))
+          return { styleId: card.id, card: null as typeof card | null };
+        return { styleId: newId(), card };
+      });
+      const compositionId = newId();
+      const now = timestamp();
+      db.transaction(() => {
+        for (const entry of mapped) {
+          if (!entry.card) continue;
+          db.prepare("INSERT INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,0,1,?,?)")
+            .run(entry.styleId, entry.card.name, entry.card.description, JSON.stringify(entry.card.tasks), entry.card.rules, now, now);
+        }
+        db.prepare("INSERT INTO ai_style_compositions(id,name,description,style_ids_json,created_at,updated_at) VALUES(?,?,?,?,?,?)")
+          .run(compositionId, bundle.name, bundle.description, JSON.stringify(mapped.map((entry) => entry.styleId)), now, now);
+      })();
+      return ok({ id: compositionId, name: bundle.name, description: bundle.description, styleIds: mapped.map((entry) => entry.styleId) });
+    } catch (e) {
+      return fail(e);
+    }
   });
   ipcMain.handle("ai:style-selection:get", (_, novelId) => {
     const row: any = get(

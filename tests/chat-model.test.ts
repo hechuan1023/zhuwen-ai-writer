@@ -139,6 +139,12 @@ describe("contextBreakdown：口径与界面一致", () => {
     expect(b.totalChars).toBe(117);
     expect(b.estimateTokens).toBe(59);
   });
+  it("写作规则也计入字符额度，但 token 估算单独保留", () => {
+    const b = contextBreakdown([{ content: "引用" }], 2, 8, 4, 6);
+    expect(b.totalChars).toBe(20);
+    expect(b.rules.chars).toBe(6);
+    expect(b.estimateTokens).toBe(10);
+  });
   it("全空时 tokens 为 0，不出现负数", () => {
     expect(contextBreakdown([], 0, 0, 0).estimateTokens).toBe(0);
   });

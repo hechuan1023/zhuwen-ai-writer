@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, parseJson, UiLanguage } from "./shared";
 import { Select } from "./select";
+import { filterScenesByPov, groupScenesForTimeline, scenePovOptions } from "./scene-planner-model";
 
 type SceneRow = Record<string, any>;
 
@@ -15,7 +16,9 @@ export function ScenePlanner({
   onDraftScene,
   onCreateScene,
   onOpenChapter,
+  onChapterStatusChange,
   onMoveScene,
+  notify,
   canReorder,
 }: {
   scenes: SceneRow[];
@@ -28,12 +31,18 @@ export function ScenePlanner({
   onDraftScene: (scene: SceneRow) => void;
   onCreateScene: (chapter?: SceneRow) => void;
   onOpenChapter: (chapter: SceneRow) => void;
+  onChapterStatusChange: (chapterId: string, status: string) => void;
   onMoveScene: (sceneId: string, chapterId: string | null, beforeId?: string) => void;
+  notify: (message: string) => void;
   canReorder: boolean;
 }) {
   const tr = (zh: string, en: string) => language === "en" ? en : zh;
   const [volumeFilter, setVolumeFilter] = useState(currentChapter?.volume_id || "all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [povFilter, setPovFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<"board" | "timeline">("board");
   const [draggingId, setDraggingId] = useState("");
+  const [statusBusyId, setStatusBusyId] = useState("");
   useEffect(() => {
     if (volumeFilter !== "all" && volumeFilter !== "unvolumed" && !volumes.some((volume) => volume.id === volumeFilter))
       setVolumeFilter("all");
@@ -44,11 +53,39 @@ export function ScenePlanner({
     [scenes],
   );
   const visibleChapters = chapters.filter((chapter) =>
-    volumeFilter === "all" ? true : volumeFilter === "unvolumed" ? !chapter.volume_id : chapter.volume_id === volumeFilter,
+    (volumeFilter === "all" ? true : volumeFilter === "unvolumed" ? !chapter.volume_id : chapter.volume_id === volumeFilter) &&
+    (statusFilter === "all" || (chapter.status || "draft") === statusFilter),
   );
+  const statusOptions = [
+    { value: "all", label: tr("全部状态", "All statuses") },
+    { value: "draft", label: tr("草稿", "Draft") },
+    { value: "review", label: tr("待修改", "Needs revision") },
+    { value: "done", label: tr("已完成", "Complete") },
+  ];
+  const statusName = (status: string) => statusOptions.find((option) => option.value === status)?.label || tr("草稿", "Draft");
+  const povs = scenePovOptions(orderedScenes);
+  const povOptions = [
+    { value: "all", label: tr("全部视角（" + orderedScenes.length + "）", "All POVs (" + orderedScenes.length + ")") },
+    { value: "__no_pov__", label: tr("未标注视角", "Unlabeled POV") },
+    ...povs.map(({ value, count }) => ({ value, label: value + " (" + count + ")" })),
+  ];
+  const updateChapterStatus = async (chapter: SceneRow, status: string) => {
+    if (statusBusyId || status === (chapter.status || "draft")) return;
+    setStatusBusyId(chapter.id);
+    const result = await api("chapters:updateMeta", { id: chapter.id, status });
+    setStatusBusyId("");
+    if (result.ok) onChapterStatusChange(chapter.id, status);
+    else notify(result.error || tr("章节状态保存失败", "Could not save chapter status"));
+  };
   const knownChapterIds = new Set(chapters.map((chapter) => chapter.id));
-  const unassigned = orderedScenes.filter((scene) => !scene.chapter_id || !knownChapterIds.has(scene.chapter_id));
-  const assignedCount = orderedScenes.length - unassigned.length;
+  const visibleScenes = useMemo(() => filterScenesByPov(orderedScenes, povFilter), [orderedScenes, povFilter]);
+  const unassigned = visibleScenes.filter((scene) => !scene.chapter_id || !knownChapterIds.has(scene.chapter_id));
+  const assignedCount = visibleScenes.length - unassigned.length;
+  const timelineGroups = useMemo(
+    () => groupScenesForTimeline(visibleChapters, visibleScenes),
+    [visibleChapters, visibleScenes],
+  );
+  const canReorderVisible = canReorder && povFilter === "all";
   const volumeOptions = [
     { value: "all", label: tr("全部卷", "All volumes") },
     { value: "unvolumed", label: tr("未分卷", "No volume") },
@@ -74,19 +111,32 @@ export function ScenePlanner({
             <label>{tr("查看范围", "Volume")}</label>
             <Select value={volumeFilter} aria-label={tr("按卷筛选", "Filter by volume")} onValueChange={setVolumeFilter} options={volumeOptions} />
           </div>
+          <div className="scene-planner-filter scene-planner-status-filter">
+            <label>{tr("章节状态", "Chapter status")}</label>
+            <Select value={statusFilter} aria-label={tr("按章节状态筛选", "Filter by chapter status")} onValueChange={setStatusFilter} options={statusOptions} />
+          </div>
+          <div className="scene-planner-filter scene-planner-pov-filter">
+            <label>{tr("视角人物", "POV")}</label>
+            <Select value={povFilter} aria-label={tr("按视角人物筛选", "Filter by point of view")} onValueChange={setPovFilter} options={povOptions} />
+          </div>
           <button className="primary" onClick={() => onCreateScene()}>{tr("＋ 新建场景", "+ New scene")}</button>
           <button className="scene-planner-close" onClick={onClose}>{tr("返回资料库", "Back to story bible")}</button>
         </div>
       </header>
 
       <div className="scene-planner-summary" aria-live="polite">
-        <span><b>{orderedScenes.length}</b> {tr("个场景", "scenes")}</span>
+        <span><b>{visibleScenes.length}</b> {tr("个场景", "scenes")}</span>
         <span><b>{assignedCount}</b> {tr("已关联章节", "assigned")}</span>
         <span><b>{unassigned.length}</b> {tr("待安排", "unassigned")}</span>
-        <small>{canReorder ? tr("拖动卡片可调整章节与顺序 · 点击标题编辑细纲", "Drag to reorder or change chapter · Click a title to edit") : tr("搜索结果仅供查看；清空搜索后可调整完整场景顺序。", "Filtered results are view-only; clear search to reorder all scenes.")}</small>
+        <span>{tr("章节", "Chapters")} · {chapters.filter((item) => (item.status || "draft") === "draft").length} {tr("草稿", "draft")} / {chapters.filter((item) => item.status === "review").length} {tr("待修改", "review")} / {chapters.filter((item) => item.status === "done").length} {tr("完成", "done")}</span>
+        <div className="scene-planner-view-switch" role="group" aria-label={tr("规划视图", "Planning view")} data-fd-id="scene-planner-view-switch">
+          <button type="button" className={viewMode === "board" ? "active" : ""} aria-pressed={viewMode === "board"} onClick={() => setViewMode("board")}>{tr("规划板", "Board")}</button>
+          <button type="button" className={viewMode === "timeline" ? "active" : ""} aria-pressed={viewMode === "timeline"} onClick={() => setViewMode("timeline")}>{tr("时间线", "Timeline")}</button>
+        </div>
+        <small>{canReorderVisible ? tr("拖动卡片可调整章节与顺序 · 点击标题编辑细纲", "Drag to reorder or change chapter · Click a title to edit") : tr("搜索或视角筛选结果仅供查看；清除筛选后可调整顺序。", "Search and POV-filtered results are view-only; clear filters to reorder.")}</small>
       </div>
 
-      <div className="scene-board-scroll" data-fd-id="scene-board-columns">
+      {viewMode === "board" ? <div className="scene-board-scroll" data-fd-id="scene-board-columns">
         <div className="scene-board-columns">
           <section
             className="scene-lane scene-lane-unassigned"
@@ -106,7 +156,7 @@ export function ScenePlanner({
           </section>
 
           {visibleChapters.map((chapter, index) => {
-            const laneScenes = orderedScenes.filter((scene) => scene.chapter_id === chapter.id);
+            const laneScenes = visibleScenes.filter((scene) => scene.chapter_id === chapter.id);
             const volume = volumes.find((item) => item.id === chapter.volume_id);
             return (
               <section
@@ -121,18 +171,63 @@ export function ScenePlanner({
                   <span className="scene-lane-count">{laneScenes.length}</span>
                 </header>
                 <button className="scene-lane-open" onClick={() => onOpenChapter(chapter)}>{tr("打开章节正文", "Open chapter")}</button>
+                <div className={`scene-lane-status status-${chapter.status || "draft"}`}>
+                  <span>{tr("章节进度", "Chapter status")}</span>
+                  <Select
+                    size="compact"
+                    value={chapter.status || "draft"}
+                    aria-label={tr(`${chapter.title}章节状态`, `Status for ${chapter.title}`)}
+                    disabled={statusBusyId === chapter.id}
+                    options={statusOptions.filter((option) => option.value !== "all")}
+                    onValueChange={(status) => void updateChapterStatus(chapter, status)}
+                  />
+                </div>
                 <div className="scene-lane-cards">
-                  {laneScenes.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} dragging={draggingId === scene.id} canReorder={canReorder} canDraft language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, chapter.id, scene.id)} />)}
-                  {!laneScenes.length && <div className="scene-lane-empty">{tr("拖入一个场景，开始拆解本章推进", "Drop a scene here to plan this chapter")}</div>}
+                  {laneScenes.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, chapter.id, scene.id)} />)}
+                  {!laneScenes.length && <div className="scene-lane-empty">{povFilter === "all" ? tr("拖入一个场景，开始拆解本章推进", "Drop a scene here to plan this chapter") : tr("这个视角下暂无场景", "No scenes for this POV")}</div>}
                 </div>
                 <button className="scene-lane-add" onClick={() => onCreateScene(chapter)}>{tr("＋ 添加到本章", "+ Add to chapter")}</button>
               </section>
             );
           })}
-          {!visibleChapters.length && <div className="scene-board-no-chapters">{tr("这个范围里还没有章节。先在章节列表中创建章节，再回来安排场景。", "No chapters in this volume yet. Create chapters first, then plan scenes here.")}</div>}
+          {!visibleChapters.length && <div className="scene-board-no-chapters"><span>{tr("当前筛选范围内没有章节。", "No chapters match the current filters.")}</span><button type="button" onClick={() => { setVolumeFilter("all"); setStatusFilter("all"); }}>{tr("清除筛选", "Clear filters")}</button></div>}
           <button className="scene-lane-new-chapter" onClick={() => onCreateScene()}>{tr("＋ 新场景", "+ New scene")}</button>
         </div>
-      </div>
+      </div> : <div className="scene-timeline-scroll" data-fd-id="scene-timeline">
+        <div className="scene-timeline-note">{tr("按章节顺序与已保存的场景顺序排列。时间标签保留作者原文，不会被解析成日期；需调整顺序时切回规划板拖动。", "Ordered by chapter and saved scene order. Time markers remain author-written labels and are not parsed as dates; switch to Board to reorder.")}</div>
+        <div className="scene-timeline-groups">
+          {timelineGroups.map(({ chapter, scenes: chapterScenes }, chapterIndex) => {
+            const volume = volumes.find((item) => item.id === chapter.volume_id);
+            return <section className={`scene-timeline-chapter status-${chapter.status || "draft"}`} key={chapter.id} data-fd-id={`timeline-chapter-${chapter.id}`}>
+              <header className="scene-timeline-chapter-head">
+                <span className="scene-timeline-chapter-index">{String(chapterIndex + 1).padStart(2, "0")}</span>
+                <div><small>{volume?.title || tr("未分卷", "No volume")} · {statusName(chapter.status || "draft")}</small><h2>{chapter.title}</h2></div>
+                <button type="button" onClick={() => onOpenChapter(chapter)}>{tr("打开章节", "Open chapter")}</button>
+              </header>
+              {chapterScenes.length ? <div className="scene-timeline-events">
+                {chapterScenes.map((scene, sceneIndex) => {
+                  const data = dataFor(scene);
+                  return <article className="scene-timeline-event" key={scene.id} data-fd-id={`timeline-scene-${scene.id}`}>
+                    <span className="scene-timeline-marker" aria-hidden="true">{sceneIndex + 1}</span>
+                    <div className="scene-timeline-card">
+                      <header><span className="scene-timeline-time">{data.when || tr("未填写时间标记", "No time marker")}</span>{data.plotRole && <span className="scene-timeline-role">{data.plotRole}</span>}</header>
+                      <button type="button" className="scene-timeline-title" onClick={() => onOpenScene(scene)}>{scene.title || tr("未命名场景", "Untitled scene")}</button>
+                      {data.body && <p>{data.body}</p>}
+                      {(data.coolPoint || data.hook) && <small>{data.coolPoint && `${tr("回报", "Payoff")}: ${data.coolPoint}`}{data.coolPoint && data.hook ? " · " : ""}{data.hook && `${tr("章末钩子", "Hook")}: ${data.hook}`}</small>}
+                      <footer><span>{data.cast ? data.cast.split(/[,，、;；]+/).filter(Boolean).slice(0, 4).join(" · ") : tr("未记录出场人物", "No cast notes")}</span><button type="button" title={tr("把细纲带入 AI 面板，检查后再发送", "Bring outline to AI for review")} onClick={() => onDraftScene(scene)}>{tr("✦ AI 起草", "✦ Draft with AI")}</button></footer>
+                    </div>
+                  </article>;
+                })}
+              </div> : <div className="scene-timeline-empty">{tr("本章尚未安排场景", "No scenes planned for this chapter")}</div>}
+            </section>;
+          })}
+          {unassigned.length > 0 && <section className="scene-timeline-unassigned" data-fd-id="timeline-unassigned">
+            <header><b>{tr("待安排场景", "Unassigned scenes")}</b><small>{tr("这些场景不进入叙事顺序", "Not included in story order")}</small></header>
+            <div>{unassigned.map((scene) => <button type="button" key={scene.id} onClick={() => onOpenScene(scene)}>{scene.title || tr("未命名场景", "Untitled scene")}</button>)}</div>
+          </section>}
+          {!timelineGroups.length && <div className="scene-board-no-chapters"><span>{tr("当前筛选范围内没有章节。", "No chapters match the current filters.")}</span><button type="button" onClick={() => { setVolumeFilter("all"); setStatusFilter("all"); }}>{tr("清除筛选", "Clear filters")}</button></div>}
+        </div>
+      </div>}
     </section>
   );
 }

@@ -85,6 +85,8 @@ export function StyleCardPanel({
   const [compositionEditor, setCompositionEditor] = useState<StyleComposition | null>(null);
   const [deleteComposition, setDeleteComposition] = useState<StyleComposition | null>(null);
   const [savingComposition, setSavingComposition] = useState(false);
+  const [importingComposition, setImportingComposition] = useState(false);
+  const [exportingComposition, setExportingComposition] = useState("");
   useEffect(() => {
     if (!open) return;
     let live = true;
@@ -161,11 +163,23 @@ export function StyleCardPanel({
           <section className="zchat-style-presets zchat-style-saved" data-fd-id="ai-style-saved-compositions">
             <header>
               <b>{tr("我的技法组合", "My technique sets")}</b>
-              <button type="button" disabled={!selectedIds.length} onClick={() => setCompositionEditor({ id: "", name: "", description: "", styleIds: [...selectedIds] })}>
-                {tr("保存当前组合", "Save current set")}
-              </button>
+              <div className="zchat-style-composition-actions">
+                <button type="button" disabled={importingComposition} onClick={async () => {
+                  setImportingComposition(true); setError("");
+                  const result = await api<StyleComposition>("ai:style-compositions:import");
+                  setImportingComposition(false);
+                  if (!result.ok) setError(result.error || tr("导入组合失败", "Could not import set"));
+                  else if (result.data) {
+                    setCompositions((current) => [...current.filter((item) => item.id !== result.data.id), result.data].sort((a, b) => a.name.localeCompare(b.name)));
+                    onReload();
+                  }
+                }}><IconUpload />{importingComposition ? tr("导入中…", "Importing…") : tr("导入组合", "Import set")}</button>
+                <button type="button" disabled={!selectedIds.length} onClick={() => setCompositionEditor({ id: "", name: "", description: "", styleIds: [...selectedIds] })}>
+                  {tr("保存当前组合", "Save current set")}
+                </button>
+              </div>
             </header>
-            <p>{tr("保存在本机，可在不同作品间复用。保存组合不会改变当前作品的勾选；应用时再替换当前组合。", "Saved on this device and reusable across novels. Saving does not change the current selection; apply a set when you want to replace it.")}</p>
+            <p>{tr("本机可跨作品复用，也可导出 JSON 带到其他设备。保存或导入不会改变当前勾选；应用组合时才会替换。", "Reuse sets across novels on this device, or export JSON to transfer them. Saving or importing leaves the current selection unchanged; applying a set replaces it.")}</p>
             {compositions.length ? (
               <div className="zchat-style-saved-list">
                 {compositions.map((composition) => {
@@ -177,6 +191,12 @@ export function StyleCardPanel({
                       <small className="zchat-style-tasks">{tr(`${composition.styleIds.length} 张技法卡`, `${composition.styleIds.length} techniques`)}</small>
                     </button>
                     <div className="zchat-style-row-actions">
+                      <button type="button" title={tr("导出组合", "Export set")} aria-label={tr(`导出组合 ${composition.name}`, `Export set ${composition.name}`)} disabled={Boolean(exportingComposition)} onClick={async () => {
+                        setExportingComposition(composition.id); setError("");
+                        const result = await api("ai:style-compositions:export", composition.id);
+                        setExportingComposition("");
+                        if (!result.ok) setError(result.error || tr("导出组合失败", "Could not export set"));
+                      }}><IconDownload /></button>
                       <button type="button" title={tr("编辑组合", "Edit set")} aria-label={tr(`编辑组合 ${composition.name}`, `Edit set ${composition.name}`)} onClick={() => setCompositionEditor({ ...composition, styleIds: [...composition.styleIds] })}>✎</button>
                       <button type="button" className="danger-text" title={tr("删除组合", "Delete set")} aria-label={tr(`删除组合 ${composition.name}`, `Delete set ${composition.name}`)} onClick={() => setDeleteComposition(composition)}>×</button>
                     </div>

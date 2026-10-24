@@ -254,7 +254,7 @@ export function Composer({
           onClick={onOpenContext}
         >
           <span
-            className={`zchat-context-ring ${contextPercent >= 100 ? "over" : ""}`}
+            className={`zchat-context-ring ${contextPercent >= 100 ? "over" : contextPercent >= 80 ? "warn" : ""}`}
             style={{ "--context-progress": `${Math.min(100, Math.max(0, contextPercent))}%` } as React.CSSProperties}
             aria-hidden="true"
           >

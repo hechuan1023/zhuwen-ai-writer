@@ -590,6 +590,7 @@
   border-radius: 50%;
   background: conic-gradient(var(--accent, #9b6b42) var(--context-progress), rgba(127, 127, 127, .18) 0);
   position: relative;
+  transition: background 180ms var(--ease, ease);
 }
 .zchat-context-ring::after {
   content: "";
@@ -599,6 +600,7 @@
   background: var(--panel, #f8f5ef);
 }
 .zchat-context-ring.over { background: conic-gradient(#c84b4b 100%, rgba(127, 127, 127, .18) 0); }
+.zchat-context-ring.warn { background: conic-gradient(var(--warning, #a67c3a) var(--context-progress), rgba(127, 127, 127, .18) 0); }
 .zchat-context-limit { flex: none; opacity: .72; font-size: 10px; margin-left: -2px; }
 .zchat-send {
   display: inline-flex;
@@ -1105,8 +1107,8 @@
   margin-left: 18px;
   margin-right: 18px;
 }
-@media (prefers-reduced-motion: reduce) { .zchat-send { transition: none; } }
-.reduce-motion .zchat-send { transition: none; }
+@media (prefers-reduced-motion: reduce) { .zchat-send, .zchat-context-ring { transition: none; } }
+.reduce-motion .zchat-send, .reduce-motion .zchat-context-ring { transition: none; }
 .zchat-style-entry { flex: none; padding: 0 10px 6px; min-width: 0; }
 .zchat-style-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .zchat-style-toolbar > span { color: var(--muted); font-size: 11px; line-height: 1.45; }
@@ -1143,6 +1145,8 @@
 .zchat-style-presets-grid small { color: var(--muted); font-size: 10px; line-height: 1.4; }
 .zchat-style-saved > header { align-items: center; }
 .zchat-style-saved > header button { min-height: 28px; padding: 4px 9px; font-size: 10px; }
+.zchat-style-composition-actions { display: flex; flex: none; gap: 5px; }
+.zchat-style-composition-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
 .zchat-style-saved-list { display: grid; gap: 6px; }
 .zchat-style-saved-list article { min-width: 0; display: flex; align-items: center; gap: 6px; padding: 6px 7px 6px 10px; border: 1px solid var(--line); border-radius: var(--r-md, 10px); background: var(--paper); }
 .zchat-style-saved-list article.active { border-color: var(--accent); background: var(--accent-soft); }

@@ -25,6 +25,7 @@ export function LibraryPanel({
   chapters = [],
   volumes = [],
   onSelectChapter,
+  onChapterStatusChange,
   onDraftScene,
   sourceNavigationRequest,
   onSourceNavigationConsumed,
@@ -38,6 +39,7 @@ export function LibraryPanel({
   chapters?: AnyRow[];
   volumes?: AnyRow[];
   onSelectChapter?: (chapter: AnyRow) => void;
+  onChapterStatusChange?: (chapterId: string, status: string) => void;
   onDraftScene?: (scene: AnyRow, chapter: AnyRow) => void;
   sourceNavigationRequest?: { nonce: string; kind: string; sourceId: string } | null;
   onSourceNavigationConsumed?: () => void;
@@ -594,6 +596,17 @@ export function LibraryPanel({
                 value={editing.when || ""}
                 onChange={(e) => updateEditing({ when: e.target.value })}
               />
+              <input
+                data-fd-id="scene-pov"
+                list="scene-pov-names"
+                maxLength={120}
+                placeholder={tr("视角人物（POV，如：林照）", "Point-of-view character (POV, e.g. Lin Zhao)")}
+                value={editing.pov || ""}
+                onChange={(e) => updateEditing({ pov: e.target.value })}
+              />
+              <datalist id="scene-pov-names">
+                {[...new Set(allItems.filter((item) => item.kind === "scene").map((item) => String(parseJson(item.content_json).pov || "").trim()).filter(Boolean))].map((pov) => <option key={pov} value={pov} />)}
+              </datalist>
               <Select
                 value={editing.chapter_id || ""}
                 aria-label={tr("关联所属章节", "Linked chapter")}
@@ -911,7 +924,9 @@ export function LibraryPanel({
           }}
           onCreateScene={(targetChapter) => openEditor(null, targetChapter ? { chapter_id: targetChapter.id } : {})}
           onOpenChapter={(targetChapter) => onSelectChapter?.(targetChapter)}
+          onChapterStatusChange={(chapterId, status) => onChapterStatusChange?.(chapterId, status)}
           onMoveScene={(sceneId, chapterId, beforeId) => void moveScene(sceneId, chapterId, beforeId)}
+          notify={notify}
           canReorder={!search.trim()}
         />,
         detailTarget,

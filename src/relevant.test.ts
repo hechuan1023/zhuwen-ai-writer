@@ -71,6 +71,16 @@ describe("relevantMaterials", () => {
     expect(out[0].content).toContain("别名：北境关口、旧霜关");
   });
 
+  it("场景 POV 可命中推荐并随场景引用进入上下文", () => {
+    const out = relevantMaterials(
+      [item({ id: "scene-1", kind: "scene", title: "雾桥对峙", content_json: JSON.stringify({ pov: "苏晚", body: "她听见门外的脚步" }) })],
+      "苏晚没有回头。",
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].reasons[0]).toContain("提及人物");
+    expect(out[0].content).toContain("视角人物：苏晚");
+  });
+
   it("英文界面返回英文候选理由", () => {
     const out = relevantMaterials(
       [item({ title: "苏晚", content_json: JSON.stringify({ alias: "晚晚" }) })],

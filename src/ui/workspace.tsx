@@ -1569,6 +1569,14 @@ export function Workspace({
                     chapters={chapters}
                     volumes={volumes}
                     onSelectChapter={(targetChapter) => void switchChapter(targetChapter)}
+                    onChapterStatusChange={(chapterId, status) => {
+                      setChapters((current) => current.map((item) => item.id === chapterId ? { ...item, status } : item));
+                      if (chapterRef.current?.id === chapterId) {
+                        const updated = { ...chapterRef.current, status };
+                        chapterRef.current = updated;
+                        setChapter(updated);
+                      }
+                    }}
                     onDraftScene={(scene, targetChapter) => void prepareSceneDraft(scene, targetChapter)}
                     sourceNavigationRequest={sourceNavigationRequest}
                     onSourceNavigationConsumed={() => setSourceNavigationRequest(null)}

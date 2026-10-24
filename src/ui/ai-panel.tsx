@@ -752,14 +752,11 @@ export function AiPanel({
     editor.commands.scrollIntoView();
     notify(tr("续写已追加到章末，可使用 Ctrl+Z 撤销", "Continuation appended to the chapter. Use Ctrl+Z to undo"));
   }
-  const contextChars = contexts.reduce((n, x) => n + String(x.content || "").length, 0);
   const historyChars = messages.reduce(
     (n, m) => n + String(m?.content || "").length,
     0,
   );
   const draftChars = draftRef.current.length;
-  const estimate = Math.ceil((contextChars + historyChars + draftChars + styleRuleChars) / 2);
-  const contextOnlyEstimate = Math.ceil(contextChars / 2);
   const historyCount = messages.filter((m) => !m.streaming).length;
   const generatingConvTitle =
     conversations.find(
@@ -799,6 +796,7 @@ export function AiPanel({
     draftChars,
     styleRuleChars,
   );
+  const estimate = breakdown.estimateTokens;
   const contextLimitChars = 300000;
   const contextPercent = Math.round((breakdown.totalChars / contextLimitChars) * 100);
   const [contextOpen, setContextOpen] = useState(false);
@@ -1143,11 +1141,11 @@ export function AiPanel({
           (mode === "continue" || mode === "naturalize" ? (mode === "naturalize" ? contexts.some((x) => x.kind === "selection") : true) : Boolean(draft.trim()))
         }
         contextSummary={tr(
-          `上下文约 ${fmt(estimate)}`,
-          `~${fmt(estimate)} tokens`,
+          `${fmt(breakdown.totalChars)} 字`,
+          `${fmt(breakdown.totalChars)} chars`,
         )}
         contextPercent={contextPercent}
-        contextLimitLabel={tr("/30万字", "/300k")}
+        contextLimitLabel={tr("/30万", "/300k")}
         onOpenContext={() => void openContext()}
         autoRefNotice={
           mode === "continue"

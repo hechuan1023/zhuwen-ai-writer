@@ -60,7 +60,7 @@ function contextContent(item: Material, maxChars = 6000, chapterTitles: Record<s
   const fields: Record<string, string[]> = {
     character: ["alias", "body", "goal", "motive", "conflict", "personality", "speech", "knowledge", "taboo", "checklist"],
     world: ["category", "alias", "body"],
-    scene: ["when", "plotRole", "cast", "coolPoint", "hook", "body"],
+    scene: ["when", "pov", "plotRole", "cast", "coolPoint", "hook", "body"],
     foreshadow: ["body", "plantAt", "planAt", "prereq", "payoff", "effect", "importance"],
     timeline: ["when", "body"],
     relation: ["label", "body"],
@@ -70,7 +70,7 @@ function contextContent(item: Material, maxChars = 6000, chapterTitles: Record<s
   const labels: Record<string, string> = {
     body: "说明", goal: "目标", motive: "动机", conflict: "矛盾", personality: "性格",
     speech: "语言习惯", knowledge: "知识边界", taboo: "底线", checklist: "核对项",
-    category: "分类", alias: "别名", when: "位置/时间", plotRole: "剧情作用", cast: "出场人物",
+    category: "分类", alias: "别名", when: "位置/时间", pov: "视角人物", plotRole: "剧情作用", cast: "出场人物",
     coolPoint: "回报", hook: "钩子", plantAt: "埋设位置", planAt: "计划回收",
     prereq: "回收前提", payoff: "回收方式", effect: "回收影响", importance: "重要度",
     label: "关系",
@@ -128,7 +128,7 @@ export function relevantMaterials(
     const participantTerms = item.kind === "relation"
       ? [String(item.from || "").trim(), String(item.to || "").trim()]
       : item.kind === "scene"
-        ? String(content.cast || "").split(/[,，、;；]+/).map((s) => s.trim())
+        ? [String(content.pov || "").trim(), ...String(content.cast || "").split(/[,，、;；]+/).map((s) => s.trim())]
         : [];
     const aliases = item.kind === "character" || item.kind === "world" ? parseAliases(item.content_json) : [];
     const tags = parseTags(item.tags_json);

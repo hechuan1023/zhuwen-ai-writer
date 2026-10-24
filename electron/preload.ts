@@ -25,6 +25,8 @@ const allowedChannels = new Set([
   'ai:style-compositions:list',
   'ai:style-compositions:save',
   'ai:style-compositions:delete',
+  'ai:style-compositions:export',
+  'ai:style-compositions:import',
   'app:close-ready',
   'appearance:chooseBackground',
   'backup:chooseDir',

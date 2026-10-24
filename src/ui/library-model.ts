@@ -47,6 +47,7 @@ export function editorToLibraryContent(kind: string, editing: any): any {
       plotRole: editing.plotRole || "",
       coolPoint: editing.coolPoint || "",
       cast: editing.cast || "",
+      pov: String(editing.pov || "").trim().slice(0, 120),
       when: editing.when || "",
     };
   if (kind === "relation")
@@ -113,6 +114,7 @@ export function normalizeLibraryDraft(kind: string, d: any) {
     plotRole: String(d.plotRole || ""),
     coolPoint: String(d.coolPoint || ""),
     cast: String(d.cast || ""),
+    pov: String(d.pov || ""),
     alias: String(d.alias || ""),
     appearance: String(d.appearance || ""),
     personality: String(d.personality || ""),

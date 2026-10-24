@@ -76,6 +76,7 @@ describe("scene / foreshadow / health tools", () => {
         hook: "身份曝光",
         coolPoint: "一招制敌",
         cast: "甲,乙",
+        pov: "甲",
         when: "第3章",
       }),
     });
@@ -83,6 +84,8 @@ describe("scene / foreshadow / health tools", () => {
     expect(content.hook).toBe("身份曝光");
     expect(content.plotRole).toBe("转折");
     expect(content.cast).toBe("甲,乙");
+    expect(content.pov).toBe("甲");
+    expect(normalizeLibraryDraft("scene", model)).toContain('"pov":"甲"');
   });
 
   it("foreshadow lifecycle fields round-trip", () => {
