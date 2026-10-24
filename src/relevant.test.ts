@@ -71,6 +71,55 @@ describe("relevantMaterials", () => {
     expect(out[0].content).toContain("别名：北境关口、旧霜关");
   });
 
+  it("地点和势力的作者确认沿革按章节顺序进入引用上下文", () => {
+    const out = relevantMaterials(
+      [item({
+        id: "faction-1",
+        kind: "world",
+        title: "巡夜司",
+        content_json: JSON.stringify({
+          category: "势力",
+          body: "负责都城夜巡",
+          progressions: [
+            { chapterId: "ch-late", chapterTitle: "夜审", change: "改由新司主接管", evidence: "旧司主失踪" },
+            { chapterId: "ch-early", chapterTitle: "封城令", change: "封锁北门", evidence: "疫病告急" },
+          ],
+        }),
+      })],
+      "巡夜司的旧档仍在。",
+      12,
+      { chapterTitles: { "ch-early": "封城令", "ch-late": "夜审" }, chapterOrder: { "ch-early": 2, "ch-late": 8 } },
+    );
+    expect(out[0].content).toContain("作者确认的地点 / 势力沿革");
+    expect(out[0].content.indexOf("封城令：封锁北门")).toBeLessThan(out[0].content.indexOf("夜审：改由新司主接管"));
+  });
+
+  it("为当前章节引用资料时隐藏后续人物与世界状态，防止设定穿越", () => {
+    const chapterOrder = { ch1: 0, ch2: 1, ch3: 2 };
+    const chapterTitles = { ch1: "开端", ch2: "封关", ch3: "改旗" };
+    const out = relevantMaterials(
+      [item({
+        id: "place-timeline",
+        kind: "world",
+        title: "霜河关",
+        content_json: JSON.stringify({
+          category: "地点",
+          progressions: [
+            { chapterId: "ch3", change: "改由新军接管" },
+            { chapterId: "ch2", change: "关闭北门" },
+            { chapterId: "ch1", change: "关外商道仍开放" },
+          ],
+        }),
+      })],
+      "霜河关仍在封锁中。",
+      12,
+      { chapterId: "ch2", chapterTitles, chapterOrder },
+    );
+    expect(out[0].content).toContain("开端");
+    expect(out[0].content).toContain("关闭北门");
+    expect(out[0].content).not.toContain("改由新军接管");
+  });
+
   it("场景 POV 和剧情线可命中推荐并随场景引用进入上下文", () => {
     const out = relevantMaterials(
       [item({ id: "scene-1", kind: "scene", title: "雾桥对峙", content_json: JSON.stringify({ pov: "苏晚", plotlines: ["复仇主线"], body: "她听见门外的脚步" }) })],

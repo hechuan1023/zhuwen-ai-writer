@@ -1,6 +1,33 @@
 import { useEffect, useState } from "react";
-import { api, time, PromptDialog, AnyRow, UiLanguage } from "./shared";
+import { api, time, PromptDialog, Modal, AnyRow, UiLanguage } from "./shared";
 import { Select } from "./select";
+
+type EpubCustomLayout = {
+  lineHeight: number;
+  marginPercent: number;
+  paragraphGapEm: number;
+  indentEm: number;
+};
+
+const DEFAULT_EPUB_CUSTOM_LAYOUT: EpubCustomLayout = {
+  lineHeight: 1.8,
+  marginPercent: 5,
+  paragraphGapEm: 0.65,
+  indentEm: 2,
+};
+
+function normalizeEpubCustomLayout(value: any): EpubCustomLayout {
+  const bounded = (input: unknown, fallback: number, min: number, max: number) => {
+    const parsed = Number(input);
+    return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+  };
+  return {
+    lineHeight: bounded(value?.lineHeight, 1.8, 1.4, 2.4),
+    marginPercent: bounded(value?.marginPercent, 5, 3, 12),
+    paragraphGapEm: bounded(value?.paragraphGapEm, 0.65, 0, 1.5),
+    indentEm: bounded(value?.indentEm, 2, 0, 3),
+  };
+}
 
 export function IoPanel({
   novel,
@@ -22,9 +49,16 @@ export function IoPanel({
     [importProgress, setImportProgress] = useState({ read: 0, total: 0 }),
     [backups, setBackups] = useState<AnyRow[]>([]),
     [bookChapters, setBookChapters] = useState<AnyRow[]>([]),
+    [bookVolumes, setBookVolumes] = useState<AnyRow[]>([]),
+    [epubPreviewOpen, setEpubPreviewOpen] = useState(false),
+    [epubPreviewChapterId, setEpubPreviewChapterId] = useState(""),
+    [epubPreviewChapter, setEpubPreviewChapter] = useState<AnyRow | null>(null),
+    [epubPreviewBusy, setEpubPreviewBusy] = useState(false),
     [exportScope, setExportScope] = useState<"all" | "volume" | "chapter">(
       "all",
     ),
+    [epubLayout, setEpubLayout] = useState<"standard" | "compact" | "no-indent" | "custom">("standard"),
+    [epubCustomLayout, setEpubCustomLayout] = useState<EpubCustomLayout>(DEFAULT_EPUB_CUSTOM_LAYOUT),
     [autoCfg, setAutoCfg] = useState<any>({
       enabled: false,
       directory: "",
@@ -36,20 +70,40 @@ export function IoPanel({
     [importTitleEdit, setImportTitleEdit] = useState<string | null>(null);
   useEffect(() => {
     api("novels:open", novel.id).then(
-      (r) => r.ok && setBookChapters(r.data.chapters),
+      (r) => {
+        if (!r.ok) return;
+        setBookChapters(r.data.chapters || []);
+        setBookVolumes(r.data.volumes || []);
+      },
     );
   }, [novel.id]);
+  const orderedChapters = bookChapters.slice().sort((a, b) => {
+    const volumeOrder = new Map(bookVolumes.map((volume, index) => [volume.id, Number(volume.sort_order ?? index)]));
+    const aVolumeOrder = a.volume_id ? volumeOrder.get(a.volume_id) ?? 0 : -1;
+    const bVolumeOrder = b.volume_id ? volumeOrder.get(b.volume_id) ?? 0 : -1;
+    return aVolumeOrder - bVolumeOrder || Number(a.sort_order || 0) - Number(b.sort_order || 0);
+  });
   const volumeChapterIds = chapter?.volume_id
-    ? bookChapters
-        .filter((c) => c.volume_id === chapter.volume_id)
-        .map((c) => c.id)
+    ? orderedChapters.filter((c) => c.volume_id === chapter.volume_id).map((c) => c.id)
     : [];
+  const scopedChapters = exportScope === "chapter"
+    ? orderedChapters.filter((item) => item.id === chapter?.id)
+    : exportScope === "volume"
+      ? orderedChapters.filter((item) => item.volume_id === chapter?.volume_id)
+      : orderedChapters;
   const load = () =>
     api("backup:list", novel.id).then((r) => r.ok && setBackups(r.data));
   useEffect(() => {
     load();
   }, [novel.id]);
   useEffect(() => {
+    api<any>("preferences:get", "epubLayout").then((r) => {
+      if (r.ok && ["standard", "compact", "no-indent", "custom"].includes(r.data))
+        setEpubLayout(r.data);
+    });
+    api<any>("preferences:get", "epubCustomLayout").then((r) => {
+      if (r.ok && r.data) setEpubCustomLayout(normalizeEpubCustomLayout(r.data));
+    });
     api<any>("preferences:get", "autoBackup").then((r) => {
       if (r.ok && r.data) setAutoCfg((c: any) => ({ ...c, ...r.data }));
     });
@@ -61,6 +115,19 @@ export function IoPanel({
     () => window.zhuwen.onImportProgress((progress) => setImportProgress(progress)),
     [],
   );
+  useEffect(() => {
+    if (!epubPreviewOpen || !epubPreviewChapterId) return;
+    let active = true;
+    setEpubPreviewBusy(true);
+    setEpubPreviewChapter(null);
+    api<any>("chapters:get", epubPreviewChapterId).then((result) => {
+      if (!active) return;
+      setEpubPreviewBusy(false);
+      if (result.ok) setEpubPreviewChapter(result.data);
+      else notify(result.error || tr("读取章节预览失败", "Could not load chapter preview"));
+    });
+    return () => { active = false; };
+  }, [epubPreviewOpen, epubPreviewChapterId, notify, language]);
   async function saveAuto(next: any) {
     const previous = autoCfg;
     setAutoCfg(next);
@@ -69,6 +136,20 @@ export function IoPanel({
       setAutoCfg(previous);
       notify(r.error || tr("自动备份设置保存失败", "Could not save automatic backup settings"));
     }
+  }
+  async function changeEpubLayout(next: "standard" | "compact" | "no-indent" | "custom") {
+    const previous = epubLayout;
+    setEpubLayout(next);
+    const r = await api("preferences:set", { key: "epubLayout", value: next });
+    if (!r.ok) {
+      setEpubLayout(previous);
+      notify(r.error || tr("EPUB 排版偏好保存失败", "Could not save EPUB layout preference"));
+    }
+  }
+  async function saveEpubCustomLayout(next: EpubCustomLayout) {
+    const result = await api("preferences:set", { key: "epubCustomLayout", value: next });
+    if (!result.ok)
+      notify(result.error || tr("自定义 EPUB 排版保存失败", "Could not save custom EPUB layout"));
   }
   async function exp(format: string) {
     if (operationBusy) return;
@@ -90,12 +171,28 @@ export function IoPanel({
       includeVolume: true,
       includeChapter: true,
       encoding: "utf8",
+      epubLayout,
+      epubCustomLayout,
       chapterIds,
     });
     setOperationBusy("");
-    if (r.ok && r.data) notify(tr(`已导出到 ${r.data.file}`, `Exported to ${r.data.file}`));
+    if (r.ok && r.data) {
+      notify(tr(`已导出到 ${r.data.file}`, `Exported to ${r.data.file}`));
+      if (format === "epub") setEpubPreviewOpen(false);
+    }
     else if (!r.ok) notify(r.error || tr("导出失败", "Export failed"));
   }
+  const previewPreset = {
+    standard: { lineHeight: 1.8, marginPercent: 5, paragraphGapEm: 0.65, indentEm: 2 },
+    compact: { lineHeight: 1.65, marginPercent: 4, paragraphGapEm: 0.3, indentEm: 2 },
+    "no-indent": { lineHeight: 2, marginPercent: 6, paragraphGapEm: 0.9, indentEm: 0 },
+  } as const;
+  const previewLayout = epubLayout === "custom" ? epubCustomLayout : previewPreset[epubLayout];
+  const previewParagraphs = String(epubPreviewChapter?.plain_text || "")
+    .split(/\r\n?|\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 36);
   return (
     <div className="io">
       <section>
@@ -104,7 +201,7 @@ export function IoPanel({
           {tr("按卷和章节顺序导出正文，不包含 AI 对话和创作资料。", "Exports manuscript text in volume and chapter order, without AI conversations or story-bible items.")}
         </p>
         <p className="hint">
-          {tr("EPUB 适合阅读器阅读，包含目录与章节导航；当前不嵌入封面或插图。", "EPUB is reflowable and includes a table of contents and chapter navigation; covers and illustrations are not embedded yet.")}
+          {tr("EPUB 包含目录与章节导航；有作品封面时会嵌入封面页。正文插图暂不导出。", "EPUB includes a table of contents and chapter navigation. The novel cover is embedded when available; inline illustrations are not exported yet.")}
         </p>
         <label>
           {tr("导出范围", "Export scope")}
@@ -130,6 +227,63 @@ export function IoPanel({
             ]}
           />
         </label>
+        <label>
+          {tr("EPUB 排版（仅影响 EPUB）", "EPUB layout (EPUB only)")}
+          <Select
+            value={epubLayout}
+            aria-label={tr("EPUB 排版", "EPUB layout")}
+            onValueChange={(value) => void changeEpubLayout(value as typeof epubLayout)}
+            options={[
+              { value: "standard", label: tr("标准阅读", "Standard reading"), hint: tr("舒适行距与首行缩进", "Balanced spacing with first-line indents") },
+              { value: "compact", label: tr("网文连载", "Web serial"), hint: tr("更紧凑的段落间距", "Tighter paragraph spacing") },
+              { value: "no-indent", label: tr("舒展无缩进", "Open, no indent"), hint: tr("较宽行距与段间距", "More line and paragraph spacing") },
+              { value: "custom", label: tr("自定义版式", "Custom layout"), hint: tr("调整行距、页边距和段落格式", "Tune line spacing, margins, and paragraphs") },
+            ]}
+          />
+        </label>
+        {epubLayout === "custom" && (
+          <div className="epub-custom-layout" data-fd-id="epub-custom-layout">
+            {([
+              ["lineHeight", tr("行距", "Line spacing"), 1.4, 2.4, 0.1, `${epubCustomLayout.lineHeight.toFixed(1)}×`],
+              ["marginPercent", tr("页边距", "Page margin"), 3, 12, 1, `${epubCustomLayout.marginPercent}%`],
+              ["paragraphGapEm", tr("段落间距", "Paragraph spacing"), 0, 1.5, 0.1, `${epubCustomLayout.paragraphGapEm.toFixed(1)}em`],
+              ["indentEm", tr("首行缩进", "First-line indent"), 0, 3, 0.5, `${epubCustomLayout.indentEm.toFixed(1)}em`],
+            ] as const).map(([key, label, min, max, step, value]) => (
+              <label className="epub-layout-control" key={key}>
+                <span>{label}<output>{value}</output></span>
+                <input
+                  type="range"
+                  min={min}
+                  max={max}
+                  step={step}
+                  value={epubCustomLayout[key]}
+                  aria-label={label}
+                  onChange={(event) => {
+                    const next = normalizeEpubCustomLayout({ ...epubCustomLayout, [key]: Number(event.target.value) });
+                    setEpubCustomLayout(next);
+                  }}
+                  onPointerUp={() => void saveEpubCustomLayout(epubCustomLayout)}
+                  onKeyUp={() => void saveEpubCustomLayout(epubCustomLayout)}
+                />
+              </label>
+            ))}
+            <div
+              className="epub-layout-preview"
+              style={{
+                lineHeight: epubCustomLayout.lineHeight,
+                paddingInline: `${epubCustomLayout.marginPercent}%`,
+              }}
+            >
+              <strong>{tr("排版预览", "Layout preview")}</strong>
+              <p style={{ marginBottom: `${epubCustomLayout.paragraphGapEm}em`, textIndent: `${epubCustomLayout.indentEm}em` }}>
+                {tr("夜雨落在旧城的瓦檐上。她把信折好，收进袖中，决定天亮前离开。", "Rain tapped the old rooftops. She folded the letter, slipped it into her sleeve, and decided to leave before dawn.")}
+              </p>
+              <p style={{ marginBottom: 0, textIndent: `${epubCustomLayout.indentEm}em` }}>
+                {tr("这段示例会随上方参数变化，实际导出采用相同设置。", "This sample follows the settings above; the EPUB export uses the same values.")}
+              </p>
+            </div>
+          </div>
+        )}
         <div className="row io-export-actions" data-fd-id="manuscript-export-formats">
           <button disabled={Boolean(operationBusy)} onClick={() => exp("txt")}>
             {operationBusy === "export:txt" ? tr("正在导出…", "Exporting…") : tr("导出 TXT", "Export TXT")}
@@ -140,8 +294,15 @@ export function IoPanel({
           <button disabled={Boolean(operationBusy)} onClick={() => exp("docx")}>
             {operationBusy === "export:docx" ? tr("正在导出…", "Exporting…") : tr("导出 DOCX", "Export DOCX")}
           </button>
-          <button disabled={Boolean(operationBusy)} onClick={() => exp("epub")}>
-            {operationBusy === "export:epub" ? tr("正在导出…", "Exporting…") : tr("导出 EPUB", "Export EPUB")}
+          <button
+            disabled={Boolean(operationBusy) || !scopedChapters.length}
+            onClick={() => {
+              if (!scopedChapters.length) return notify(tr("当前范围没有可预览的章节", "No chapters are available in this export scope"));
+              setEpubPreviewChapterId(scopedChapters[0].id);
+              setEpubPreviewOpen(true);
+            }}
+          >
+            {tr("预览并导出 EPUB", "Preview & export EPUB")}
           </button>
         </div>
       </section>
@@ -445,6 +606,77 @@ export function IoPanel({
             } else notify(r.error || tr("导入失败", "Import failed"));
           }}
         />
+      )}
+      {epubPreviewOpen && (
+        <Modal
+          title={tr("EPUB 成书预览", "EPUB book preview")}
+          close={() => setEpubPreviewOpen(false)}
+        >
+          <div className="epub-preview-dialog">
+            <div className="epub-preview-toolbar">
+              <label>
+                {tr("预览章节", "Preview chapter")}
+                <Select
+                  value={epubPreviewChapterId}
+                  aria-label={tr("选择预览章节", "Choose preview chapter")}
+                  onValueChange={setEpubPreviewChapterId}
+                  options={scopedChapters.map((item) => ({
+                    value: item.id,
+                    label: `${bookVolumes.find((volume) => volume.id === item.volume_id)?.title ? `${bookVolumes.find((volume) => volume.id === item.volume_id)?.title} · ` : ""}${item.title}`,
+                  }))}
+                />
+              </label>
+              <span>{tr(`${scopedChapters.length} 章在导出范围内`, `${scopedChapters.length} chapters in export scope`)}</span>
+            </div>
+            <div className="epub-preview-reader">
+              {novel.cover_path && String(novel.cover_path).startsWith("data:image/") ? (
+                <div className="epub-preview-cover"><img src={novel.cover_path} alt={tr(`${novel.title || "作品"}封面`, `${novel.title || "Novel"} cover`)} /></div>
+              ) : (
+                <div className="epub-preview-cover epub-preview-cover-empty">{tr("无封面", "No cover")}</div>
+              )}
+              <header className="epub-preview-titlepage">
+                <h2>{novel.title || tr("未命名作品", "Untitled novel")}</h2>
+                {novel.author && <p>{novel.author}</p>}
+              </header>
+              {epubPreviewBusy ? (
+                <p className="hint" role="status">{tr("正在读取章节…", "Loading chapter…")}</p>
+              ) : epubPreviewChapter ? (
+                <article
+                  className="epub-preview-content"
+                  style={{
+                    lineHeight: previewLayout.lineHeight,
+                    paddingInline: `${previewLayout.marginPercent}%`,
+                  }}
+                >
+                  {epubPreviewChapter.volume_id && bookVolumes.find((volume) => volume.id === epubPreviewChapter.volume_id)?.title && (
+                    <p className="epub-preview-volume">{bookVolumes.find((volume) => volume.id === epubPreviewChapter.volume_id)?.title}</p>
+                  )}
+                  <h3>{epubPreviewChapter.title}</h3>
+                  {previewParagraphs.length ? previewParagraphs.map((text, index) => (
+                    <p
+                      key={`${epubPreviewChapter.id}-${index}`}
+                      style={{
+                        marginBottom: `${previewLayout.paragraphGapEm}em`,
+                        textIndent: `${previewLayout.indentEm}em`,
+                      }}
+                    >{text}</p>
+                  )) : <p className="hint">{tr("本章暂无正文。", "This chapter has no text yet.")}</p>}
+                  {(String(epubPreviewChapter.plain_text || "").split(/\r\n?|\n/).filter((line) => line.trim()).length > 36) && (
+                    <p className="epub-preview-truncated">{tr("仅显示前 36 段预览；导出会包含本章全文。", "Preview shows the first 36 paragraphs; export includes the full chapter.")}</p>
+                  )}
+                </article>
+              ) : (
+                <p className="hint" role="alert">{tr("无法加载预览章节。", "Could not load the preview chapter.")}</p>
+              )}
+            </div>
+            <div className="row end epub-preview-actions">
+              <button type="button" onClick={() => setEpubPreviewOpen(false)}>{tr("返回修改设置", "Back to settings")}</button>
+              <button type="button" className="primary" disabled={Boolean(operationBusy) || epubPreviewBusy} onClick={() => void exp("epub")}>
+                {operationBusy === "export:epub" ? tr("正在生成…", "Generating…") : tr("确认导出 EPUB", "Export EPUB")}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

@@ -40,6 +40,32 @@ describe("relation label/body roundtrip", () => {
   });
 });
 
+describe("地点 / 势力沿革记录", () => {
+  it("world timeline survives editing, save conversion, and no-op draft checks", () => {
+    const row = {
+      id: "world-1",
+      kind: "world",
+      title: "霜河关",
+      content_json: JSON.stringify({
+        category: "地点",
+        alias: "北境关口",
+        body: "北境商路要塞",
+        progressions: [{ chapterId: "ch-3", chapterTitle: "关门", change: "由守军封闭", evidence: "烽火后封关" }],
+      }),
+    };
+    const model = libraryContentToEditor(row);
+    expect(model.progressions).toHaveLength(1);
+    const saved = editorToLibraryContent("world", model);
+    expect(saved.progressions[0]).toMatchObject({
+      chapterId: "ch-3",
+      chapterTitle: "关门",
+      change: "由守军封闭",
+      evidence: "烽火后封关",
+    });
+    expect(normalizeLibraryDraft("world", model)).toContain('"change":"由守军封闭"');
+  });
+});
+
 describe("library dirty compare", () => {
   it("open without edit is not dirty", () => {
     const a = libraryContentToEditor({

@@ -57,7 +57,13 @@ function countOccurrences(corpus: string, term: string) {
   return (corpus.match(new RegExp(escapeRegExp(term), "g")) || []).length;
 }
 
-function contextContent(item: Material, maxChars = 6000, chapterTitles: Record<string, string> = {}, chapterOrder: Record<string, number> = {}) {
+function contextContent(
+  item: Material,
+  maxChars = 6000,
+  chapterTitles: Record<string, string> = {},
+  chapterOrder: Record<string, number> = {},
+  currentChapterId?: string | null,
+) {
   const c = parseObject(item.content_json);
   const fields: Record<string, string[]> = {
     character: ["alias", "body", "goal", "motive", "conflict", "personality", "speech", "knowledge", "taboo", "checklist"],
@@ -84,10 +90,17 @@ function contextContent(item: Material, maxChars = 6000, chapterTitles: Record<s
         ? c[key].map((value: unknown) => String(value || "").trim()).filter(Boolean).join("、")
         : String(c[key] || "")).trim()] as const)
     .filter(([, value]) => value);
-  if (item.kind === "character" && Array.isArray(c.progressions) && c.progressions.length) {
+  const hasWorldTimeline = item.kind === "world" && ["地点", "势力"].includes(String(c.category || ""));
+  if ((item.kind === "character" || hasWorldTimeline) && Array.isArray(c.progressions) && c.progressions.length) {
+    const currentOrder = currentChapterId ? chapterOrder[currentChapterId] : undefined;
     const progressions = c.progressions
       .slice()
       .filter((entry: any) => entry && (String(entry.change || "").trim() || String(entry.evidence || "").trim()))
+      .filter((entry: any) => {
+        const entryChapterId = String(entry.chapterId || "");
+        const entryOrder = entryChapterId ? chapterOrder[entryChapterId] : undefined;
+        return currentOrder === undefined || entryOrder === undefined || entryOrder <= currentOrder;
+      })
       .sort((left: any, right: any) => {
         const leftOrder = chapterOrder[String(left.chapterId || "")] ?? Number.MAX_SAFE_INTEGER;
         const rightOrder = chapterOrder[String(right.chapterId || "")] ?? Number.MAX_SAFE_INTEGER;
@@ -99,7 +112,11 @@ function contextContent(item: Material, maxChars = 6000, chapterTitles: Record<s
         const evidence = String(entry.evidence || "").trim();
         return `- ${chapterTitle}：${change || "阶段记录"}${evidence ? `（依据：${evidence}）` : ""}`;
       });
-    if (progressions.length) parts.push(["作者确认的阶段变化", progressions.join("\n")]);
+    if (progressions.length)
+      parts.push([
+        hasWorldTimeline ? "作者确认的地点 / 势力沿革" : "作者确认的阶段变化",
+        progressions.join("\n"),
+      ]);
   }
   const tags = parseTags(item.tags_json);
   if (tags.length) parts.push(["标签", tags.join("、")]);
@@ -199,7 +216,7 @@ export function relevantMaterials(
       id: item.id,
       kind: item.kind,
       title: item.kind === "relation" ? `${item.from || "?"} 与 ${item.to || "?"}` : title || "未命名资料",
-      content: contextContent(item, 6000, context.chapterTitles, context.chapterOrder),
+      content: contextContent(item, 6000, context.chapterTitles, context.chapterOrder, context.chapterId),
       matched: matched || String(item.title || "").trim(),
       count,
       score: score + bestWeighted * 0.01,
@@ -215,6 +232,7 @@ export function materialReferenceContent(
   maxChars = 6000,
   chapterTitles: Record<string, string> = {},
   chapterOrder: Record<string, number> = {},
+  currentChapterId?: string | null,
 ) {
-  return contextContent(item, maxChars, chapterTitles, chapterOrder);
+  return contextContent(item, maxChars, chapterTitles, chapterOrder, currentChapterId);
 }

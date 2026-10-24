@@ -19,6 +19,89 @@ export type LibraryLeaveControls = {
   discard: () => void;
 };
 
+function ProgressionsEditor({
+  editing,
+  chapters,
+  volumes,
+  chapter,
+  updateEditing,
+  tr,
+  subject,
+}: {
+  editing: AnyRow;
+  chapters: AnyRow[];
+  volumes: AnyRow[];
+  chapter: AnyRow | null;
+  updateEditing: (patch: AnyRow) => void;
+  tr: (zh: string, en: string) => string;
+  subject: "character" | "world";
+}) {
+  const entries = Array.isArray(editing.progressions) ? editing.progressions : [];
+  const isWorld = subject === "world";
+  const updateEntry = (index: number, patch: AnyRow) => updateEditing({
+    progressions: entries.map((entry: AnyRow, entryIndex: number) => entryIndex === index ? { ...entry, ...patch } : entry),
+  });
+  return (
+    <fieldset className="character-progressions" data-fd-id={`${subject}-progressions`}>
+      <legend>{isWorld ? tr("地点 / 势力沿革", "Location / faction history") : tr("阶段变化", "Character progression")}</legend>
+      <p className="hint">
+        {isWorld
+          ? tr("记录地点或势力在故事中的作者确认变化（控制权、开放状态、盟约等）及依据。引用到某一章时，AI 只看到该章及以前的记录；不会由提及次数推断状态。", "Record author-confirmed changes to a place or faction (control, access, alliances, etc.). A chapter reference only includes changes up to that chapter; mentions never infer state.")
+          : tr("记录作者确认的变化及发生章节。引用到某一章时，AI 只看到该章及以前的阶段记录；不会根据名字命中自动推断。", "Record author-confirmed changes and their chapters. A chapter reference only includes changes up to that chapter; name matches never infer a change.")}
+      </p>
+      {entries.map((progression: AnyRow, index: number) => (
+        <div className="character-progression-row" key={index} data-fd-id={`${subject}-progression-row-${index + 1}`}>
+          <div className="character-progression-heading">
+            <Select
+              value={String(progression.chapterId || "")}
+              aria-label={tr("变化所属章节", "Progression chapter")}
+              onValueChange={(value) => {
+                const linked = chapters.find((candidate) => candidate.id === value);
+                updateEntry(index, { chapterId: value, chapterTitle: linked?.title || "" });
+              }}
+              options={[
+                { value: "", label: tr("选择发生章节", "Choose a chapter") },
+                ...chapters.map((item) => ({
+                  value: item.id,
+                  label: `${volumes.find((volume) => volume.id === item.volume_id)?.title ? `${volumes.find((volume) => volume.id === item.volume_id)?.title} · ` : ""}${item.title}`,
+                })),
+              ]}
+            />
+            <button
+              type="button"
+              className="icon"
+              title={tr("移除记录", "Remove record")}
+              aria-label={tr("移除记录", "Remove record")}
+              onClick={() => updateEditing({ progressions: entries.filter((_: AnyRow, i: number) => i !== index) })}
+            >×</button>
+          </div>
+          <input
+            placeholder={isWorld ? tr("变化摘要（如：由议会接管北门）", "Change (e.g. council takes control of the north gate)") : tr("变化摘要（如：由戒备转为暂时合作）", "Change (e.g. guarded → temporary alliance)")}
+            maxLength={160}
+            value={progression.change || ""}
+            onChange={(event) => updateEntry(index, { change: event.target.value })}
+          />
+          <textarea
+            rows={2}
+            placeholder={tr("依据 / 触发事件（可选）", "Evidence or triggering event (optional)")}
+            maxLength={1200}
+            value={progression.evidence || ""}
+            onChange={(event) => updateEntry(index, { evidence: event.target.value })}
+          />
+        </div>
+      ))}
+      <button
+        type="button"
+        className="secondary character-progression-add"
+        disabled={entries.length >= 100}
+        onClick={() => updateEditing({
+          progressions: [...entries, { chapterId: chapter?.id || "", chapterTitle: chapter?.title || "", change: "", evidence: "" }],
+        })}
+      >＋ {isWorld ? tr("添加沿革记录", "Add history record") : tr("添加阶段变化", "Add progression")}</button>
+    </fieldset>
+  );
+}
+
 export function LibraryPanel({
   novel,
   chapter,
@@ -588,6 +671,17 @@ export function LibraryPanel({
                 />
               )}
             </>
+          )}
+          {kind === "world" && (editing.category === "地点" || editing.category === "势力") && (
+            <ProgressionsEditor
+              editing={editing}
+              chapters={chapters}
+              volumes={volumes}
+              chapter={chapter}
+              updateEditing={updateEditing}
+              tr={tr}
+              subject="world"
+            />
           )}
           {kind === "scene" && (
             <>

@@ -15,6 +15,10 @@ export function libraryContentToEditor(row: {
     next.progressions = Array.isArray(next.progressions)
       ? next.progressions.filter((entry: any) => entry && typeof entry === "object" && !Array.isArray(entry))
       : [];
+  if (kind === "world")
+    next.progressions = Array.isArray(next.progressions)
+      ? next.progressions.filter((entry: any) => entry && typeof entry === "object" && !Array.isArray(entry))
+      : [];
   if (kind === "relation") {
     next.body = c.label ?? c.body ?? "";
     next.from = c.from ?? "";
@@ -99,7 +103,20 @@ export function editorToLibraryContent(kind: string, editing: any): any {
         .filter((entry: any) => entry.change || entry.evidence),
     };
   if (kind === "world")
-    return { body: editing.body || "", category: editing.category || "", alias: editing.alias || "" };
+    return {
+      body: editing.body || "",
+      category: editing.category || "",
+      alias: editing.alias || "",
+      progressions: (Array.isArray(editing.progressions) ? editing.progressions : [])
+        .slice(0, 100)
+        .map((entry: any) => ({
+          chapterId: String(entry?.chapterId || ""),
+          chapterTitle: String(entry?.chapterTitle || "").trim().slice(0, 120),
+          change: String(entry?.change || "").trim().slice(0, 160),
+          evidence: String(entry?.evidence || "").trim().slice(0, 1200),
+        }))
+        .filter((entry: any) => entry.change || entry.evidence),
+    };
   return { body: editing.body || "" };
 }
 

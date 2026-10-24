@@ -234,6 +234,7 @@ export function RefPicker({
                             6000,
                             Object.fromEntries(bookChapters.map((chapter) => [chapter.id, chapter.title])),
                             Object.fromEntries(bookChapters.map((chapter, index) => [chapter.id, index])),
+                            chapterId,
                           ),
                           sourceId: x.id,
                         });

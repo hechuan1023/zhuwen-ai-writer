@@ -50,26 +50,64 @@ function CopyButton({
   compact?: boolean;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
-  const [done, setDone] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "done" | "error">("idle");
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+  }, []);
+  async function copy() {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+    } catch {
+      // Continue with the hidden-textarea fallback for restricted desktop contexts.
+    }
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.setAttribute("aria-hidden", "true");
+    textarea.style.position = "fixed";
+    textarea.style.top = "-1000px";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    try {
+      textarea.focus();
+      textarea.select();
+      if (!document.execCommand("copy")) throw new Error("Clipboard copy failed");
+    } finally {
+      textarea.remove();
+      previousFocus?.focus?.({ preventScroll: true });
+    }
+  }
+  const statusText = copyState === "done"
+    ? tr("已复制", "Copied")
+    : copyState === "error"
+      ? tr("复制失败，请检查剪贴板权限", "Copy failed; check clipboard permissions")
+      : tr("复制", "Copy");
   return (
     <button
       type="button"
       className={`zchat-act ${compact ? "icon-only" : ""}`}
       data-fd-id="ai-copy"
-      aria-label={tr("复制", "Copy")}
-      title={tr("复制", "Copy")}
+      aria-label={statusText}
+      title={statusText}
       onClick={async () => {
         try {
-          await navigator.clipboard.writeText(text);
-          setDone(true);
-          setTimeout(() => setDone(false), 1400);
+          await copy();
+          setCopyState("done");
         } catch {
-          /* 剪贴板不可用时静默失败，不影响阅读 */
+          setCopyState("error");
         }
+        if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+        feedbackTimer.current = setTimeout(() => setCopyState("idle"), 1800);
       }}
     >
-      {done ? <IconCheck /> : <IconCopy />}
-      {!compact && <span>{done ? tr("已复制", "Copied") : tr("复制", "Copy")}</span>}
+      {copyState === "done" ? <IconCheck /> : <IconCopy />}
+      {!compact && <span>{statusText}</span>}
+      <span className="sr-only" role="status" aria-live="polite">{copyState === "idle" ? "" : statusText}</span>
     </button>
   );
 }

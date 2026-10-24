@@ -12,7 +12,43 @@ type EpubOptions = {
   includeAuthor?: boolean;
   includeVolume?: boolean;
   includeChapter?: boolean;
+  epubLayout?: "standard" | "compact" | "no-indent" | "custom";
+  epubCustomLayout?: {
+    lineHeight?: number;
+    marginPercent?: number;
+    paragraphGapEm?: number;
+    indentEm?: number;
+  };
 };
+
+function boundedNumber(value: unknown, fallback: number, min: number, max: number) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+}
+
+const COVER_MIME_EXTENSIONS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/bmp": "bmp",
+};
+
+function readCover(
+  dataUrl: unknown,
+): { mime: string; extension: string; data: Buffer } | null {
+  if (typeof dataUrl !== "string") return null;
+  const match =
+    /^data:(image\/(?:png|jpeg|webp|gif|bmp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(
+      dataUrl,
+    );
+  if (!match || match[2].length % 4 !== 0) throw new Error("作品封面格式无效，无法嵌入 EPUB");
+  const mime = match[1];
+  const data = Buffer.from(match[2], "base64");
+  if (!data.length || data.length > 3 * 1024 * 1024)
+    throw new Error("作品封面为空或超过 3 MB，无法嵌入 EPUB");
+  return { mime, extension: COVER_MIME_EXTENSIONS[mime], data };
+}
 
 function xml(value: unknown): string {
   return String(value ?? "")
@@ -35,7 +71,7 @@ function xhtml(title: string, body: string, stylesheet = "../styles/book.css") {
 
 /** Build a reflowable EPUB 3.0 publication from ordered manuscript chapters. */
 export async function buildEpub(
-  novel: { title?: string | null; author?: string | null },
+  novel: { title?: string | null; author?: string | null; cover_path?: string | null },
   chapters: EpubChapter[],
   options: EpubOptions = {},
 ): Promise<Buffer> {
@@ -46,6 +82,21 @@ export async function buildEpub(
   const modified = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   const identifier = `urn:uuid:${randomUUID()}`;
   const zip = new JSZip();
+  const cover = readCover(novel.cover_path);
+  const layouts = {
+    standard: { lineHeight: "1.8", margin: "5%", paragraphGap: ".65em", indent: "2em" },
+    compact: { lineHeight: "1.65", margin: "4%", paragraphGap: ".3em", indent: "2em" },
+    "no-indent": { lineHeight: "2", margin: "6%", paragraphGap: ".9em", indent: "0" },
+  } as const;
+  const custom = options.epubCustomLayout || {};
+  const layout = options.epubLayout === "custom"
+    ? {
+        lineHeight: `${boundedNumber(custom.lineHeight, 1.8, 1.4, 2.4)}`,
+        margin: `${boundedNumber(custom.marginPercent, 5, 3, 12)}%`,
+        paragraphGap: `${boundedNumber(custom.paragraphGapEm, 0.65, 0, 1.5)}em`,
+        indent: `${boundedNumber(custom.indentEm, 2, 0, 3)}em`,
+      }
+    : layouts[options.epubLayout || "standard"] || layouts.standard;
 
   // OCF requires this to be the first ZIP entry, stored without compression.
   zip.file("mimetype", "application/epub+zip", {
@@ -62,15 +113,28 @@ export async function buildEpub(
 
   zip.file(
     "EPUB/styles/book.css",
-    `html { line-height: 1.8; }
-body { margin: 5%; font-family: serif; }
+    `html { line-height: ${layout.lineHeight}; }
+body { margin: ${layout.margin}; font-family: serif; }
 h1 { margin: 0 0 1.4em; text-align: center; font-size: 1.35em; line-height: 1.5; }
 .volume-title { margin: 0 0 1em; text-align: center; color: #666; font-size: .95em; }
-p { margin: 0 0 .65em; text-indent: 2em; }
+p { margin: 0 0 ${layout.paragraphGap}; text-indent: ${layout.indent}; }
 .title-page { display: flex; min-height: 80vh; flex-direction: column; justify-content: center; text-align: center; }
 .title-page h1 { font-size: 2em; }
-.title-page p { text-indent: 0; }`,
+.title-page p { text-indent: 0; }
+.cover-page { margin: 0; padding: 0; text-align: center; }
+.cover-page img { display: block; width: 100%; height: 100vh; object-fit: contain; }`,
   );
+
+  if (cover) {
+    zip.file(`EPUB/images/cover.${cover.extension}`, cover.data);
+    zip.file(
+      "EPUB/text/cover.xhtml",
+      xhtml(
+        title,
+        `<section class="cover-page"><img src="../images/cover.${cover.extension}" alt="${xml(title)}"/></section>`,
+      ),
+    );
+  }
 
   const chapterDocs = chapters.map((chapter, index) => {
     const id = `chapter-${index + 1}`;
@@ -119,6 +183,12 @@ p { margin: 0 0 .65em; text-indent: 2em; }
   const manifest = [
     '<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>',
     '<item id="css" href="styles/book.css" media-type="text/css"/>',
+    ...(cover
+      ? [
+          `<item id="cover-image" href="images/cover.${cover.extension}" media-type="${cover.mime}" properties="cover-image"/>`,
+          '<item id="cover-page" href="text/cover.xhtml" media-type="application/xhtml+xml"/>',
+        ]
+      : []),
     ...(hasTitlePage
       ? ['<item id="title-page" href="text/title.xhtml" media-type="application/xhtml+xml"/>']
       : []),
@@ -127,6 +197,7 @@ p { margin: 0 0 .65em; text-indent: 2em; }
     ),
   ].join("\n    ");
   const spine = [
+    ...(cover ? ['<itemref idref="cover-page"/>'] : []),
     ...(hasTitlePage ? ['<itemref idref="title-page"/>'] : []),
     ...chapterDocs.map((chapter) => `<itemref idref="${chapter.id}"/>`),
   ].join("\n    ");

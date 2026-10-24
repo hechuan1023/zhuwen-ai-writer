@@ -1146,6 +1146,170 @@ button.danger-text:not(:disabled):hover {
 .io-export-actions button {
   min-height: 36px;
 }
+.epub-custom-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  background: color-mix(in srgb, var(--paper) 82%, var(--panel));
+}
+.io .epub-layout-control {
+  gap: 6px;
+  margin: 4px 0;
+}
+.epub-layout-control > span {
+  display: flex;
+  justify-content: space-between;
+  color: var(--ink);
+}
+.epub-layout-control output {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.io input[type="range"] {
+  width: 100%;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--accent);
+  box-shadow: none;
+}
+.epub-layout-preview {
+  grid-column: 1 / -1;
+  padding: 12px 8px;
+  border-radius: var(--r-sm, 8px);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-editor, Georgia, serif);
+  font-size: 12px;
+}
+.epub-layout-preview strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font: 600 11px/1.4 var(--font-ui, sans-serif);
+}
+.epub-layout-preview p {
+  margin-top: 0;
+}
+.epub-preview-dialog {
+  display: grid;
+  gap: 14px;
+}
+.epub-preview-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.epub-preview-toolbar label {
+  display: grid;
+  gap: 5px;
+  min-width: min(360px, 65%);
+  color: var(--muted);
+  font-size: 11px;
+}
+.epub-preview-toolbar > span {
+  padding-bottom: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.epub-preview-reader {
+  max-height: min(62vh, 680px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  background: #f4f0e6;
+  color: #28251f;
+  box-shadow: inset 0 1px 3px #322d2412;
+}
+.epub-preview-cover {
+  display: grid;
+  place-items: center;
+  min-height: 190px;
+  padding: 18px;
+  background: #e8e2d5;
+}
+.epub-preview-cover img {
+  display: block;
+  width: auto;
+  max-width: min(100%, 280px);
+  height: 250px;
+  object-fit: contain;
+  box-shadow: 0 8px 24px #211d1726;
+}
+.epub-preview-cover-empty {
+  color: #716c61;
+  font-size: 12px;
+}
+.epub-preview-titlepage {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  min-height: 190px;
+  padding: 22px 14%;
+  text-align: center;
+}
+.epub-preview-titlepage h2 {
+  margin: 0;
+  color: #28251f;
+  font: 600 24px/1.5 var(--font-editor, Georgia, serif);
+}
+.epub-preview-titlepage p {
+  margin: 10px 0 0;
+  color: #716c61;
+}
+.epub-preview-content {
+  padding-top: 20px;
+  padding-bottom: 26px;
+  border-top: 1px solid #d8d1c3;
+  font: 14px/1.8 var(--font-editor, Georgia, serif);
+}
+.epub-preview-content h3 {
+  margin: 0 0 20px;
+  color: #28251f;
+  font: 600 18px/1.5 var(--font-editor, Georgia, serif);
+  text-align: center;
+}
+.epub-preview-content .epub-preview-volume {
+  color: #716c61;
+  font-size: 12px;
+  text-align: center;
+}
+.epub-preview-content p {
+  margin-top: 0;
+  white-space: pre-wrap;
+}
+.epub-preview-content .epub-preview-truncated {
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px dashed #c9c1b2;
+  color: #716c61;
+  font: 11px/1.5 var(--font-ui, sans-serif);
+  text-indent: 0;
+}
+.epub-preview-actions {
+  gap: 8px;
+}
+@media (max-width: 560px) {
+  .epub-custom-layout {
+    grid-template-columns: 1fr;
+  }
+  .epub-preview-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .epub-preview-toolbar label {
+    min-width: 100%;
+  }
+  .epub-preview-toolbar > span {
+    padding-bottom: 0;
+  }
+}
 .cover-edit {
   display: flex;
   gap: 14px;
@@ -1182,6 +1346,17 @@ button.danger-text:not(:disabled):hover {
 }
 .io .check input {
   width: auto;
+}
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 .grid2 {
   display: grid;
