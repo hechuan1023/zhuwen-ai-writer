@@ -1060,6 +1060,14 @@ button:disabled {
   margin: 10px 0;
   font-size: 12px;
 }
+.io-export-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
+  gap: 8px;
+}
+.io-export-actions button {
+  min-height: 36px;
+}
 .cover-edit {
   display: flex;
   gap: 14px;

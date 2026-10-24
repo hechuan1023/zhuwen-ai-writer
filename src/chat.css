@@ -557,6 +557,11 @@
   border-color: var(--line-strong, var(--line));
   background: var(--accent-soft, color-mix(in srgb, var(--accent) 8%, var(--paper)));
 }
+.zchat-pill:focus-visible,
+.zchat-send:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, var(--paper));
+  outline-offset: 2px;
+}
 /* 任务与模型药丸允许收缩省略，但绝不换行成竖排 */
 .zchat-pill.wide {
   flex: 0 1 auto;
@@ -565,8 +570,14 @@
 }
 .zchat-pill.context {
   color: var(--muted, #8a8577);
-  flex: none;
-  margin-left: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(42%, 300px);
+}
+.zchat-context-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .zchat-context-ring {
@@ -588,7 +599,7 @@
   background: var(--panel, #f8f5ef);
 }
 .zchat-context-ring.over { background: conic-gradient(#c84b4b 100%, rgba(127, 127, 127, .18) 0); }
-.zchat-context-limit { opacity: .62; font-size: 10px; margin-left: -2px; }
+.zchat-context-limit { flex: none; opacity: .72; font-size: 10px; margin-left: -2px; }
 .zchat-send {
   display: inline-flex;
   align-items: center;
@@ -1080,7 +1091,7 @@
     max-width: none;
   }
   .zchat-pill.context {
-    margin-left: 0;
+    max-width: min(48%, 220px);
   }
   .zchat-ref-main {
     max-width: 120px;
@@ -1117,9 +1128,23 @@
 .zchat-style-preview header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; font-size: 12px; }
 .zchat-style-preview header small { color: var(--muted); font-size: 10px; }
 .zchat-style-preview pre { max-height: 22vh; overflow: auto; margin: 0; white-space: pre-wrap; font: 11px/1.55 var(--font-ui, sans-serif); }
+.zchat-style-presets { margin: 10px 0 12px; padding: 10px; border: 1px solid var(--line); border-radius: var(--r-lg, 14px); background: color-mix(in srgb, var(--panel) 52%, var(--paper)); }
+.zchat-style-presets > header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.zchat-style-presets > header b { font-size: 12px; }
+.zchat-style-presets > header small, .zchat-style-presets > p { color: var(--muted); font-size: 10px; }
+.zchat-style-presets > p { margin: 4px 0 9px; line-height: 1.5; }
+.zchat-style-presets-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.zchat-style-presets-grid button { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 8px 9px; border: 1px solid var(--line); border-radius: var(--r-md, 10px); background: var(--paper); color: var(--ink); text-align: left; cursor: pointer; transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease), transform var(--dur) var(--ease); }
+.zchat-style-presets-grid button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 52%, var(--line)); background: var(--accent-soft); transform: translateY(-1px); }
+.zchat-style-presets-grid button.active { border-color: var(--accent); background: var(--accent-soft); }
+.zchat-style-presets-grid button:focus-visible { outline: none; box-shadow: var(--focus); }
+.zchat-style-presets-grid button:disabled { opacity: .5; cursor: not-allowed; }
+.zchat-style-presets-grid b { font-size: 11px; }
+.zchat-style-presets-grid small { color: var(--muted); font-size: 10px; line-height: 1.4; }
 .zchat-style-editor { display: grid; gap: 12px; }
 .zchat-style-editor label { display: grid; gap: 5px; font-size: 12px; }
 .zchat-style-editor textarea { resize: vertical; line-height: 1.55; }
 .zchat-style-task-options { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 0; padding: 8px 10px 10px; border: 1px solid var(--line); border-radius: 9px; }
 .zchat-style-task-options legend { padding: 0 5px; color: var(--muted); font-size: 11px; }
 .zchat-style-task-options label { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }
+@media (max-width: 600px) { .zchat-style-presets-grid { grid-template-columns: 1fr; } }

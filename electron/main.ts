@@ -14,6 +14,7 @@ import { extractDocxTextBuffer } from "./docx";
 import { decodeImportBuffer } from "./text-import";
 import { writeVerifiedJson } from "./atomic-json";
 import { Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
+import { buildEpub } from "./epub";
 import {
   Db,
   builtinPrompts,
@@ -3056,21 +3057,31 @@ function registerIpc(userDir: string) {
   });
   ipcMain.handle("export:novel", async (_, p) => {
     try {
-      const ext =
-        p.format === "docx" ? "docx" : p.format === "md" ? "md" : "txt";
-      const f = await dialog.showSaveDialog({
-        title: "导出稿件",
-        defaultPath: `${p.title}.${ext}`,
-        filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
-      });
-      if (f.canceled || !f.filePath) return ok(null);
+      const requestedFormat = String(p?.format || "");
+      const ext = ["txt", "md", "docx", "epub"].includes(requestedFormat)
+        ? requestedFormat
+        : "txt";
       const rows: any[] = all(
         `SELECT c.*,v.title volume_title FROM chapters c LEFT JOIN volumes v ON c.volume_id=v.id WHERE c.novel_id=? AND c.deleted_at IS NULL ${p.chapterIds?.length ? `AND c.id IN (${p.chapterIds.map(() => "?").join(",")})` : ""} ORDER BY COALESCE(v.sort_order,-1),c.sort_order`,
         p.novelId,
         ...(p.chapterIds || []),
       );
+      if (ext === "epub" && !rows.length)
+        throw new Error("没有可导出的章节内容");
       const novel: any = get("SELECT * FROM novels WHERE id=?", p.novelId);
+      const safeTitle = String(novel?.title || p?.title || "小说")
+        .replace(/[\u0000-\u001f<>:"/\\|?*]/g, "_")
+        .replace(/[. ]+$/g, "")
+        .slice(0, 100) || "小说";
+      const f = await dialog.showSaveDialog({
+        title: "导出稿件",
+        defaultPath: `${safeTitle}.${ext}`,
+        filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+      });
+      if (f.canceled || !f.filePath) return ok(null);
       if (ext === "docx") await writeDocx(f.filePath, novel, rows, p);
+      else if (ext === "epub")
+        await fs.promises.writeFile(f.filePath, await buildEpub(novel, rows, p));
       else
         await fs.promises.writeFile(
           f.filePath,

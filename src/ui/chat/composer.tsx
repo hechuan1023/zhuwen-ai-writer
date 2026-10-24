@@ -246,7 +246,10 @@ export function Composer({
           type="button"
           className="zchat-pill context"
           data-fd-id="ai-context-entry"
-          aria-label={tr("查看上下文占用", "View context usage")}
+          aria-label={tr(
+            `查看上下文占用：${contextSummary}${contextLimitLabel ? ` ${contextLimitLabel}` : ""}，${Math.round(contextPercent)}%`,
+            `Context usage: ${contextSummary}${contextLimitLabel ? ` ${contextLimitLabel}` : ""}, ${Math.round(contextPercent)}%`,
+          )}
           title={tr("查看上下文占用与将要发送的内容", "View context usage and what will be sent")}
           onClick={onOpenContext}
         >
@@ -257,7 +260,7 @@ export function Composer({
           >
             <i />
           </span>
-          {contextSummary}
+          <span className="zchat-context-summary" data-fd-id="ai-context-summary">{contextSummary}</span>
           {contextLimitLabel ? <small className="zchat-context-limit">{contextLimitLabel}</small> : null}
         </button>
         {generating ? (

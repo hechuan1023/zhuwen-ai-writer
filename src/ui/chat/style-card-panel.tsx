@@ -16,6 +16,8 @@ function styleLabel(card: StyleCard, language: string) {
     "style-suspense-information-control": ["Clues & information control", "Keep clues traceable and reveals consequential."],
     "style-character-voice-tension": ["Character voice & tension", "Give dialogue a character-specific agenda and subtext."],
     "style-light-comedy-mismatch": ["Situational comedy", "Build humor from character relationships and mismatched situations."],
+    "style-grounded-mystery": ["Grounded mystery", "Anchor investigation in daily routines, interests, and verifiable evidence."],
+    "style-cultural-modernization": ["Cultural translation", "Put traditional culture into character action and modern emotional stakes."],
   };
   const [name, description] = labels[card.id] || [card.name, card.description];
   return { name, description };
@@ -24,6 +26,27 @@ function taskLabel(task: string, language: string) {
   const map: Record<string, [string, string]> = { continue: ["续写", "Continuation"], polish: ["润色", "Polish"], naturalize: ["自然化润色", "Naturalize"], outline: ["构思", "Outline"], chat: ["对话", "Chat"], check: ["检查", "Check"] };
   return map[task]?.[language === "en" ? 1 : 0] || task;
 }
+
+const TECHNIQUE_PRESETS = [
+  {
+    id: "genre-cultural-growth",
+    name: ["国风成长连载", "Guofeng growth serial"],
+    description: ["成长推进 + 文化转译 + 追更兑现", "Growth + cultural translation + serial payoff"],
+    cardIds: ["style-growth-progression", "style-cultural-modernization", "style-serial-hook-payoff"],
+  },
+  {
+    id: "genre-grounded-mystery",
+    name: ["现实悬疑连载", "Grounded mystery serial"],
+    description: ["证据链 + 人物声线 + 章节钩子", "Evidence + character voice + chapter hooks"],
+    cardIds: ["style-grounded-mystery", "style-suspense-information-control", "style-character-voice-tension", "style-serial-hook-payoff"],
+  },
+  {
+    id: "genre-ensemble-comedy",
+    name: ["群像生活轻喜", "Ensemble slice-of-life comedy"],
+    description: ["群像烟火 + 关系张力 + 处境错位", "Ensemble + relationship tension + situational comedy"],
+    cardIds: ["style-human-ensemble", "style-character-voice-tension", "style-light-comedy-mismatch"],
+  },
+];
 
 export function StyleCardPanel({
   language,
@@ -91,6 +114,28 @@ export function StyleCardPanel({
           <section className="zchat-style-preview" data-fd-id="ai-style-composition-preview">
             <header><b>{tr("本任务实际注入规则", "Rules applied to this task")}</b><small>{taskLabel(taskKind, language)}</small></header>
             <pre>{previewRules || tr("当前任务不注入写作风格规则。", "No style rules are added for this task.")}</pre>
+          </section>
+          <section className="zchat-style-presets" data-fd-id="ai-style-presets">
+            <header><b>{tr("题材技法组合", "Genre technique sets")}</b><small>{tr("不模仿具体作品或作者", "No imitation of specific works or authors")}</small></header>
+            <p>{tr("依据近年题材趋势整理叙事机制。应用会替换当前勾选，之后仍可逐张增删。", "Narrative mechanisms informed by recent genre trends. Applying a set replaces the current selection; you can then add or remove cards.")}</p>
+            <div className="zchat-style-presets-grid">
+              {TECHNIQUE_PRESETS.map((preset) => {
+                const available = preset.cardIds.every((id) => cards.some((card) => card.id === id));
+                const selectedPreset = selectedIds.length === preset.cardIds.length && preset.cardIds.every((id) => selectedIds.includes(id));
+                return <button
+                  type="button"
+                  key={preset.id}
+                  className={selectedPreset ? "active" : ""}
+                  disabled={!available}
+                  aria-pressed={selectedPreset}
+                  data-fd-id={`ai-style-preset-${preset.id}`}
+                  onClick={() => onSelectionChange(preset.cardIds)}
+                >
+                  <b>{preset.name[language === "en" ? 1 : 0]}</b>
+                  <small>{preset.description[language === "en" ? 1 : 0]}</small>
+                </button>;
+              })}
+            </div>
           </section>
           <div className="zchat-style-toolbar">
             <span>{tr("技法卡可导出为文件，在不同作品或设备间复用。", "Export a technique card to reuse it across projects or devices.")}</span>

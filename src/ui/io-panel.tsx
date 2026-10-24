@@ -80,7 +80,7 @@ export function IoPanel({
       if (!volumeChapterIds.length) return notify(tr("当前章节不在任何卷中", "The current chapter is not in a volume"));
       chapterIds = volumeChapterIds;
     }
-    setOperationBusy("export");
+    setOperationBusy(`export:${format}`);
     const r = await api("export:novel", {
       novelId: novel.id,
       title: novel.title,
@@ -102,6 +102,9 @@ export function IoPanel({
         <h3>{tr("稿件导出", "Manuscript export")}</h3>
         <p className="hint">
           {tr("按卷和章节顺序导出正文，不包含 AI 对话和创作资料。", "Exports manuscript text in volume and chapter order, without AI conversations or story-bible items.")}
+        </p>
+        <p className="hint">
+          {tr("EPUB 适合阅读器阅读，包含目录与章节导航；当前不嵌入封面或插图。", "EPUB is reflowable and includes a table of contents and chapter navigation; covers and illustrations are not embedded yet.")}
         </p>
         <label>
           {tr("导出范围", "Export scope")}
@@ -127,11 +130,18 @@ export function IoPanel({
             ]}
           />
         </label>
-        <div className="row">
-          <button disabled={Boolean(operationBusy)} onClick={() => exp("txt")}>{tr("导出 TXT", "Export TXT")}</button>
-          <button disabled={Boolean(operationBusy)} onClick={() => exp("md")}>{tr("导出 Markdown", "Export Markdown")}</button>
+        <div className="row io-export-actions" data-fd-id="manuscript-export-formats">
+          <button disabled={Boolean(operationBusy)} onClick={() => exp("txt")}>
+            {operationBusy === "export:txt" ? tr("正在导出…", "Exporting…") : tr("导出 TXT", "Export TXT")}
+          </button>
+          <button disabled={Boolean(operationBusy)} onClick={() => exp("md")}>
+            {operationBusy === "export:md" ? tr("正在导出…", "Exporting…") : tr("导出 Markdown", "Export Markdown")}
+          </button>
           <button disabled={Boolean(operationBusy)} onClick={() => exp("docx")}>
-            {operationBusy === "export" ? tr("正在导出…", "Exporting…") : tr("导出 DOCX", "Export DOCX")}
+            {operationBusy === "export:docx" ? tr("正在导出…", "Exporting…") : tr("导出 DOCX", "Export DOCX")}
+          </button>
+          <button disabled={Boolean(operationBusy)} onClick={() => exp("epub")}>
+            {operationBusy === "export:epub" ? tr("正在导出…", "Exporting…") : tr("导出 EPUB", "Export EPUB")}
           </button>
         </div>
       </section>
