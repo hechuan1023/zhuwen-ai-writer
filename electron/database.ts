@@ -173,6 +173,17 @@ function migrate(db: Db) {
     db.exec(`ALTER TABLE ai_messages ADD COLUMN selection_from INTEGER; ALTER TABLE ai_messages ADD COLUMN selection_to INTEGER;`)
     db.prepare('INSERT INTO schema_migrations VALUES(10,?)').run(now())
   })()
+  if (version < 11) db.transaction(() => {
+    db.exec(`ALTER TABLE message_context_snapshots ADD COLUMN source_data_version INTEGER;`)
+    db.prepare('INSERT INTO schema_migrations VALUES(11,?)').run(now())
+  })()
+  if (version < 12) db.transaction(() => {
+    db.exec(`ALTER TABLE novel_ai_styles ADD COLUMN style_ids_json TEXT NOT NULL DEFAULT '[]';`)
+    const selections = db.prepare('SELECT novel_id,style_id FROM novel_ai_styles WHERE style_id IS NOT NULL').all() as { novel_id: string; style_id: string }[]
+    const updateSelection = db.prepare('UPDATE novel_ai_styles SET style_ids_json=? WHERE novel_id=?')
+    for (const selection of selections) updateSelection.run(JSON.stringify([selection.style_id]), selection.novel_id)
+    db.prepare('INSERT INTO schema_migrations VALUES(12,?)').run(now())
+  })()
   // 已完成迁移的数据库也要能补齐或升级内置卡；不覆盖用户自定义记录。
   {
     const insert = db.prepare('INSERT OR IGNORE INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')

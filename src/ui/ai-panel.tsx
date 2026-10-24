@@ -82,12 +82,17 @@ export function AiPanel({
       currentRevision: number;
       resume: () => void;
     } | null>(null);
+  const [sourceApproval, setSourceApproval] = useState<{
+    labels: string[];
+    resume: () => void;
+  } | null>(null);
   const autoSelected = useRef("");
   const consumedSceneDraft = useRef("");
   const [mode, setMode] = useState<"chat" | "continue" | "naturalize" | "polish" | "outline" | "check">("chat");
   const [activeTaskId, setActiveTaskId] = useState("discuss-plot");
-  const [styleId, setStyleId] = useState("");
+  const [styleIds, setStyleIds] = useState<string[]>([]);
   const [styleRuleChars, setStyleRuleChars] = useState(0);
+  const [stylePreviewRules, setStylePreviewRules] = useState("");
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [previewMessages, setPreviewMessages] = useState<AnyRow[]>([]);
@@ -213,7 +218,7 @@ export function AiPanel({
     api("connections:list").then((r) => r.ok && setConnections(r.data));
     api("prompts:list").then((r) => r.ok && setPrompts(r.data));
     api<StyleCard[]>("ai:styles:list").then((r) => r.ok && setStyleCards(r.data || []));
-    api<any>("ai:style-selection:get", novelId).then((r) => r.ok && setStyleId(r.data?.styleId || ""));
+    api<any>("ai:style-selection:get", novelId).then((r) => r.ok && setStyleIds(r.data?.styleIds || (r.data?.styleId ? [r.data.styleId] : [])));
     api("novels:open", novelId).then(
       (r) => r.ok && setBookChapters(r.data.chapters),
     );
@@ -223,20 +228,23 @@ export function AiPanel({
     const r = await api<StyleCard[]>("ai:styles:list");
     if (r.ok) setStyleCards(r.data || []);
     const selected = await api<any>("ai:style-selection:get", novelId);
-    if (selected.ok) setStyleId(selected.data?.styleId || "");
+    if (selected.ok) setStyleIds(selected.data?.styleIds || (selected.data?.styleId ? [selected.data.styleId] : []));
   }
-  async function selectStyle(next: string) {
-    const r = await api("ai:style-selection:set", { novelId, styleId: next });
-    if (r.ok) setStyleId(next);
+  async function selectStyles(next: string[]) {
+    const r = await api<any>("ai:style-selection:set", { novelId, styleIds: next });
+    if (r.ok) setStyleIds(r.data?.styleIds || next);
     else notify(r.error || tr("写作风格保存失败", "Could not save writing style"));
   }
   useEffect(() => {
     let live = true;
-    api<any>("ai:style:estimate", { styleId, taskKind: mode }).then((r) => {
-      if (live && r.ok) setStyleRuleChars(Number(r.data?.chars || 0));
+    api<any>("ai:style:estimate", { styleIds, taskKind: mode }).then((r) => {
+      if (live && r.ok) {
+        setStyleRuleChars(Number(r.data?.chars || 0));
+        setStylePreviewRules(String(r.data?.instruction || ""));
+      }
     });
     return () => { live = false; };
-  }, [styleId, mode]);
+  }, [styleIds, mode]);
   useEffect(() => {
     const request = sceneDraftRequest;
     if (!request || session?.novelId !== novelId || request.chapterId !== chapterId || consumedSceneDraft.current === request.nonce) return;
@@ -583,7 +591,7 @@ export function AiPanel({
       connectionId: connection,
       prompt: plan.prompt,
       contexts: plan.contexts,
-      styleId,
+      styleIds,
       taskKind: mode,
     });
     if (!r.ok) {
@@ -593,10 +601,12 @@ export function AiPanel({
     } else loadConversations();
   }
   async function verifyAdoptionSource(
+    sourceMessageId: string | null | undefined,
     sourceChapterId: string | null | undefined,
     sourceRevision: number | null | undefined,
     approvedRevision: number | undefined,
-    resume: (revision: number) => void,
+    approvedSourceState: string | undefined,
+    resume: (revision: number, sourceState: string) => void,
   ) {
     if (sourceChapterId && chapter && sourceChapterId !== chapter.id) {
       const sourceTitle = bookChapters.find((item) => item.id === sourceChapterId)?.title || tr("原章节", "source chapter");
@@ -606,19 +616,44 @@ export function AiPanel({
       ));
       return false;
     }
-    if (sourceRevision == null || !chapter) return true;
-    const latest = await api<AnyRow>("chapters:get", chapter.id);
-    if (!latest.ok || !latest.data) {
-      notify(tr("无法核对当前章节版本，未采纳 AI 内容。", "Could not verify the current chapter revision; nothing was adopted."));
+    let currentRevision = Number(chapter?.revision || 0);
+    if (sourceRevision != null && chapter) {
+      const latest = await api<AnyRow>("chapters:get", chapter.id);
+      if (!latest.ok || !latest.data) {
+        notify(tr("无法核对当前章节版本，未采纳 AI 内容。", "Could not verify the current chapter revision; nothing was adopted."));
+        return false;
+      }
+      currentRevision = Number(latest.data.revision ?? chapter.revision);
+      if (currentRevision !== Number(sourceRevision) && approvedRevision !== currentRevision) {
+        setRevisionApproval({
+          chapterTitle: chapter.title,
+          sourceRevision: Number(sourceRevision),
+          currentRevision,
+          resume: () => resume(currentRevision, approvedSourceState || ""),
+        });
+        return false;
+      }
+    }
+    if (!sourceMessageId) return true;
+    const refs = await api<AnyRow[]>("ai:message:contexts", sourceMessageId);
+    if (!refs.ok) {
+      notify(refs.error || tr("无法核对 AI 回复所依据的资料，未采纳。", "Could not verify the AI source materials; nothing was adopted."));
       return false;
     }
-    const currentRevision = Number(latest.data.revision ?? chapter.revision);
-    if (currentRevision === Number(sourceRevision) || approvedRevision === currentRevision) return true;
-    setRevisionApproval({
-      chapterTitle: chapter.title,
-      sourceRevision: Number(sourceRevision),
-      currentRevision,
-      resume: () => resume(currentRevision),
+    const staleRefs = (refs.data || []).filter((item) =>
+      ["changed", "deleted", "missing"].includes(String(item.sourceStatus || "")),
+    );
+    if (!staleRefs.length) return true;
+    const sourceState = JSON.stringify(staleRefs.map((item) => [
+      item.kind, item.sourceId, item.sourceStatus, item.currentDataVersion,
+    ]));
+    if (approvedSourceState === sourceState) return true;
+    setSourceApproval({
+      labels: staleRefs.map((item) => `${item.label || item.kind}（${
+        item.sourceStatus === "changed" ? tr("已更新", "updated") :
+          item.sourceStatus === "deleted" ? tr("已删除", "deleted") : tr("已不存在", "missing")
+      }）`),
+      resume: () => resume(currentRevision, sourceState),
     });
     return false;
   }
@@ -631,10 +666,12 @@ export function AiPanel({
     savedTo?: number | null,
     sourceChapterId?: string,
     approvedRevision?: number,
+    sourceMessageId?: string,
+    approvedSourceState?: string,
   ) {
     if (!editor || !chapter || !content) return;
     if (sourceChapterId && sourceChapterId !== chapter.id) {
-      await verifyAdoptionSource(sourceChapterId, sourceRevision, approvedRevision, () => {});
+      await verifyAdoptionSource(sourceMessageId, sourceChapterId, sourceRevision, approvedRevision, approvedSourceState, () => {});
       return;
     }
     const selected = savedSelection ?? contexts.find((x) => x.kind === "selection")?.content;
@@ -649,8 +686,8 @@ export function AiPanel({
     }
     if (save && !(await save(true)))
       return notify(tr("正文尚未保存，已取消写入 AI 内容", "The manuscript could not be saved, so the AI text was not inserted"));
-    if (!(await verifyAdoptionSource(sourceChapterId, sourceRevision, approvedRevision, (revision) => {
-      void apply(mode, content, sourceRevision, savedSelection, savedFrom, savedTo, sourceChapterId, revision);
+    if (!(await verifyAdoptionSource(sourceMessageId, sourceChapterId, sourceRevision, approvedRevision, approvedSourceState, (revision, sourceState) => {
+      void apply(mode, content, sourceRevision, savedSelection, savedFrom, savedTo, sourceChapterId, revision, sourceMessageId, sourceState);
     }))) return;
     const snapshot = await api("revisions:create", {
       chapterId: chapter.id,
@@ -679,12 +716,14 @@ export function AiPanel({
     sourceRevision?: number,
     sourceChapterId?: string,
     approvedRevision?: number,
+    sourceMessageId?: string,
+    approvedSourceState?: string,
   ) {
     if (!editor || !chapter || !content) return;
     if (save && !(await save(true)))
       return notify(tr("正文尚未保存，已取消追加 AI 内容", "The manuscript could not be saved, so the AI text was not appended"));
-    if (!(await verifyAdoptionSource(sourceChapterId, sourceRevision, approvedRevision, (revision) => {
-      void applyEnd(content, sourceRevision, sourceChapterId, revision);
+    if (!(await verifyAdoptionSource(sourceMessageId, sourceChapterId, sourceRevision, approvedRevision, approvedSourceState, (revision, sourceState) => {
+      void applyEnd(content, sourceRevision, sourceChapterId, revision, sourceMessageId, sourceState);
     }))) return;
     const snapshot = await api("revisions:create", {
       chapterId: chapter.id,
@@ -740,6 +779,9 @@ export function AiPanel({
         ),
         source_chapter_other: Boolean(messageChapterId && chapterId && messageChapterId !== chapterId),
         source_chapter_title: bookChapters.find((item) => item.id === messageChapterId)?.title || "",
+        source_material_stale: Array.isArray(message.source_refs) && message.source_refs.some((source: AnyRow) =>
+          ["changed", "deleted", "missing"].includes(String(source.source_status || "")),
+        ),
       };
     }),
     [messages, chapterId, sourceRevisionNow, bookChapters],
@@ -779,7 +821,7 @@ export function AiPanel({
       conversationId: conversation,
       contexts: plan.contexts,
       prompt: plan.prompt,
-      styleId,
+      styleIds,
       taskKind: mode,
     });
     if (seq !== previewSeq.current) return;
@@ -931,10 +973,10 @@ export function AiPanel({
       applyDisabledReason: replyDisabledReason,
       canAppendToEnd: !float && m.id === continuationId && !sourceChapterMismatch,
       requiresComparison: naturalize,
-      onInsertCursor: () => naturalize ? openComparison() : void apply("insert", m.content, m.source_revision, undefined, undefined, undefined, m.chapter_id),
+      onInsertCursor: () => naturalize ? openComparison() : void apply("insert", m.content, m.source_revision, undefined, undefined, undefined, m.chapter_id, undefined, m.source_message_id),
       onReplaceSelection: () =>
-        naturalize ? openComparison() : void apply("replace", m.content, m.source_revision, m.selection_text || undefined, m.selection_from, m.selection_to, m.chapter_id),
-      onAppendToEnd: () => naturalize ? openComparison() : void applyEnd(m.content, m.source_revision, m.chapter_id),
+        naturalize ? openComparison() : void apply("replace", m.content, m.source_revision, m.selection_text || undefined, m.selection_from, m.selection_to, m.chapter_id, undefined, m.source_message_id),
+      onAppendToEnd: () => naturalize ? openComparison() : void applyEnd(m.content, m.source_revision, m.chapter_id, undefined, m.source_message_id),
       onSegments: () => naturalize ? openComparison() : setSegments({ msg: m }),
       onCompare: openComparison,
       onSaveInspiration: () => {
@@ -1058,8 +1100,10 @@ export function AiPanel({
       <StyleCardPanel
         language={language}
         cards={styleCards}
-        selectedId={styleId}
-        onSelect={selectStyle}
+        selectedIds={styleIds}
+        onSelectionChange={selectStyles}
+        taskKind={mode}
+        previewRules={stylePreviewRules}
         onReload={() => void reloadStyleCards()}
         compact
       />
@@ -1213,6 +1257,15 @@ export function AiPanel({
               {tr("字", "chars")}
             </p>
             <pre>{refPreview.content}</pre>
+            {["changed", "deleted", "missing"].includes(String(refPreview.sourceStatus || "")) && (
+              <div className="zchat-source-stale" role="status">
+                {refPreview.sourceStatus === "changed"
+                  ? tr("生成后此资料已更新；上方内容是生成时保存的快照。", "This material has changed since generation; the text above is the saved snapshot.")
+                  : refPreview.sourceStatus === "deleted"
+                    ? tr("此资料已删除；上方内容是生成时保存的快照。", "This material was deleted; the text above is the saved snapshot.")
+                    : tr("原始资料已不存在；上方内容是生成时保存的快照。", "The original material is missing; the text above is the saved snapshot.")}
+              </div>
+            )}
             {refPreview.sourceId && onNavigateSource && [
               "chapter", "selection", "summary", "continuation", "outline", "scene", "character", "world", "inspiration", "timeline", "foreshadow", "relation",
             ].includes(refPreview.kind) && (
@@ -1248,6 +1301,23 @@ export function AiPanel({
           }}
         />
       )}
+      {sourceApproval && (
+        <ConfirmDialog
+          title={tr("引用资料已变化", "Referenced materials changed")}
+          message={tr(
+            `这条回复所依据的资料在生成后发生了变化：${sourceApproval.labels.join("、")}。请先查看来源快照；若仍要采纳，请确认。`,
+            `Sources used for this reply changed after generation: ${sourceApproval.labels.join(", ")}. Review the saved snapshots; confirm only if you still want to adopt it.`,
+          )}
+          confirmLabel={tr("仍要采纳", "Apply anyway")}
+          cancelLabel={tr("返回检查", "Review first")}
+          onCancel={() => setSourceApproval(null)}
+          onConfirm={() => {
+            const pending = sourceApproval;
+            setSourceApproval(null);
+            pending.resume();
+          }}
+        />
+      )}
       {compare && (
         <DiffModal
           title={tr("对比原文与 AI 建议", "Compare manuscript and AI suggestion")}
@@ -1260,7 +1330,7 @@ export function AiPanel({
           onApply={async () => {
             const msg = compare.msg;
             setCompare(null);
-            await apply("replace", msg.content, msg.source_revision, compare.original, msg.selection_from, msg.selection_to, msg.chapter_id);
+            await apply("replace", msg.content, msg.source_revision, compare.original, msg.selection_from, msg.selection_to, msg.chapter_id, undefined, msg.source_message_id);
           }}
         />
       )}
@@ -1272,7 +1342,7 @@ export function AiPanel({
           onAdopt={async (content, mode) => {
             const msg = segments.msg;
             setSegments(null);
-            await apply(mode, content, msg.source_revision, msg.selection_text || undefined, msg.selection_from, msg.selection_to, msg.chapter_id);
+            await apply(mode, content, msg.source_revision, msg.selection_text || undefined, msg.selection_from, msg.selection_to, msg.chapter_id, undefined, msg.source_message_id);
           }}
           language={language}
         />

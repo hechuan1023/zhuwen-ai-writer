@@ -615,22 +615,26 @@
   padding: 0 10px 0 12px;
   border: 1px solid var(--line);
   border-radius: var(--r-sm, 8px);
-  background: var(--panel-2, var(--paper));
+  background: color-mix(in srgb, var(--panel-2, var(--paper)) 92%, var(--accent-soft, var(--paper)));
   color: var(--ink);
   font-size: 13px;
   line-height: 1.3;
   cursor: pointer;
-  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease), box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
 .zw-select.compact .zw-select-trigger { min-height: 28px; font-size: 12px; }
 .zw-select-trigger:hover:not(:disabled) {
-  border-color: var(--line-strong, var(--line));
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  background: color-mix(in srgb, var(--paper) 88%, var(--accent-soft, var(--panel)));
 }
 .zw-select-trigger.open,
 .zw-select-trigger:focus-visible {
   outline: none;
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
-  box-shadow: var(--focus, 0 0 0 3px var(--accent-soft));
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  box-shadow: var(--focus, 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent));
+}
+.zw-select-trigger:active:not(:disabled) {
+  transform: translateY(1px);
 }
 .zw-select-trigger:disabled {
   opacity: 0.5;
@@ -655,12 +659,12 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--paper) 92%, transparent);
-  box-shadow: var(--shadow, 0 16px 40px rgba(0,0,0,.18)), inset 0 1px 0 rgba(255,255,255,.25);
-  backdrop-filter: blur(var(--glass-blur, 12px)) saturate(1.1);
-  -webkit-backdrop-filter: blur(var(--glass-blur, 12px)) saturate(1.1);
+  border: 1px solid color-mix(in srgb, var(--line) 78%, var(--accent));
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--paper) 96%, transparent);
+  box-shadow: var(--shadow, 0 16px 40px rgba(0,0,0,.18)), 0 2px 8px rgba(31, 36, 32, .06), inset 0 1px 0 rgba(255,255,255,.25);
+  backdrop-filter: blur(var(--glass-blur, 12px)) saturate(1.12);
+  -webkit-backdrop-filter: blur(var(--glass-blur, 12px)) saturate(1.12);
   animation: zw-select-in 140ms var(--ease);
 }
 .zw-select-pop.no-motion { animation: none; }
@@ -697,11 +701,19 @@
   background: var(--panel);
   color: var(--ink);
   font-size: 13px;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.zw-select-search:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  background: var(--paper);
+  box-shadow: var(--focus, 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent));
 }
 .zw-select-list {
   overflow: auto;
   padding: 4px;
   min-height: 0;
+  overscroll-behavior: contain;
 }
 .zw-select-option {
   display: flex;
@@ -715,10 +727,14 @@
   font-size: 13px;
 }
 .zw-select-option.active {
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent-soft, var(--accent)) 76%, var(--paper));
 }
 .zw-select-option.selected {
   font-weight: 600;
+  color: color-mix(in srgb, var(--ink) 78%, var(--accent));
+}
+.zw-select-option.selected .zw-select-check {
+  color: var(--accent);
 }
 .zw-select-option.disabled {
   opacity: 0.45;
@@ -748,6 +764,7 @@
   font-size: 12px;
   text-align: center;
 }
+.reduce-motion .zw-select-trigger { transition: none; }
 .zw-select.combobox { width: 100%; min-width: 0; }
 .zw-select-trigger.input {
   cursor: text;

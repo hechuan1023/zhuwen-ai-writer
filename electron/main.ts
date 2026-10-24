@@ -1033,12 +1033,26 @@ function styleCardRow(id: string) {
   return { ...card, rules: effectiveStyleRules(card) };
 }
 function requestStyle(p: any) {
-  const id = String(p?.styleId || "");
+  const requestedIds = Array.isArray(p?.styleIds)
+    ? p.styleIds
+    : p?.styleId ? [p.styleId] : [];
+  const ids: string[] = [...new Set<string>(requestedIds.map((id: unknown) => String(id || "").trim()).filter((id: string) => Boolean(id)))].slice(0, 6);
   const task = String(p?.taskKind || "chat");
-  const card = styleCardRow(id);
-  if (task === "chat" || task === "check") return { card: null, instruction: "" };
-  const usableCard = card && (card.tasks.includes(task) || task === "polish" || task === "naturalize") ? card : null;
-  return { card: usableCard, instruction: buildTaskAndStyleInstructions(usableCard, task) };
+  const cards = task === "chat" || task === "check"
+    ? []
+    : ids.map((id) => styleCardRow(id)).filter((card: any) =>
+        card && (card.tasks.includes(task) || (task === "naturalize" && card.tasks.includes("polish"))),
+      );
+  const instruction = buildTaskAndStyleInstructions(cards, task);
+  const card = cards.length
+    ? {
+        id: cards[0].id,
+        name: cards.map((item: any) => item.name).join(" + "),
+        version: Math.max(...cards.map((item: any) => Number(item.version || 1))),
+        rules: instruction,
+      }
+    : null;
+  return { card, cards, instruction };
 }
 const ok = <T>(data: T) => ({ ok: true, data });
 const fail = (e: unknown) => ({
@@ -1069,6 +1083,34 @@ async function readImportFile(
 }
 
 function registerIpc(userDir: string) {
+  const librarySourceKinds = new Set([
+    "outline", "scene", "character", "world", "inspiration", "timeline", "foreshadow", "relation",
+  ]);
+  const sourceState = (snapshot: any, novelId: string) => {
+    if (!librarySourceKinds.has(String(snapshot.kind || "")) || !snapshot.source_id)
+      return { ...snapshot, source_status: "untracked", current_data_version: null, current_title: null };
+    const current: any = get(
+      "SELECT title,data_version,deleted_at FROM library_items WHERE id=? AND novel_id=? AND kind=?",
+      snapshot.source_id,
+      novelId,
+      snapshot.kind,
+    );
+    const status = !current
+      ? "missing"
+      : current.deleted_at
+        ? "deleted"
+        : snapshot.source_data_version == null
+          ? "unknown"
+          : Number(current.data_version) !== Number(snapshot.source_data_version)
+            ? "changed"
+            : "current";
+    return {
+      ...snapshot,
+      source_status: status,
+      current_data_version: current ? Number(current.data_version) : null,
+      current_title: current?.title || null,
+    };
+  };
   ipcMain.handle("database:health", () => {
     try {
       db.pragma("wal_checkpoint(PASSIVE)");
@@ -2198,25 +2240,32 @@ function registerIpc(userDir: string) {
   );
   ipcMain.handle("ai:style-selection:get", (_, novelId) => {
     const row: any = get(
-      "SELECT style_id FROM novel_ai_styles WHERE novel_id=?",
+      "SELECT style_id,style_ids_json FROM novel_ai_styles WHERE novel_id=?",
       String(novelId || ""),
     );
-    const card = row?.style_id ? styleCardRow(row.style_id) : null;
-    return ok(card ? { styleId: card.id, card } : { styleId: "", card: null });
+    let styleIds: string[] = [];
+    try { styleIds = JSON.parse(row?.style_ids_json || "[]"); } catch {}
+    if (!styleIds.length && row?.style_id) styleIds = [String(row.style_id)];
+    const cards = [...new Set(styleIds)].map(styleCardRow).filter(Boolean);
+    return ok({ styleIds: cards.map((card: any) => card.id), cards });
   });
   ipcMain.handle("ai:style-selection:set", (_, p) => {
     const novelId = String(p?.novelId || "");
-    const styleId = String(p?.styleId || "");
     if (!get("SELECT id FROM novels WHERE id=?", novelId)) return fail("作品不存在");
-    if (styleId && !styleCardRow(styleId)) return fail("写作风格不存在");
+    const rawIds = Array.isArray(p?.styleIds) ? p.styleIds : p?.styleId ? [p.styleId] : [];
+    const styleIds: string[] = [...new Set<string>(rawIds.map((id: unknown) => String(id || "").trim()).filter((id: string) => Boolean(id)))];
+    if (styleIds.length > 6) return fail("每个作品最多组合 6 张技法卡");
+    const cards = styleIds.map(styleCardRow);
+    if (cards.some((card) => !card)) return fail("写作风格不存在");
+    const styleId = styleIds[0] || "";
     db.prepare(
-      "INSERT INTO novel_ai_styles(novel_id,style_id,updated_at) VALUES(?,?,?) ON CONFLICT(novel_id) DO UPDATE SET style_id=excluded.style_id,updated_at=excluded.updated_at,data_version=data_version+1",
-    ).run(novelId, styleId || null, timestamp());
-    return ok({ styleId, card: styleId ? styleCardRow(styleId) : null });
+      "INSERT INTO novel_ai_styles(novel_id,style_id,updated_at,style_ids_json) VALUES(?,?,?,?) ON CONFLICT(novel_id) DO UPDATE SET style_id=excluded.style_id,style_ids_json=excluded.style_ids_json,updated_at=excluded.updated_at,data_version=data_version+1",
+    ).run(novelId, styleId || null, timestamp(), JSON.stringify(styleIds));
+    return ok({ styleIds, cards });
   });
   ipcMain.handle("ai:style:estimate", (_, p) => {
     const style = requestStyle(p);
-    return ok({ chars: style.instruction.length, styleId: style.card?.id || "", taskKind: p?.taskKind || "chat" });
+    return ok({ chars: style.instruction.length, instruction: style.instruction, styleIds: style.cards.map((card: any) => card.id), styleNames: style.cards.map((card: any) => card.name), taskKind: p?.taskKind || "chat" });
   });
   ipcMain.handle("ai:style:save", (_, p) => {
     const name = String(p?.name || "").trim();
@@ -2227,9 +2276,14 @@ function registerIpc(userDir: string) {
     const old: any = get("SELECT builtin FROM ai_style_cards WHERE id=?", id);
     if (old?.builtin) return fail("内置风格不能直接修改，请先复制为自定义风格");
     const t = timestamp();
+    const taskOptions = new Set(["continue", "polish", "naturalize", "outline"]);
+    const tasks = [...new Set((Array.isArray(p?.tasks) ? p.tasks : ["continue", "polish"])
+      .map((task: unknown) => String(task || ""))
+      .filter((task: string) => taskOptions.has(task)))];
+    if (!tasks.length) return fail("至少为技法卡选择一种适用任务");
     db.prepare(
       "INSERT INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,0,1,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,tasks_json=excluded.tasks_json,rules=excluded.rules,updated_at=excluded.updated_at,data_version=data_version+1",
-    ).run(id, name, String(p?.description || "").slice(0, 240), JSON.stringify(Array.isArray(p?.tasks) ? p.tasks : ["continue", "polish"]), rules, t, t);
+    ).run(id, name, String(p?.description || "").slice(0, 240), JSON.stringify(tasks), rules, t, t);
     return ok({ id });
   });
   ipcMain.handle("ai:style:delete", (_, id) => {
@@ -2237,7 +2291,16 @@ function registerIpc(userDir: string) {
     if (!row) return fail("写作风格不存在");
     if (row.builtin) return fail("内置风格不能删除");
     db.transaction(() => {
-      db.prepare("UPDATE novel_ai_styles SET style_id=NULL,updated_at=? WHERE style_id=?").run(timestamp(), id);
+      const selections: any[] = all("SELECT novel_id,style_id,style_ids_json FROM novel_ai_styles");
+      const update = db.prepare("UPDATE novel_ai_styles SET style_id=?,style_ids_json=?,updated_at=?,data_version=data_version+1 WHERE novel_id=?");
+      for (const selection of selections) {
+        let ids: string[] = [];
+        try { ids = JSON.parse(selection.style_ids_json || "[]"); } catch {}
+        if (!ids.length && selection.style_id) ids = [String(selection.style_id)];
+        const remaining = ids.filter((styleId) => styleId !== String(id));
+        if (remaining.length !== ids.length)
+          update.run(remaining[0] || null, JSON.stringify(remaining), timestamp(), selection.novel_id);
+      }
       db.prepare("DELETE FROM ai_style_cards WHERE id=?").run(id);
     })();
     return ok(true);
@@ -2426,10 +2489,37 @@ function registerIpc(userDir: string) {
       ];
       broadcastSession();
       broadcastConversations(String(p.novelId || aiSession.novelId || ""));
-      for (const x of p.contexts || [])
+      const savedRefs = (p.contexts || []).map((x: any) => {
+        const snapshot = {
+          label: String(x.label || ""),
+          kind: String(x.kind || ""),
+          content: String(x.content || ""),
+          source_id: x.sourceId || null,
+          source_data_version: null as number | null,
+        };
+        if (librarySourceKinds.has(snapshot.kind) && snapshot.source_id) {
+          const source: any = get(
+            "SELECT data_version FROM library_items WHERE id=? AND novel_id=? AND kind=? AND deleted_at IS NULL",
+            snapshot.source_id,
+            String(p.novelId || ""),
+            snapshot.kind,
+          );
+          snapshot.source_data_version = source ? Number(source.data_version) : null;
+        }
         db.prepare(
-          "INSERT INTO message_context_snapshots VALUES(?,?,?,?,?,?,?,1)",
-        ).run(newId(), uid, x.label, x.kind, x.content, x.sourceId || null, t);
+          "INSERT INTO message_context_snapshots(id,message_id,label,kind,content,source_id,created_at,source_data_version) VALUES(?,?,?,?,?,?,?,?)",
+        ).run(newId(), uid, snapshot.label, snapshot.kind, snapshot.content, snapshot.source_id, t, snapshot.source_data_version);
+        return sourceState(snapshot, String(p.novelId || ""));
+      });
+      const liveRefs = savedRefs.map((x: any) => ({
+        label: x.label,
+        kind: x.kind,
+        source_id: x.source_id,
+        source_status: x.source_status,
+        current_data_version: x.current_data_version,
+        current_title: x.current_title,
+      }));
+      for (const message of aiSession.messages.slice(-2)) message.source_refs = liveRefs;
       // 规则只在本次请求的内存快照中加入一次，不写入对话历史，避免逐轮累积。
       const history = withWriterPersona(conversationHistory(conv));
       if (style.instruction) history.splice(1, 0, { role: "system", content: style.instruction });
@@ -2658,7 +2748,7 @@ function registerIpc(userDir: string) {
       const userIds = rows.filter((row) => row.role === "user").map((row) => row.id);
       const snapshots: any[] = userIds.length
         ? all(
-            `SELECT message_id,label,kind,source_id FROM message_context_snapshots WHERE message_id IN (${userIds.map(() => "?").join(",")}) ORDER BY created_at,rowid`,
+            `SELECT message_id,label,kind,source_id,source_data_version FROM message_context_snapshots WHERE message_id IN (${userIds.map(() => "?").join(",")}) ORDER BY created_at,rowid`,
             ...userIds,
           )
         : [];
@@ -2666,7 +2756,14 @@ function registerIpc(userDir: string) {
       for (const snapshot of snapshots) {
         refsByMessage.set(snapshot.message_id, [
           ...(refsByMessage.get(snapshot.message_id) || []),
-          { label: snapshot.label, kind: snapshot.kind, source_id: snapshot.source_id },
+          ((source) => ({
+            label: source.label,
+            kind: source.kind,
+            source_id: source.source_id,
+            source_status: source.source_status,
+            current_data_version: source.current_data_version,
+            current_title: source.current_title,
+          }))(sourceState(snapshot, String(aiSession.novelId || ""))),
         ]);
       }
       let lastSourceMessageId = "";
@@ -2704,9 +2801,21 @@ function registerIpc(userDir: string) {
       return fail("引用快照不存在或不属于当前作品");
     return ok(
       all(
-        "SELECT label,kind,content,source_id AS sourceId FROM message_context_snapshots WHERE message_id=? ORDER BY created_at,rowid",
+        "SELECT label,kind,content,source_id AS sourceId,source_data_version AS sourceDataVersion FROM message_context_snapshots WHERE message_id=? ORDER BY created_at,rowid",
         row.id,
-      ),
+      ).map((snapshot: any) => {
+        const state = sourceState({
+          ...snapshot,
+          source_id: snapshot.sourceId,
+          source_data_version: snapshot.sourceDataVersion,
+        }, String(row.novel_id));
+        return {
+          ...snapshot,
+          sourceStatus: state.source_status,
+          currentDataVersion: state.current_data_version,
+          currentTitle: state.current_title,
+        };
+      }),
     );
   });
   ipcMain.handle("ai:float:open", () => {
@@ -3260,11 +3369,15 @@ function buildBackup(novelId: string) {
         ...messageIds,
       )
     : [];
-  const selectedStyle: any = get("SELECT style_id FROM novel_ai_styles WHERE novel_id=?", novelId);
-  bundle.styleSelection = selectedStyle?.style_id || "";
-  bundle.styleCards = selectedStyle?.style_id
-    ? all("SELECT * FROM ai_style_cards WHERE id=? AND builtin=0", selectedStyle.style_id)
-    : [];
+  const selectedStyle: any = get("SELECT style_id,style_ids_json FROM novel_ai_styles WHERE novel_id=?", novelId);
+  let styleIds: string[] = [];
+  try { styleIds = JSON.parse(selectedStyle?.style_ids_json || "[]"); } catch {}
+  if (!styleIds.length && selectedStyle?.style_id) styleIds = [String(selectedStyle.style_id)];
+  bundle.styleSelection = [...new Set(styleIds)];
+  bundle.styleCards = bundle.styleSelection.flatMap((id: string) => {
+    const card = get("SELECT * FROM ai_style_cards WHERE id=? AND builtin=0", id);
+    return card ? [card] : [];
+  });
   bundle.checksum = createHash("sha256")
     .update(JSON.stringify(bundle))
     .digest("hex");
@@ -3456,14 +3569,14 @@ function restoreBackupAsCopy(b: any) {
             null,
           x.created_at || t,
         );
-    let restoredStyleId = String(b.styleSelection || "");
-    if (Array.isArray(b.styleCards) && b.styleCards.length) {
-      const source = b.styleCards[0];
-      restoredStyleId = newId();
+    const restoredStyles = new Map<string, string>();
+    for (const source of b.styleCards || []) {
+      if (!source?.id || restoredStyles.has(String(source.id))) continue;
+      const restoredId = newId();
       db.prepare(
         "INSERT INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,0,1,?,?)",
       ).run(
-        restoredStyleId,
+        restoredId,
         source.name,
         source.description || "",
         source.tasks_json || "[]",
@@ -3471,11 +3584,17 @@ function restoreBackupAsCopy(b: any) {
         t,
         t,
       );
-    } else if (restoredStyleId && !styleCardRow(restoredStyleId)) {
-      restoredStyleId = "";
+      restoredStyles.set(String(source.id), restoredId);
     }
-    if (restoredStyleId)
-      db.prepare("INSERT INTO novel_ai_styles(novel_id,style_id,updated_at) VALUES(?,?,?)").run(novelId, restoredStyleId, t);
+    const sourceSelection = Array.isArray(b.styleSelection)
+      ? b.styleSelection.map((id: unknown) => String(id || ""))
+      : b.styleSelection ? [String(b.styleSelection)] : [];
+    const restoredStyleIds: string[] = [...new Set<string>(sourceSelection.map((id: string) =>
+      restoredStyles.get(id) || (styleCardRow(id) ? id : ""),
+    ).filter((id: string): id is string => Boolean(id)))].slice(0, 6);
+    if (restoredStyleIds.length)
+      db.prepare("INSERT INTO novel_ai_styles(novel_id,style_id,updated_at,style_ids_json) VALUES(?,?,?,?)")
+        .run(novelId, restoredStyleIds[0], t, JSON.stringify(restoredStyleIds));
     return novelId;
   })();
 }

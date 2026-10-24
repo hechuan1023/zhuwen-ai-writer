@@ -1103,10 +1103,20 @@
 .zchat-style-list > button { flex-direction: column; align-items: flex-start; }
 .zchat-style-list b, .zchat-style-list small { min-width: 0; }
 .zchat-style-list small { color: var(--muted); line-height: 1.45; }
-.zchat-style-row > button:first-child { min-width: 0; flex: 1; display: grid; gap: 3px; text-align: left; background: transparent; border: 0; }
+.zchat-style-row > .zchat-style-select { min-width: 0; flex: 1; display: flex; align-items: flex-start; gap: 8px; text-align: left; background: transparent; border: 0; }
+.zchat-style-copy { min-width: 0; flex: 1; display: grid; gap: 3px; }
+.zchat-style-check { flex: none; width: 18px; color: var(--accent); font-weight: 700; }
+.zchat-style-tasks { font-size: 10px; }
 .zchat-style-row-actions { display: flex; gap: 3px; flex: none; }
 .zchat-style-row-actions button { width: 28px; min-width: 28px; height: 28px; padding: 0; display: grid; place-items: center; }
 .zchat-style-rules { max-height: 48vh; overflow: auto; padding: 10px; border: 1px solid var(--line); border-radius: 8px; white-space: pre-wrap; font: inherit; line-height: 1.6; background: var(--panel); }
+.zchat-style-preview { margin: 12px 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--panel) 55%, var(--paper)); }
+.zchat-style-preview header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; font-size: 12px; }
+.zchat-style-preview header small { color: var(--muted); font-size: 10px; }
+.zchat-style-preview pre { max-height: 22vh; overflow: auto; margin: 0; white-space: pre-wrap; font: 11px/1.55 var(--font-ui, sans-serif); }
 .zchat-style-editor { display: grid; gap: 12px; }
 .zchat-style-editor label { display: grid; gap: 5px; font-size: 12px; }
 .zchat-style-editor textarea { resize: vertical; line-height: 1.55; }
+.zchat-style-task-options { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 0; padding: 8px 10px 10px; border: 1px solid var(--line); border-radius: 9px; }
+.zchat-style-task-options legend { padding: 0 5px; color: var(--muted); font-size: 11px; }
+.zchat-style-task-options label { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }

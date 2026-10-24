@@ -269,7 +269,16 @@ export function MessageList({
                     <button
                       type="button"
                       key={`${source.kind}:${source.source_id || sourceIndex}`}
-                      title={tr("查看本次请求保存的来源快照", "View the source snapshot saved with this request")}
+                      title={tr(
+                        source.source_status === "changed" ? "资料已更新 · 查看请求时快照" :
+                          source.source_status === "deleted" ? "资料已删除 · 查看请求时快照" :
+                            source.source_status === "missing" ? "原资料不存在 · 查看请求时快照" :
+                              "查看本次请求保存的来源快照",
+                        source.source_status === "changed" ? "Material changed · view request snapshot" :
+                          source.source_status === "deleted" ? "Material deleted · view request snapshot" :
+                            source.source_status === "missing" ? "Original missing · view request snapshot" :
+                              "View the source snapshot saved with this request",
+                      )}
                       onClick={() => onOpenSource?.(String(m.source_message_id || ""), source)}
                     >
                       <IconQuote />
@@ -281,6 +290,11 @@ export function MessageList({
               {!isUser && m.source_stale && (
                 <div className="zchat-source-stale" role="status">
                   {tr("生成后正文有更新 · 采纳前请核对", "Manuscript changed since generation · review before adopting")}
+                </div>
+              )}
+              {!isUser && m.source_material_stale && (
+                <div className="zchat-source-stale" role="status">
+                  {tr("引用资料生成后已变化 · 查看来源快照，采纳前需确认", "A referenced material changed after generation · review the source snapshot before adopting")}
                 </div>
               )}
               {!isUser && m.source_chapter_other && (

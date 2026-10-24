@@ -28,20 +28,29 @@ function taskLabel(task: string, language: string) {
 export function StyleCardPanel({
   language,
   cards,
-  selectedId,
-  onSelect,
+  selectedIds,
+  onSelectionChange,
+  taskKind,
+  previewRules,
   onReload,
   compact = false,
 }: {
   language: string;
   cards: StyleCard[];
-  selectedId: string;
-  onSelect: (id: string) => void;
+  selectedIds: string[];
+  onSelectionChange: (ids: string[]) => void;
+  taskKind: string;
+  previewRules: string;
   onReload: () => void;
   compact?: boolean;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
-  const selected = cards.find((x) => x.id === selectedId);
+  const selected = cards.filter((x) => selectedIds.includes(x.id));
+  const selectedLabel = selected.length === 0
+    ? tr("不使用风格", "No style")
+    : selected.length === 1
+      ? styleLabel(selected[0], language).name
+      : tr(`组合 ${selected.length} 种技法`, `${selected.length} techniques`);
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<StyleCard | null>(null);
   const [edit, setEdit] = useState<StyleCard | null>(null);
@@ -52,35 +61,45 @@ export function StyleCardPanel({
     label: styleLabel(card, language).name,
     hint: card.builtin ? tr("内置", "Built-in") : tr("自定义", "Custom"),
     icon: <IconSparkle />,
+    selected: selectedIds.includes(card.id),
     onSelect: () => {
-      onSelect(card.id);
-      setOpen(false);
+      onSelectionChange(selectedIds.includes(card.id)
+        ? selectedIds.filter((id) => id !== card.id)
+        : [...selectedIds, card.id]);
     },
   }));
+  const appliesToTask = (card: StyleCard) =>
+    taskKind !== "chat" && taskKind !== "check" &&
+    (card.tasks.includes(taskKind) || (taskKind === "naturalize" && card.tasks.includes("polish")));
   return (
     <div className="zchat-style-entry" data-fd-id="ai-style-entry">
       <ChatMenu
         ariaLabel={tr("写作风格", "Writing style")}
         dataFdId="ai-style-menu"
-        trigger={<><IconSparkle /><span className="zchat-ellipsis">{selected ? styleLabel(selected, language).name : tr("不使用风格", "No style")}</span><IconChevronDown size={13} /></>}
+        trigger={<><IconSparkle /><span className="zchat-ellipsis">{selectedLabel}</span><IconChevronDown size={13} /></>}
         triggerClassName="zchat-pill wide"
         items={[
-          { id: "style-none", label: tr("不使用风格卡", "No style card"), onSelect: () => { onSelect(""); setOpen(false); } },
+          { id: "style-none", label: tr("不使用风格卡", "No style card"), selected: selectedIds.length === 0, onSelect: () => onSelectionChange([]) },
           ...items,
           { id: "style-details", label: tr("查看与管理风格卡", "View and manage style cards"), onSelect: () => setOpen(true) },
         ]}
       />
       {open && (
         <Modal title={tr("AI 写作风格", "AI writing styles")} close={() => setOpen(false)}>
-          <p className="hint">{tr("帮助保持叙事与人物表达的一致性，减少重复套路。效果会随模型和上下文而变化。", "Helps keep narrative and character expression consistent and reduce repeated patterns. Results vary with the model and context.")}</p>
+          <p className="hint">{tr("可组合多张技法卡。每张卡按其适用任务生效；普通聊天和逻辑检查不会注入写作风格。", "Combine techniques. Each card applies only to its enabled writing tasks; normal chat and logic checks do not receive style rules.")}</p>
+          <section className="zchat-style-preview" data-fd-id="ai-style-composition-preview">
+            <header><b>{tr("本任务实际注入规则", "Rules applied to this task")}</b><small>{taskLabel(taskKind, language)}</small></header>
+            <pre>{previewRules || tr("当前任务不注入写作风格规则。", "No style rules are added for this task.")}</pre>
+          </section>
           <div className="zchat-style-list">
-            <button type="button" className={!selectedId ? "active" : ""} onClick={() => { onSelect(""); setOpen(false); }}>
+            <button type="button" className={!selectedIds.length ? "active" : ""} onClick={() => onSelectionChange([])}>
               <b>{tr("不使用风格卡", "No style card")}</b><small>{tr("恢复现有行为，不向普通聊天添加正文规则。", "Keep existing behavior; no writing rules are added to normal chat.")}</small>
             </button>
             {cards.map((card) => (
-              <div className={`zchat-style-row ${card.id === selectedId ? "active" : ""}`} key={card.id}>
-                <button type="button" onClick={() => { onSelect(card.id); setOpen(false); }}>
-                  <b>{styleLabel(card, language).name}</b><small>{styleLabel(card, language).description}</small>
+              <div className={`zchat-style-row ${selectedIds.includes(card.id) ? "active" : ""}`} key={card.id}>
+                <button type="button" className="zchat-style-select" aria-pressed={selectedIds.includes(card.id)} onClick={() => onSelectionChange(selectedIds.includes(card.id) ? selectedIds.filter((id) => id !== card.id) : [...selectedIds, card.id])}>
+                  <span className="zchat-style-check" aria-hidden="true">{selectedIds.includes(card.id) ? "✓" : "○"}</span>
+                  <span className="zchat-style-copy"><b>{styleLabel(card, language).name}</b><small>{styleLabel(card, language).description}</small><small className="zchat-style-tasks">{tr("适用：", "Tasks: ")}{card.tasks.map((x) => taskLabel(x, language)).join(language === "en" ? ", " : "、")}{!appliesToTask(card) ? ` · ${tr("当前任务不生效", "inactive for this task")}` : ` · ${tr("当前任务生效", "active for this task")}`}</small></span>
                 </button>
                 <div className="zchat-style-row-actions">
                   <button type="button" title={tr("查看规则", "View rules")} onClick={() => setDetail(card)}>⌄</button>
@@ -104,10 +123,17 @@ export function StyleCardPanel({
 
 function StyleEditor({ card, language, onCancel, onSaved, onError }: { card: StyleCard; language: string; onCancel: () => void; onSaved: () => void; onError: (s: string) => void }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
+  const taskOptions: [string, string, string][] = [
+    ["continue", "续写", "Continuation"],
+    ["polish", "润色", "Polish"],
+    ["naturalize", "自然化润色", "Naturalize"],
+    ["outline", "构思 / 起草", "Outline / Draft"],
+  ];
   const [name, setName] = useState(card.name);
   const [description, setDescription] = useState(card.description || "");
   const [rules, setRules] = useState(card.rules || "");
+  const [tasks, setTasks] = useState(card.tasks.filter((task) => taskOptions.some(([id]) => id === task)));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  return <Modal title={tr("编辑写作风格", "Edit writing style")} close={onCancel}><div className="zchat-style-editor"><label>{tr("名称", "Name")}<input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></label><label>{tr("说明", "Description")}<input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={240} /></label><label>{tr("规则", "Rules")}<textarea value={rules} onChange={(e) => setRules(e.target.value)} maxLength={20000} rows={12} /></label></div>{error && <p className="hint error">{error}</p>}<div className="row end"><button type="button" onClick={onCancel} disabled={saving}>{tr("取消", "Cancel")}</button><button type="button" className="primary" disabled={saving || !name.trim() || !rules.trim()} onClick={async () => { setSaving(true); setError(""); const r = await api("ai:style:save", { id: card.id || undefined, name: name.trim(), description: description.trim(), rules: rules.trim(), tasks: card.tasks }); setSaving(false); if (r.ok) onSaved(); else { const message = r.error || tr("保存失败", "Save failed"); setError(message); onError(message); } }}>{saving ? tr("保存中…", "Saving…") : tr("保存", "Save")}</button></div></Modal>;
+  return <Modal title={tr("编辑写作风格", "Edit writing style")} close={onCancel}><div className="zchat-style-editor"><label>{tr("名称", "Name")}<input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></label><label>{tr("说明", "Description")}<input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={240} /></label><fieldset className="zchat-style-task-options"><legend>{tr("适用任务", "Apply to tasks")}</legend>{taskOptions.map(([id, zh, en]) => <label key={id}><input type="checkbox" checked={tasks.includes(id)} onChange={(event) => setTasks((current) => event.target.checked ? [...current, id] : current.filter((task) => task !== id))} />{tr(zh, en)}</label>)}</fieldset><label>{tr("规则", "Rules")}<textarea value={rules} onChange={(e) => setRules(e.target.value)} maxLength={20000} rows={12} /></label></div>{error && <p className="hint error">{error}</p>}<div className="row end"><button type="button" onClick={onCancel} disabled={saving}>{tr("取消", "Cancel")}</button><button type="button" className="primary" disabled={saving || !name.trim() || !rules.trim() || !tasks.length} onClick={async () => { setSaving(true); setError(""); const r = await api("ai:style:save", { id: card.id || undefined, name: name.trim(), description: description.trim(), rules: rules.trim(), tasks }); setSaving(false); if (r.ok) onSaved(); else { const message = r.error || tr("保存失败", "Save failed"); setError(message); onError(message); } }}>{saving ? tr("保存中…", "Saving…") : tr("保存", "Save")}</button></div></Modal>;
 }

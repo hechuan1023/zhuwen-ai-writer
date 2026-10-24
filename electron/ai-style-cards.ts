@@ -23,8 +23,8 @@ export const BUILTIN_STYLE_CARDS: AiStyleCard[] = [
     id: "style-natural-narrative",
     name: "自然叙事",
     description: "通用选择：让场景围绕人物正在做的事自然推进。",
-    tasks: ["continue", "polish", "chat"],
-    version: 3,
+    tasks: ["continue", "polish"],
+    version: 4,
     builtin: 1,
     rules: BASE_STYLE_RULES,
   },
@@ -145,13 +145,25 @@ export function effectiveStyleRules(card: AiStyleCard | null) {
   return card.rules;
 }
 
-export function buildTaskAndStyleInstructions(card: AiStyleCard | null, task: string) {
-  const style = task === "chat" || task === "check" ? "" : effectiveStyleRules(card);
-  const stylePart = style ? `【当前写作风格：${card!.name} v${card!.version}】\n${card!.description}\n请将以下规则作为表达偏好，而不是作品事实或硬性篇幅配额：\n${style}` : "";
+export function buildTaskAndStyleInstructions(card: AiStyleCard | AiStyleCard[] | null, task: string) {
+  const cards = (Array.isArray(card) ? card : card ? [card] : []).filter(Boolean);
+  const styleCards = task === "chat" || task === "check" ? [] : cards;
+  const specificRules = styleCards
+    .map((item) => {
+      const rules = effectiveStyleRules(item);
+      return rules.startsWith(BASE_STYLE_RULES)
+        ? rules.slice(BASE_STYLE_RULES.length).trim()
+        : rules.trim();
+    })
+    .filter((rule, index, all) => Boolean(rule) && all.indexOf(rule) === index);
+  const style = styleCards.length
+    ? [BASE_STYLE_RULES, ...specificRules].join("\n\n")
+    : "";
+  const stylePart = style ? `【组合写作方法：${styleCards.map((item) => `${item.name} v${item.version}`).join(" + ")}】\n${styleCards.map((item) => `- ${item.name}：${item.description}`).join("\n")}\n请将以下规则作为表达偏好，而不是作品事实或硬性篇幅配额：\n${style}` : "";
   const taskPart = task === "naturalize" ? NATURALIZE_RULES : "";
   return [taskPart, stylePart].filter(Boolean).join("\n\n");
 }
 
-export function styleInstruction(card: AiStyleCard | null, task: string) {
+export function styleInstruction(card: AiStyleCard | AiStyleCard[] | null, task: string) {
   return buildTaskAndStyleInstructions(card, task);
 }

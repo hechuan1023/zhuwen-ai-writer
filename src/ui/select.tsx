@@ -82,9 +82,11 @@ export function Select({
     );
   }, [options, searchable, query]);
 
-  const enabledIndexes = filtered
-    .map((o, i) => (o.disabled ? -1 : i))
-    .filter((i) => i >= 0);
+  const enabledIndexes = useMemo(
+    () => filtered.map((o, i) => (o.disabled ? -1 : i)).filter((i) => i >= 0),
+    [filtered],
+  );
+  const selectedIndex = filtered.findIndex((o) => o.value === value && !o.disabled);
 
   const place = useCallback(() => {
     const el = triggerRef.current;
@@ -114,11 +116,10 @@ export function Select({
   const openMenu = useCallback(() => {
     if (disabled) return;
     place();
-    const idx = Math.max(0, filtered.findIndex((o) => o.value === value));
-    setActiveIndex(idx >= 0 ? idx : 0);
+    setActiveIndex(selectedIndex >= 0 ? selectedIndex : enabledIndexes[0] ?? 0);
     setQuery("");
     setOpen(true);
-  }, [disabled, place, filtered, value]);
+  }, [disabled, place, filtered, selectedIndex, enabledIndexes]);
 
   const close = useCallback(
     (restoreFocus = true) => {
@@ -160,32 +161,23 @@ export function Select({
         return;
       }
       const list = filtered;
-      if (!list.length) return;
+      if (!enabledIndexes.length) return;
       const move = (dir: 1 | -1) => {
         e.preventDefault();
-        let i = activeIndex;
-        for (let n = 0; n < list.length; n++) {
-          i = (i + dir + list.length) % list.length;
-          if (!list[i].disabled) break;
-        }
+        const current = enabledIndexes.indexOf(activeIndex);
+        const position = current < 0 ? (dir > 0 ? -1 : 0) : current;
+        const i = enabledIndexes[(position + dir + enabledIndexes.length) % enabledIndexes.length];
         setActiveIndex(i);
-        listRef.current
-          ?.querySelector<HTMLElement>(`[data-index="${i}"]`)
-          ?.scrollIntoView({ block: "nearest" });
+        document.getElementById(`${listboxId}-option-${i}`)?.scrollIntoView({ block: "nearest" });
       };
       if (e.key === "ArrowDown") move(1);
       else if (e.key === "ArrowUp") move(-1);
       else if (e.key === "Home") {
         e.preventDefault();
-        const i = list.findIndex((o) => !o.disabled);
-        if (i >= 0) setActiveIndex(i);
+        setActiveIndex(enabledIndexes[0]);
       } else if (e.key === "End") {
         e.preventDefault();
-        for (let i = list.length - 1; i >= 0; i--)
-          if (!list[i].disabled) {
-            setActiveIndex(i);
-            break;
-          }
+        setActiveIndex(enabledIndexes[enabledIndexes.length - 1]);
       } else if (e.key === "Enter" || e.key === " ") {
         if (searchable && e.key === " " && document.activeElement === searchRef.current)
           return;
@@ -202,8 +194,7 @@ export function Select({
         typeahead.current.at = now;
         const i = list.findIndex(
           (o) =>
-            !o.disabled &&
-            o.label.toLowerCase().startsWith(typeahead.current.buffer),
+            !o.disabled && o.label.toLowerCase().startsWith(typeahead.current.buffer),
         );
         if (i >= 0) setActiveIndex(i);
       }
@@ -220,10 +211,12 @@ export function Select({
       document.removeEventListener("keydown", onKey, true);
       scroller?.removeEventListener("scroll", onScroll, true);
     };
-  }, [open, activeIndex, filtered, onValueChange, close, place, searchable]);
+  }, [open, activeIndex, filtered, enabledIndexes, listboxId, onValueChange, close, place, searchable]);
 
   useEffect(() => {
-    if (open && searchable) searchRef.current?.focus();
+    if (!open) return;
+    if (searchable) searchRef.current?.focus();
+    else listRef.current?.focus();
   }, [open, searchable]);
 
   return (
@@ -262,10 +255,6 @@ export function Select({
       </button>
       {open && rect && (
         <div
-          ref={listRef}
-          role="listbox"
-          id={listboxId}
-          aria-labelledby={id}
           className={`zw-select-pop ${reducedMotion ? "no-motion" : ""}`}
           style={{
             position: "fixed",
@@ -280,15 +269,36 @@ export function Select({
             <input
               ref={searchRef}
               className="zw-select-search"
+              role="combobox"
+              aria-label={rest["aria-label"]}
+              aria-expanded={open}
+              aria-controls={listboxId}
+              aria-autocomplete="list"
+              aria-activedescendant={filtered[activeIndex] && !filtered[activeIndex].disabled ? `${listboxId}-option-${activeIndex}` : undefined}
               placeholder="搜索…"
               value={query}
               onChange={(e) => {
-                setQuery(e.target.value);
-                setActiveIndex(0);
+                const nextQuery = e.target.value;
+                const q = nextQuery.trim().toLowerCase();
+                const next = !q ? options : options.filter((o) =>
+                  o.label.toLowerCase().includes(q) ||
+                  o.hint?.toLowerCase().includes(q) ||
+                  o.value.toLowerCase().includes(q),
+                );
+                setQuery(nextQuery);
+                setActiveIndex(Math.max(0, next.findIndex((option) => !option.disabled)));
               }}
             />
           )}
-          <div className="zw-select-list">
+          <div
+            ref={listRef}
+            className="zw-select-list"
+            role="listbox"
+            id={listboxId}
+            aria-labelledby={id}
+            tabIndex={searchable ? undefined : 0}
+            aria-activedescendant={!searchable && filtered[activeIndex] && !filtered[activeIndex].disabled ? `${listboxId}-option-${activeIndex}` : undefined}
+          >
             {filtered.length === 0 && (
               <div className="zw-select-empty" role="presentation">
                 无匹配项
@@ -297,6 +307,7 @@ export function Select({
             {filtered.map((o, i) => (
               <div
                 key={o.value === "" ? "__empty" : o.value}
+                id={`${listboxId}-option-${i}`}
                 role="option"
                 data-index={i}
                 aria-selected={o.value === value}
