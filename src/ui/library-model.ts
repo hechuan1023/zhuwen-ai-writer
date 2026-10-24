@@ -20,6 +20,9 @@ export function libraryContentToEditor(row: {
     next.to = c.to ?? "";
     next.label = next.body;
   }
+  if (kind === "scene") {
+    next.plotlinesText = Array.isArray(c.plotlines) ? c.plotlines.join("，") : String(c.plotlines || "");
+  }
   if (!next.tagsText) next.tagsText = parseTags(row.tags_json || "[]");
   return next;
 }
@@ -48,6 +51,11 @@ export function editorToLibraryContent(kind: string, editing: any): any {
       coolPoint: editing.coolPoint || "",
       cast: editing.cast || "",
       pov: String(editing.pov || "").trim().slice(0, 120),
+      plotlines: [...new Set(String(editing.plotlinesText ?? editing.plotlines ?? "")
+        .split(/[,，、;；\n]+/)
+        .map((value) => value.trim().slice(0, 80))
+        .filter(Boolean))]
+        .slice(0, 20),
       when: editing.when || "",
     };
   if (kind === "relation")
@@ -115,6 +123,7 @@ export function normalizeLibraryDraft(kind: string, d: any) {
     coolPoint: String(d.coolPoint || ""),
     cast: String(d.cast || ""),
     pov: String(d.pov || ""),
+    plotlinesText: String(d.plotlinesText ?? (Array.isArray(d.plotlines) ? d.plotlines.join("，") : d.plotlines || "")),
     alias: String(d.alias || ""),
     appearance: String(d.appearance || ""),
     personality: String(d.personality || ""),

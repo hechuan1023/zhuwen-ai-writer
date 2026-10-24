@@ -76,10 +76,46 @@ button:disabled {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-ink, white);
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--accent) 18%, transparent);
 }
-.primary:hover {
+.primary:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 88%, black);
   border-color: color-mix(in srgb, var(--accent) 88%, black);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 24%, transparent);
+  transform: translateY(-1px);
+}
+.secondary {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft, var(--accent)) 62%, var(--paper));
+  color: color-mix(in srgb, var(--ink) 76%, var(--accent));
+}
+button.secondary:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft, var(--accent)) 88%, var(--paper));
+}
+button.icon {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-color: transparent;
+  border-radius: var(--r-sm, 8px);
+  background: transparent;
+  color: var(--muted);
+  line-height: 1;
+}
+button.icon:not(.danger-text):not(:disabled):hover {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  color: var(--ink);
+}
+button.icon.danger-text:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--danger) 18%, transparent);
+  background: var(--danger-soft, color-mix(in srgb, var(--danger) 10%, transparent));
+  color: var(--danger);
 }
 button.danger:not(:disabled):hover {
   background: color-mix(in srgb, var(--danger) 88%, black);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterScenesByPov, groupScenesForTimeline, scenePovOptions } from "../src/ui/scene-planner-model";
+import { buildPlotlineMatrix, filterScenesByPov, filterScenesByTrack, groupScenesForTimeline, scenePovOptions, scenePlotlines, sceneTags, sceneTrackOptions } from "../src/ui/scene-planner-model";
 
 describe("scene timeline ordering", () => {
   it("uses chapter order and preserves saved scene order without parsing free-text time labels", () => {
@@ -49,5 +49,50 @@ describe("scene POV filters", () => {
     expect(filterScenesByPov(scenes, "顾行舟").map((scene) => scene.id)).toEqual(["b"]);
     expect(filterScenesByPov(scenes, "__unassigned__").map((scene) => scene.id)).toEqual(["d"]);
     expect(filterScenesByPov(scenes, "all")).toHaveLength(4);
+  });
+});
+
+describe("scene label filters", () => {
+  const scenes = [
+    { id: "a", tags_json: '["复仇"]', content_json: JSON.stringify({ plotlines: ["复仇主线"] }) },
+    { id: "b", tags_json: '["宗门暗线"]', content_json: JSON.stringify({ plotlines: ["复仇主线", "家族支线"] }) },
+    { id: "c", tags_json: "[]" },
+  ];
+
+  it("keeps explicit plotlines distinct from generic tags and handles legacy text", () => {
+    expect(sceneTags({ tags_json: "宗门暗线，宗门暗线;复仇" })).toEqual(["宗门暗线", "复仇"]);
+    expect(scenePlotlines({ content_json: JSON.stringify({ plotlines: ["复仇主线", "复仇主线"] }) })).toEqual(["复仇主线"]);
+    expect(sceneTrackOptions(scenes)).toEqual([
+      { value: "plotline:复仇主线", kind: "plotline", label: "复仇主线", count: 2 },
+      { value: "tag:复仇", kind: "tag", label: "复仇", count: 1 },
+      { value: "tag:宗门暗线", kind: "tag", label: "宗门暗线", count: 1 },
+      { value: "plotline:家族支线", kind: "plotline", label: "家族支线", count: 1 },
+    ]);
+  });
+
+  it("filters plotlines separately from tags and includes scenes without either label", () => {
+    expect(filterScenesByTrack(scenes, "plotline:复仇主线").map((scene) => scene.id)).toEqual(["a", "b"]);
+    expect(filterScenesByTrack(scenes, "tag:宗门暗线").map((scene) => scene.id)).toEqual(["b"]);
+    expect(filterScenesByTrack(scenes, "__unlabeled__").map((scene) => scene.id)).toEqual(["c"]);
+    expect(filterScenesByTrack(scenes, "all")).toHaveLength(3);
+  });
+});
+
+describe("plotline matrix", () => {
+  it("groups assigned scenes by chapter and explicit plotline while retaining empty rows", () => {
+    const result = buildPlotlineMatrix(
+      [{ id: "ch1" }, { id: "ch2" }, { id: "ch3" }],
+      [
+        { id: "s1", chapter_id: "ch1", content_json: JSON.stringify({ plotlines: ["主线"] }) },
+        { id: "s2", chapter_id: "ch1", content_json: JSON.stringify({ plotlines: ["支线", "主线"] }) },
+        { id: "s3", chapter_id: "ch2", content_json: JSON.stringify({ plotlines: ["支线"] }) },
+        { id: "orphan", chapter_id: "deleted", content_json: JSON.stringify({ plotlines: ["旧线"] }) },
+      ],
+    );
+    expect(result.plotlines).toEqual(["主线", "支线"]);
+    expect(result.rows.map((row) => row.chapter.id)).toEqual(["ch1", "ch2", "ch3"]);
+    expect(result.rows[0].scenesByPlotline["主线"].map((scene) => scene.id)).toEqual(["s1", "s2"]);
+    expect(result.rows[1].scenesByPlotline["主线"]).toEqual([]);
+    expect(result.rows[2].scenesByPlotline["支线"]).toEqual([]);
   });
 });

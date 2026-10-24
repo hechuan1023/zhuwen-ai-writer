@@ -1101,16 +1101,6 @@ export function AiPanel({
           />
         }
       />
-      <StyleCardPanel
-        language={language}
-        cards={styleCards}
-        selectedIds={styleIds}
-        onSelectionChange={selectStyles}
-        taskKind={mode}
-        previewRules={stylePreviewRules}
-        onReload={() => void reloadStyleCards()}
-        compact
-      />
       <Composer
         language={language}
         float={float}
@@ -1147,6 +1137,18 @@ export function AiPanel({
         contextPercent={contextPercent}
         contextLimitLabel={tr("/30万", "/300k")}
         onOpenContext={() => void openContext()}
+        styleControl={
+          <StyleCardPanel
+            language={language}
+            cards={styleCards}
+            selectedIds={styleIds}
+            onSelectionChange={selectStyles}
+            taskKind={mode}
+            previewRules={stylePreviewRules}
+            onReload={() => void reloadStyleCards()}
+            compact
+          />
+        }
         autoRefNotice={
           mode === "continue"
             ? tr(

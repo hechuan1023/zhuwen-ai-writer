@@ -60,7 +60,7 @@ function contextContent(item: Material, maxChars = 6000, chapterTitles: Record<s
   const fields: Record<string, string[]> = {
     character: ["alias", "body", "goal", "motive", "conflict", "personality", "speech", "knowledge", "taboo", "checklist"],
     world: ["category", "alias", "body"],
-    scene: ["when", "pov", "plotRole", "cast", "coolPoint", "hook", "body"],
+    scene: ["when", "pov", "plotlines", "plotRole", "cast", "coolPoint", "hook", "body"],
     foreshadow: ["body", "plantAt", "planAt", "prereq", "payoff", "effect", "importance"],
     timeline: ["when", "body"],
     relation: ["label", "body"],
@@ -70,13 +70,13 @@ function contextContent(item: Material, maxChars = 6000, chapterTitles: Record<s
   const labels: Record<string, string> = {
     body: "说明", goal: "目标", motive: "动机", conflict: "矛盾", personality: "性格",
     speech: "语言习惯", knowledge: "知识边界", taboo: "底线", checklist: "核对项",
-    category: "分类", alias: "别名", when: "位置/时间", pov: "视角人物", plotRole: "剧情作用", cast: "出场人物",
+    category: "分类", alias: "别名", when: "位置/时间", pov: "视角人物", plotlines: "剧情线", plotRole: "剧情作用", cast: "出场人物",
     coolPoint: "回报", hook: "钩子", plantAt: "埋设位置", planAt: "计划回收",
     prereq: "回收前提", payoff: "回收方式", effect: "回收影响", importance: "重要度",
     label: "关系",
   };
   const parts = (fields[item.kind] || ["body"])
-    .map((key) => [labels[key] || key, String(c[key] || "").trim()] as const)
+    .map((key) => [labels[key] || key, (Array.isArray(c[key]) ? c[key].map((value: unknown) => String(value || "").trim()).filter(Boolean).join("、") : String(c[key] || "")).trim()] as const)
     .filter(([, value]) => value);
   if (item.kind === "character" && Array.isArray(c.progressions) && c.progressions.length) {
     const progressions = c.progressions
@@ -130,12 +130,17 @@ export function relevantMaterials(
       : item.kind === "scene"
         ? [String(content.pov || "").trim(), ...String(content.cast || "").split(/[,，、;；]+/).map((s) => s.trim())]
         : [];
+    const plotlines = item.kind === "scene"
+      ? (Array.isArray(content.plotlines) ? content.plotlines : String(content.plotlines || "").split(/[,，、;；\n]+/))
+          .map((value: unknown) => String(value || "").trim()).filter(Boolean)
+      : [];
     const aliases = item.kind === "character" || item.kind === "world" ? parseAliases(item.content_json) : [];
     const tags = parseTags(item.tags_json);
-    const terms = new Map<string, "title" | "alias" | "tag" | "person">();
+    const terms = new Map<string, "title" | "alias" | "tag" | "person" | "plotline">();
     if (title) terms.set(title, "title");
     for (const term of aliases) if (!terms.has(term)) terms.set(term, "alias");
     for (const term of participantTerms) if (term && !terms.has(term)) terms.set(term, "person");
+    for (const term of plotlines) if (term && !terms.has(term)) terms.set(term, "plotline");
     for (const term of tags) if (term && !terms.has(term)) terms.set(term, "tag");
 
     let score = 0;
@@ -163,6 +168,7 @@ export function relevantMaterials(
       else if (type === "title") reasons.push(en ? `Text mentions “${rawTerm}” · ${fullCount}` : `正文提及「${rawTerm}」${fullCount} 次`);
       else if (type === "alias") reasons.push(en ? `Alias match “${rawTerm}” · ${fullCount}` : `命中别名「${rawTerm}」${fullCount} 次`);
       else if (type === "person") reasons.push(en ? `Mentioned character “${rawTerm}” · ${fullCount}` : `提及人物「${rawTerm}」${fullCount} 次`);
+      else if (type === "plotline") reasons.push(en ? `Plotline match “${rawTerm}” · ${fullCount}` : `命中剧情线「${rawTerm}」${fullCount} 次`);
       else reasons.push(en ? `Tag match “${rawTerm}” · ${fullCount}` : `命中标签「${rawTerm}」${fullCount} 次`);
     }
     if (item.kind === "relation" && participantsHit >= 2) {

@@ -75,6 +75,10 @@ export function StyleCardPanel({
     : selected.length === 1
       ? styleLabel(selected[0], language).name
       : tr(`组合 ${selected.length} 种技法`, `${selected.length} techniques`);
+  const appliesToTask = (card: StyleCard) =>
+    taskKind !== "chat" && taskKind !== "check" &&
+    (card.tasks.includes(taskKind) || (taskKind === "naturalize" && card.tasks.includes("polish")));
+  const applicableSelected = selected.filter(appliesToTask);
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<StyleCard | null>(null);
   const [edit, setEdit] = useState<StyleCard | null>(null);
@@ -115,15 +119,27 @@ export function StyleCardPanel({
         : [...selectedIds, card.id]);
     },
   }));
-  const appliesToTask = (card: StyleCard) =>
-    taskKind !== "chat" && taskKind !== "check" &&
-    (card.tasks.includes(taskKind) || (taskKind === "naturalize" && card.tasks.includes("polish")));
   return (
     <div className="zchat-style-entry" data-fd-id="ai-style-entry">
       <ChatMenu
         ariaLabel={tr("写作风格", "Writing style")}
         dataFdId="ai-style-menu"
-        trigger={<><IconSparkle /><span className="zchat-ellipsis">{selectedLabel}</span><IconChevronDown size={13} /></>}
+        trigger={
+          <>
+            <IconSparkle />
+            <span className="zchat-ellipsis">{selectedLabel}</span>
+            {selected.length > 0 && (
+              <small className={`zchat-style-state ${applicableSelected.length ? "active" : "inactive"}`}>
+                {applicableSelected.length === 0
+                  ? tr("本任务不生效", "Inactive")
+                  : applicableSelected.length === selected.length
+                    ? tr("生效", "Active")
+                    : tr(`${applicableSelected.length}/${selected.length} 生效`, `${applicableSelected.length}/${selected.length} active`)}
+              </small>
+            )}
+            <IconChevronDown size={13} />
+          </>
+        }
         triggerClassName="zchat-pill wide"
         items={[
           { id: "style-none", label: tr("不使用风格卡", "No style card"), selected: selectedIds.length === 0, onSelect: () => onSelectionChange([]) },

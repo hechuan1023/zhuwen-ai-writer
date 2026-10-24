@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnyRow, kindNameFor } from "../shared";
 import { ChatMenu, type MenuItem } from "./menu";
 import {
@@ -120,6 +120,8 @@ export type ComposerProps = {
   onOpenContext: () => void;
   /** 保存状态或会话级错误 */
   statusLine?: React.ReactNode;
+  /** 可选的写作风格选择器，嵌入输入框工具栏 */
+  styleControl?: ReactNode;
   /** 续写自动引用提示（可见、可查看范围） */
   autoRefNotice?: string | null;
 };
@@ -150,6 +152,7 @@ export function Composer({
   contextLimitLabel,
   onOpenContext,
   statusLine,
+  styleControl,
   autoRefNotice,
 }: ComposerProps) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
@@ -229,6 +232,7 @@ export function Composer({
         >
           <IconPlus />
         </button>
+        {styleControl}
         <ChatMenu
           ariaLabel={tr("任务类型", "Task type")}
           dataFdId="ai-task-menu"

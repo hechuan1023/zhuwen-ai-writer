@@ -604,6 +604,13 @@ export function LibraryPanel({
                 value={editing.pov || ""}
                 onChange={(e) => updateEditing({ pov: e.target.value })}
               />
+              <input
+                data-fd-id="scene-plotlines"
+                maxLength={600}
+                placeholder={tr("剧情线 / 子线（逗号分隔，如：复仇、宗门暗线）", "Plotlines (comma-separated, e.g. revenge, clan intrigue)")}
+                value={editing.plotlinesText || ""}
+                onChange={(e) => updateEditing({ plotlinesText: e.target.value })}
+              />
               <datalist id="scene-pov-names">
                 {[...new Set(allItems.filter((item) => item.kind === "scene").map((item) => String(parseJson(item.content_json).pov || "").trim()).filter(Boolean))].map((pov) => <option key={pov} value={pov} />)}
               </datalist>

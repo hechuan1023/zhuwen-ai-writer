@@ -77,6 +77,7 @@ describe("scene / foreshadow / health tools", () => {
         coolPoint: "一招制敌",
         cast: "甲,乙",
         pov: "甲",
+        plotlines: ["复仇主线", "宗门暗线"],
         when: "第3章",
       }),
     });
@@ -85,7 +86,9 @@ describe("scene / foreshadow / health tools", () => {
     expect(content.plotRole).toBe("转折");
     expect(content.cast).toBe("甲,乙");
     expect(content.pov).toBe("甲");
+    expect(content.plotlines).toEqual(["复仇主线", "宗门暗线"]);
     expect(normalizeLibraryDraft("scene", model)).toContain('"pov":"甲"');
+    expect(normalizeLibraryDraft("scene", model)).toContain('"plotlinesText":"复仇主线，宗门暗线"');
   });
 
   it("foreshadow lifecycle fields round-trip", () => {
