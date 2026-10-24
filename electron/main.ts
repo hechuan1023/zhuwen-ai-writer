@@ -120,6 +120,8 @@ type AiSession = {
   conversationId: string;
   text: string;
   contexts: any[];
+  draftStyleIds: string[] | null;
+  draftVersion: number;
   messages: any[];
   generating: boolean;
   requestId: string;
@@ -140,6 +142,8 @@ const aiSession: AiSession = {
   conversationId: "",
   text: "",
   contexts: [],
+  draftStyleIds: null,
+  draftVersion: 0,
   messages: [],
   generating: false,
   requestId: "",
@@ -198,7 +202,7 @@ function clearConversationDraft(novelId: string, convId: string) {
   delete conversationDrafts[key];
   persistDrafts();
 }
-function saveConversationDraft(userDir: string) {
+function saveConversationDraft(userDir: string, versionHint?: number) {
   const novelId = String(aiSession.novelId || "");
   if (!novelId) return;
   const convId = String(aiSession.conversationId || "");
@@ -209,11 +213,15 @@ function saveConversationDraft(userDir: string) {
     convId,
     text: String(aiSession.text || ""),
     contexts: JSON.parse(JSON.stringify(aiSession.contexts || [])),
-    version:
+    ...(Array.isArray(aiSession.draftStyleIds) ? { styleIds: [...aiSession.draftStyleIds] } : {}),
+    version: Math.max(
       Math.max(prev?.version || 0, draftTombstones[key] || 0) + 1,
+      Number.isFinite(versionHint) ? Number(versionHint) : 0,
+    ),
     updatedAt: new Date().toISOString(),
   };
   conversationDrafts[key] = next;
+  aiSession.draftVersion = next.version;
   persistDrafts();
   return next;
 }
@@ -221,6 +229,8 @@ function loadConversationDraft(novelId: string, convId: string) {
   const d = conversationDrafts[draftKey(novelId, convId || "")];
   aiSession.text = d?.text || "";
   aiSession.contexts = d?.contexts ? JSON.parse(JSON.stringify(d.contexts)) : [];
+  aiSession.draftStyleIds = Array.isArray(d?.styleIds) ? [...d.styleIds] : null;
+  aiSession.draftVersion = d?.version || 0;
   return d?.version || 0;
 }
 /** 草稿更新：必须带 novelId + convId + version，防串写 */
@@ -238,11 +248,22 @@ function applyDraftPatch(userDir: string, p: any) {
     (v != null && prev?.version != null && v < prev.version) ||
     (v != null && draftTombstones[key] != null && v <= draftTombstones[key]);
   if (stale) return false;
+  let nextStyleIds: string[] | null | undefined;
+  if ("draftStyleIds" in p) {
+    if (p.draftStyleIds === null) nextStyleIds = null;
+    else if (
+      Array.isArray(p.draftStyleIds) &&
+      p.draftStyleIds.length <= 6 &&
+      p.draftStyleIds.every((id: unknown) => typeof id === "string" && id.length <= 200)
+    ) nextStyleIds = [...new Set<string>(p.draftStyleIds.map((id: string) => id.trim()).filter(Boolean))];
+    else return false;
+  }
   if (typeof p.text === "string") aiSession.text = p.text;
   if (Array.isArray(p.contexts)) aiSession.contexts = p.contexts;
-  saveConversationDraft(userDir);
+  if (nextStyleIds !== undefined) aiSession.draftStyleIds = nextStyleIds;
+  const saved = saveConversationDraft(userDir, v ?? undefined);
   broadcastSession();
-  return true;
+  return { accepted: true, version: saved?.version ?? 0 };
 }
 function sendSessionSnapshot() {
   const payload = aiSessionSnapshot();
@@ -2758,6 +2779,86 @@ function registerIpc(userDir: string) {
     ).run(p.title.trim(), timestamp(), p.id);
     return ok(true);
   });
+  ipcMain.handle("ai:conversation:branch", (_, messageId) => {
+    if (aiSession.generating) return fail("请等待当前回复完成后再创建分支");
+    const targetId = String(messageId || "");
+    const target: any = get(
+      `SELECT m.id,m.conversation_id,m.role,m.chapter_id AS message_chapter_id,c.novel_id,c.chapter_id,c.title
+       FROM ai_messages m JOIN ai_conversations c ON c.id=m.conversation_id
+       WHERE m.id=? AND c.deleted_at IS NULL`,
+      targetId,
+    );
+    if (!target || target.role !== "user") return fail("找不到这条用户提问，无法创建分支");
+    if (target.novel_id !== aiSession.novelId) return fail("这条提问不属于当前小说项目");
+
+    const sourceRows: any[] = all(
+      `SELECT rowid AS source_rowid,* FROM ai_messages
+       WHERE conversation_id=? ORDER BY created_at,rowid`,
+      target.conversation_id,
+    );
+    const targetIndex = sourceRows.findIndex((row) => row.id === targetId);
+    if (targetIndex < 0) return fail("找不到这条提问，无法创建分支");
+    const historyRows = sourceRows.slice(0, targetIndex);
+    const historyIds = historyRows.map((row) => String(row.id));
+    const snapshots: any[] = historyIds.length
+      ? all(
+          `SELECT * FROM message_context_snapshots
+           WHERE message_id IN (${historyIds.map(() => "?").join(",")})
+           ORDER BY created_at,rowid`,
+          ...historyIds,
+        )
+      : [];
+    const branchId = randomUUID();
+    const branchTitle = `${String(target.title || "新对话").trim() || "新对话"} · 分支`;
+    const createdAt = timestamp();
+    try {
+      db.transaction(() => {
+        db.prepare(
+          `INSERT INTO ai_conversations(id,novel_id,chapter_id,title,created_at,updated_at)
+           VALUES(?,?,?,?,?,?)`,
+        ).run(branchId, target.novel_id, target.message_chapter_id || target.chapter_id || null, branchTitle, createdAt, createdAt);
+
+        const messageColumns = (db.prepare("PRAGMA table_info(ai_messages)").all() as any[])
+          .map((column) => String(column.name))
+          .filter((name) => name !== "id" && name !== "conversation_id" && name !== "data_version");
+        const messageSql = `INSERT INTO ai_messages(id,conversation_id,${messageColumns.join(",")},data_version)
+          VALUES(${Array(messageColumns.length + 3).fill("?").join(",")})`;
+        const messageInsert = db.prepare(messageSql);
+        const clonedIds = new Map<string, string>();
+        for (const row of historyRows) {
+          const clonedId = randomUUID();
+          clonedIds.set(String(row.id), clonedId);
+          messageInsert.run(
+            clonedId,
+            branchId,
+            ...messageColumns.map((column) => row[column]),
+            1,
+          );
+        }
+
+        const snapshotColumns = (db.prepare("PRAGMA table_info(message_context_snapshots)").all() as any[])
+          .map((column) => String(column.name))
+          .filter((name) => name !== "id" && name !== "message_id" && name !== "data_version");
+        const snapshotSql = `INSERT INTO message_context_snapshots(id,message_id,${snapshotColumns.join(",")},data_version)
+          VALUES(${Array(snapshotColumns.length + 3).fill("?").join(",")})`;
+        const snapshotInsert = db.prepare(snapshotSql);
+        for (const row of snapshots) {
+          const clonedMessageId = clonedIds.get(String(row.message_id));
+          if (!clonedMessageId) continue;
+          snapshotInsert.run(
+            randomUUID(),
+            clonedMessageId,
+            ...snapshotColumns.map((column) => row[column]),
+            1,
+          );
+        }
+      })();
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : String(error));
+    }
+    broadcastConversations(String(target.novel_id));
+    return ok({ conversationId: branchId, title: branchTitle });
+  });
   ipcMain.handle("ai:conversation:trash", (_, id) => {
     const conv: any = get(
       "SELECT novel_id FROM ai_conversations WHERE id=?",
@@ -2818,7 +2919,7 @@ function registerIpc(userDir: string) {
       const uid = newId(),
         t = timestamp();
       db.prepare(
-        "INSERT INTO ai_messages(id,conversation_id,role,content,model,connection_id,chapter_id,source_revision,selection_text,selection_from,selection_to,task_kind,style_id,style_name,style_version,style_rules,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO ai_messages(id,conversation_id,role,content,model,connection_id,chapter_id,source_revision,selection_text,selection_from,selection_to,task_kind,style_id,style_name,style_version,style_rules,style_ids_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       ).run(
         uid,
         conv,
@@ -2836,6 +2937,7 @@ function registerIpc(userDir: string) {
         style.card?.name || null,
         style.card?.version || null,
         style.instruction || null,
+        JSON.stringify(style.cards.map((card: any) => String(card.id))),
         t,
       );
       aiSession.novelId = p.novelId ?? aiSession.novelId;
@@ -3085,13 +3187,14 @@ function registerIpc(userDir: string) {
     const prevNovel = aiSession.novelId;
     const prevConv = aiSession.conversationId;
     // 文本/引用走带版本的草稿通道，防止延迟提交串写
-    if (p && (typeof p.text === "string" || Array.isArray(p.contexts))) {
+    if (p && (typeof p.text === "string" || Array.isArray(p.contexts) || "draftStyleIds" in p)) {
       const accepted = applyDraftPatch(userDir, p);
-      if (!accepted) return ok({ accepted: false });
+      if (!accepted || typeof accepted !== "object") return ok({ accepted: false, version: aiSession.draftVersion });
       // 其余字段继续处理
       const rest = { ...p };
       delete rest.text;
       delete rest.contexts;
+      delete rest.draftStyleIds;
       p = rest;
     }
     const keys = [
@@ -3112,6 +3215,8 @@ function registerIpc(userDir: string) {
       aiSession.messages = [];
       aiSession.contexts = [];
       aiSession.text = "";
+      aiSession.draftStyleIds = null;
+      aiSession.draftVersion = 0;
     }
     if (p && "conversationId" in p && p.conversationId !== prevConv) {
       loadConversationDraft(
@@ -3120,7 +3225,7 @@ function registerIpc(userDir: string) {
       );
     }
     broadcastSession();
-    return ok(true);
+    return ok({ accepted: true, version: aiSession.draftVersion });
   });
   ipcMain.handle("ai:session:loadConversation", (_, conversationId) => {
     saveConversationDraft(userDir);
@@ -3929,7 +4034,7 @@ function restoreBackupAsCopy(b: any) {
       const id = newId();
       messageMap.set(m.id, id);
       db.prepare(
-        "INSERT INTO ai_messages(id,conversation_id,role,content,model,connection_id,chapter_id,source_revision,selection_text,incomplete,task_kind,style_id,style_name,style_version,style_rules,selection_from,selection_to,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO ai_messages(id,conversation_id,role,content,model,connection_id,chapter_id,source_revision,selection_text,incomplete,task_kind,style_id,style_name,style_version,style_rules,selection_from,selection_to,style_ids_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       ).run(
         id,
         convMap.get(m.conversation_id)!,
@@ -3948,6 +4053,7 @@ function restoreBackupAsCopy(b: any) {
         m.style_rules || null,
         m.selection_from ?? null,
         m.selection_to ?? null,
+        m.style_ids_json || JSON.stringify(m.style_id ? [m.style_id] : []),
         m.created_at || t,
       );
     }

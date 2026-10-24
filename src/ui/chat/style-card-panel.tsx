@@ -19,6 +19,8 @@ function styleLabel(card: StyleCard, language: string) {
     "style-light-comedy-mismatch": ["Situational comedy", "Build humor from character relationships and mismatched situations."],
     "style-grounded-mystery": ["Grounded mystery", "Anchor investigation in daily routines, interests, and verifiable evidence."],
     "style-cultural-modernization": ["Cultural translation", "Put traditional culture into character action and modern emotional stakes."],
+    "style-urban-workplace-agency": ["Urban work & lived detail", "Ground urban stories in concrete work processes, interests, and life choices."],
+    "style-fantasy-social-fusion": ["Fantasy & social systems", "Make institutions, resources, and social pressures part of a coherent fantasy world."],
   };
   const [name, description] = labels[card.id] || [card.name, card.description];
   return { name, description };
@@ -46,6 +48,18 @@ const TECHNIQUE_PRESETS = [
     name: ["群像生活轻喜", "Ensemble slice-of-life comedy"],
     description: ["群像烟火 + 关系张力 + 处境错位", "Ensemble + relationship tension + situational comedy"],
     cardIds: ["style-human-ensemble", "style-character-voice-tension", "style-light-comedy-mismatch"],
+  },
+  {
+    id: "genre-urban-workplace",
+    name: ["都市职场群像", "Urban workplace ensemble"],
+    description: ["职业流程 + 关系博弈 + 生活选择 + 连载兑现", "Work processes + relationship dynamics + life choices + serial payoff"],
+    cardIds: ["style-urban-workplace-agency", "style-human-ensemble", "style-character-voice-tension", "style-serial-hook-payoff"],
+  },
+  {
+    id: "genre-fantasy-social-fusion",
+    name: ["现实机制幻想连载", "Social-systems fantasy serial"],
+    description: ["世界规则 + 成长代价 + 求生行动 + 阶段回报", "World rules + growth costs + survival actions + staged payoff"],
+    cardIds: ["style-fantasy-social-fusion", "style-growth-progression", "style-close-survival", "style-serial-hook-payoff"],
   },
 ];
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, parseJson, UiLanguage } from "./shared";
 import { Select } from "./select";
-import { buildPlotlineMatrix, filterScenesByPov, filterScenesByTrack, groupScenesForTimeline, scenePlotlines, scenePovOptions, sceneTags, sceneTrackOptions } from "./scene-planner-model";
+import { buildPlotlineMatrix, filterScenesByPov, filterScenesByTrack, groupScenesForTimeline, sceneCustomFields, scenePlotlines, scenePovOptions, sceneTags, sceneTrackOptions } from "./scene-planner-model";
 
 type SceneRow = Record<string, any>;
 
@@ -72,9 +72,9 @@ export function ScenePlanner({
   ];
   const tracks = sceneTrackOptions(orderedScenes);
   const trackOptions = [
-    { value: "all", label: tr("全部剧情线 / 标签", "All plotlines / labels") },
+    { value: "all", label: tr("全部剧情线 / 标签 / 属性", "All plotlines / labels / properties") },
     { value: "__unlabeled__", label: tr("未标记", "Unlabeled") },
-    ...tracks.map(({ value, kind, label, count }) => ({ value, label: `${label} (${count})`, hint: kind === "plotline" ? tr("剧情线", "Plotline") : tr("标签", "Tag") })),
+    ...tracks.map(({ value, kind, label, count }) => ({ value, label: `${label} (${count})`, hint: kind === "plotline" ? tr("剧情线", "Plotline") : kind === "custom" ? tr("自定义属性", "Custom property") : tr("标签", "Tag") })),
   ];
   const povFilterExists = povFilter === "all" || povFilter === "__unassigned__" || povs.some((item) => item.value === povFilter);
   const trackFilterExists = trackFilter === "all" || trackFilter === "__unlabeled__" || tracks.some((item) => item.value === trackFilter);
@@ -142,8 +142,8 @@ export function ScenePlanner({
             <Select value={povFilter} aria-label={tr("按视角人物筛选", "Filter by point of view")} onValueChange={setPovFilter} options={povOptions} />
           </div>
           <div className="scene-planner-filter scene-planner-tag-filter">
-            <label>{tr("剧情线 / 标签", "Plotline / label")}</label>
-            <Select value={trackFilter} aria-label={tr("按剧情线或标签筛选", "Filter by plotline or label")} onValueChange={setTrackFilter} options={trackOptions} />
+            <label>{tr("剧情线 / 标签 / 属性", "Plotline / label / property")}</label>
+            <Select searchable value={trackFilter} aria-label={tr("按剧情线、标签或自定义属性筛选", "Filter by plotline, label, or custom property")} onValueChange={setTrackFilter} options={trackOptions} />
           </div>
           <button className="primary" onClick={() => onCreateScene()}>{tr("＋ 新建场景", "+ New scene")}</button>
           <button className="scene-planner-close" onClick={onClose}>{tr("返回资料库", "Back to story bible")}</button>
@@ -160,7 +160,7 @@ export function ScenePlanner({
           <button type="button" className={viewMode === "timeline" ? "active" : ""} aria-pressed={viewMode === "timeline"} onClick={() => setViewMode("timeline")}>{tr("时间线", "Timeline")}</button>
           <button type="button" className={viewMode === "matrix" ? "active" : ""} aria-pressed={viewMode === "matrix"} onClick={() => setViewMode("matrix")}>{tr("剧情矩阵", "Matrix")}</button>
         </div>
-        <small>{viewMode === "matrix" ? tr("矩阵按章节汇总剧情线覆盖；点场景标题可打开细纲。", "Matrix summarizes plotline coverage by chapter; click a scene to open its outline.") : canReorderVisible ? tr("拖动卡片可调整章节与顺序 · 点击标题编辑细纲", "Drag to reorder or change chapter · Click a title to edit") : tr("筛选结果仅供查看；清除视角、剧情线或标签筛选后可调整顺序。", "Filtered results are view-only; clear POV, plotline, or tag filters to reorder.")}</small>
+        <small>{viewMode === "matrix" ? tr("矩阵按章节汇总剧情线覆盖；点场景标题可打开细纲。", "Matrix summarizes plotline coverage by chapter; click a scene to open its outline.") : canReorderVisible ? tr("拖动卡片可调整章节与顺序 · 点击标题编辑细纲", "Drag to reorder or change chapter · Click a title to edit") : tr("筛选结果仅供查看；清除视角、剧情线、标签或属性筛选后可调整顺序。", "Filtered results are view-only; clear POV, plotline, label, or property filters to reorder.")}</small>
       </div>
 
       {viewMode === "board" ? <div className="scene-board-scroll" data-fd-id="scene-board-columns">
@@ -237,7 +237,7 @@ export function ScenePlanner({
                   return <article className="scene-timeline-event" key={scene.id} data-fd-id={`timeline-scene-${scene.id}`}>
                     <span className="scene-timeline-marker" aria-hidden="true">{sceneIndex + 1}</span>
                     <div className="scene-timeline-card">
-                      <header><span className="scene-timeline-time">{data.when || tr("未填写时间标记", "No time marker")}</span>{data.plotRole && <span className="scene-timeline-role">{data.plotRole}</span>}{scenePlotlines(data).slice(0, 2).map((plotline) => <span className="scene-timeline-tag plotline" key={`plotline:${plotline}`}>{plotline}</span>)}{sceneTags(data).slice(0, 2).map((tag) => <span className="scene-timeline-tag" key={`tag:${tag}`}>{tag}</span>)}</header>
+                      <header><span className="scene-timeline-time">{data.when || tr("未填写时间标记", "No time marker")}</span>{data.plotRole && <span className="scene-timeline-role">{data.plotRole}</span>}{scenePlotlines(data).slice(0, 2).map((plotline) => <span className="scene-timeline-tag plotline" key={`plotline:${plotline}`}>{plotline}</span>)}{sceneTags(data).slice(0, 2).map((tag) => <span className="scene-timeline-tag" key={`tag:${tag}`}>{tag}</span>)}{sceneCustomFields(data).slice(0, 2).map((field) => <span className="scene-timeline-tag custom" key={`custom:${field.key}`} title={`${field.key}: ${field.value}`}>{field.key}: {field.value}</span>)}</header>
                       <button type="button" className="scene-timeline-title" onClick={() => onOpenScene(scene)}>{scene.title || tr("未命名场景", "Untitled scene")}</button>
                       {data.body && <p>{data.body}</p>}
                       {(data.coolPoint || data.hook) && <small>{data.coolPoint && `${tr("回报", "Payoff")}: ${data.coolPoint}`}{data.coolPoint && data.hook ? " · " : ""}{data.hook && `${tr("章末钩子", "Hook")}: ${data.hook}`}</small>}
@@ -316,7 +316,7 @@ function SceneCard({
       {scene.body && <p className="scene-card-body">{scene.body}</p>}
       {(scene.coolPoint || scene.hook) && <div className="scene-card-payoff">{scene.coolPoint && <span><i>✦</i>{scene.coolPoint}</span>}{scene.hook && <span><i>↗</i>{scene.hook}</span>}</div>}
       {scene.cast && <div className="scene-card-cast">{scene.cast.split(/[,，、;；]+/).filter(Boolean).slice(0, 4).map((person: string) => <span key={person}>{person.trim()}</span>)}</div>}
-      {(scenePlotlines(scene).length > 0 || sceneTags(scene).length > 0) && <div className="scene-card-tags">{scenePlotlines(scene).slice(0, 2).map((plotline) => <span className="plotline" key={`plotline:${plotline}`} title={tr("剧情线", "Plotline")}>{plotline}</span>)}{sceneTags(scene).slice(0, 2).map((tag) => <span key={`tag:${tag}`} title={tr("场景标签", "Scene tag")}>{tag}</span>)}</div>}
+      {(scenePlotlines(scene).length > 0 || sceneTags(scene).length > 0 || sceneCustomFields(scene).length > 0) && <div className="scene-card-tags">{scenePlotlines(scene).slice(0, 2).map((plotline) => <span className="plotline" key={`plotline:${plotline}`} title={tr("剧情线", "Plotline")}>{plotline}</span>)}{sceneTags(scene).slice(0, 2).map((tag) => <span key={`tag:${tag}`} title={tr("场景标签", "Scene tag")}>{tag}</span>)}{sceneCustomFields(scene).slice(0, 2).map((field) => <span className="custom" key={`custom:${field.key}`} title={`${field.key}: ${field.value}`}>{field.key}: {field.value}</span>)}</div>}
       {scene.when && <small className="scene-card-when">{scene.when}</small>}
       <button className="scene-card-draft" type="button" disabled={!canDraft} title={!canDraft ? tr("请先把场景分配到章节", "Assign this scene to a chapter first") : tr("把细纲带入 AI 面板，检查后再发送", "Bring this outline to AI; review before sending")} onClick={(event) => { event.stopPropagation(); onDraft(); }}>{tr("✦ 用 AI 起草", "✦ Draft with AI")}</button>
     </article>

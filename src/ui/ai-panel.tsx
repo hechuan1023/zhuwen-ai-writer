@@ -61,7 +61,7 @@ export function AiPanel({
   onToggleExpand?: (next: boolean) => void;
   sceneDraftRequest?: { nonce: string; chapterId: string; scene: AnyRow } | null;
   onSceneDraftRequestConsumed?: () => void;
-  onNavigateSource?: (source: { kind: string; sourceId: string }) => void;
+  onNavigateSource?: (source: { kind: string; sourceId: string }) => Promise<boolean | void> | boolean | void;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const [session, patch] = useAiSessionStore();
@@ -112,13 +112,15 @@ export function AiPanel({
   const draftVersionRef = useRef(0);
   const draftConvRef = useRef(conversation);
   useEffect(() => {
-    // 会话切换：取消待提交任务，以服务端草稿为准
+    // 会话切换：取消待提交任务，以服务端草稿与版本号为准
     if (draftConvRef.current !== conversation) {
       window.clearTimeout(draftTimer.current);
       draftConvRef.current = conversation;
-      draftVersionRef.current = 0;
+      draftVersionRef.current = Number(session?.draftVersion || 0);
+    } else {
+      draftVersionRef.current = Math.max(draftVersionRef.current, Number(session?.draftVersion || 0));
     }
-  }, [conversation]);
+  }, [conversation, session?.draftVersion]);
   useEffect(() => {
     if (text === lastSyncedText.current) return;
     lastSyncedText.current = text;
@@ -135,13 +137,31 @@ export function AiPanel({
       aiDraftFlusher.current = () => {};
     };
   }, []);
-  function patchDraft(value: string, convId: string, version: number) {
-    void patch({
+  function patchDraft(value: string, convId: string, version: number, nextContexts?: AnyRow[], nextStyleIds?: string[] | null) {
+    return patch({
       text: value,
+      ...(nextContexts ? { contexts: nextContexts } : {}),
+      ...(nextStyleIds !== undefined ? { draftStyleIds: nextStyleIds } : {}),
       novelId,
       conversationId: convId,
       draftVersion: version,
+    }).then((result) => {
+      const acceptedVersion = Number(result.data?.version || 0);
+      if (acceptedVersion) draftVersionRef.current = Math.max(draftVersionRef.current, acceptedVersion);
+      if (!result.ok || result.data?.accepted === false) {
+        notify(result.error || tr("草稿版本已更新，当前内容将在下次输入时重新保存。", "Draft changed elsewhere; your next edit will save the current version."));
+      }
+      return result;
     });
+  }
+  function saveComposerState(value: string, nextContexts: AnyRow[], convId = conversation, nextStyleIds?: string[] | null) {
+    draftRef.current = value;
+    setDraft(value);
+    window.clearTimeout(draftTimer.current);
+    lastSyncedText.current = value;
+    draftConvRef.current = convId;
+    const version = ++draftVersionRef.current;
+    return patchDraft(value, convId, version, nextContexts, nextStyleIds);
   }
   function updateDraft(value: string, flush = false) {
     draftRef.current = value;
@@ -151,14 +171,14 @@ export function AiPanel({
     const version = ++draftVersionRef.current;
     if (flush) {
       lastSyncedText.current = value;
-      patchDraft(value, convId, version);
+      void patchDraft(value, convId, version);
       return;
     }
     draftTimer.current = window.setTimeout(() => {
       // 过期任务：会话已切换则丢弃
       if (draftConvRef.current !== convId) return;
       lastSyncedText.current = value;
-      patchDraft(value, convId, version);
+      void patchDraft(value, convId, version);
     }, 400);
   }
   function flushDraft() {
@@ -166,10 +186,13 @@ export function AiPanel({
     const value = draftRef.current;
     lastSyncedText.current = value;
     const version = ++draftVersionRef.current;
-    patchDraft(value, conversation, version);
+    void patchDraft(value, conversation, version);
     return value;
   }
   const contexts: AnyRow[] = session?.contexts || [];
+  const activeStyleIds: string[] = Array.isArray(session?.draftStyleIds)
+    ? session.draftStyleIds
+    : styleIds;
   const messages: AnyRow[] = session?.messages || [];
   const generating: boolean = Boolean(session?.generating);
   const requestId: string = session?.requestId || "";
@@ -232,19 +255,28 @@ export function AiPanel({
   }
   async function selectStyles(next: string[]) {
     const r = await api<any>("ai:style-selection:set", { novelId, styleIds: next });
-    if (r.ok) setStyleIds(r.data?.styleIds || next);
-    else notify(r.error || tr("写作风格保存失败", "Could not save writing style"));
+    if (r.ok) {
+      setStyleIds(r.data?.styleIds || next);
+      return true;
+    }
+    notify(r.error || tr("写作风格保存失败", "Could not save writing style"));
+    return false;
+  }
+  async function selectComposerStyles(next: string[]) {
+    if (!Array.isArray(session?.draftStyleIds)) return selectStyles(next);
+    const result = await saveComposerState(draftRef.current, contexts, conversation, next);
+    return result.ok && result.data?.accepted !== false;
   }
   useEffect(() => {
     let live = true;
-    api<any>("ai:style:estimate", { styleIds, taskKind: mode }).then((r) => {
+    api<any>("ai:style:estimate", { styleIds: activeStyleIds, taskKind: mode }).then((r) => {
       if (live && r.ok) {
         setStyleRuleChars(Number(r.data?.chars || 0));
         setStylePreviewRules(String(r.data?.instruction || ""));
       }
     });
     return () => { live = false; };
-  }, [styleIds, mode]);
+  }, [activeStyleIds, mode]);
   useEffect(() => {
     const request = sceneDraftRequest;
     if (!request || session?.novelId !== novelId || request.chapterId !== chapterId || consumedSceneDraft.current === request.nonce) return;
@@ -349,7 +381,7 @@ export function AiPanel({
     };
   }
   function setContexts(updater: (xs: AnyRow[]) => AnyRow[]) {
-    patch({ contexts: updater(contexts) });
+    void saveComposerState(draftRef.current, updater(contexts));
   }
   function selectConversation(id: string) {
     api("ai:session:loadConversation", id);
@@ -580,7 +612,8 @@ export function AiPanel({
     }
     if (!float && save && !(await save(true))) return;
     const id = crypto.randomUUID();
-    patch({ contexts: plan.contexts });
+    const composerSave = await saveComposerState(draftRef.current, plan.contexts);
+    if (!composerSave.ok || composerSave.data?.accepted === false) return;
     if (continuing) {
       pendingContinue.current = true;
     }
@@ -592,17 +625,21 @@ export function AiPanel({
       sourceRevision: session?.chapter?.revision ?? chapter?.revision,
       selectionText:
         plan.contexts.find((x) => x.kind === "selection")?.content || "",
-      selectionFrom: plan.contexts.find((x) => x.kind === "selection")?.from ?? editor?.state.selection.from ?? null,
-      selectionTo: plan.contexts.find((x) => x.kind === "selection")?.to ?? editor?.state.selection.to ?? null,
+      selectionFrom: plan.contexts.find((x) => x.kind === "selection")
+        ? (plan.contexts.find((x) => x.kind === "selection")?.from ?? null)
+        : (editor?.state.selection.from ?? null),
+      selectionTo: plan.contexts.find((x) => x.kind === "selection")
+        ? (plan.contexts.find((x) => x.kind === "selection")?.to ?? null)
+        : (editor?.state.selection.to ?? null),
       connectionId: connection,
       prompt: plan.prompt,
       contexts: plan.contexts,
-      styleIds,
+      styleIds: activeStyleIds,
       taskKind: mode,
     });
     if (!r.ok) {
       pendingContinue.current = false;
-      patch({ text: plan.ask });
+      updateDraft(plan.ask, true);
       notify(r.error || tr("发送失败，内容已放回输入框，可修改后重试", "Sending failed. Your text was restored to the composer for retrying"));
     } else loadConversations();
   }
@@ -825,7 +862,7 @@ export function AiPanel({
       conversationId: conversation,
       contexts: plan.contexts,
       prompt: plan.prompt,
-      styleIds,
+      styleIds: activeStyleIds,
       taskKind: mode,
     });
     if (seq !== previewSeq.current) return;
@@ -1023,6 +1060,100 @@ export function AiPanel({
     (text: string) => <MdView text={text} />,
     [],
   );
+  async function reusePrompt(message: AnyRow) {
+    if (generating) {
+      notify(tr("请等待当前回复完成后再复用提问。", "Wait for the current response to finish before reusing a prompt."));
+      return;
+    }
+    if (!message.id) return;
+    const sourceChapterId = String(message.chapter_id || "");
+    if (sourceChapterId && sourceChapterId !== chapterId) {
+      const sourceChapter = bookChapters.find((item) => item.id === sourceChapterId);
+      if (!sourceChapter) {
+        notify(tr("原提问所属章节已不存在，无法安全重试。", "The source chapter no longer exists; retry was stopped to avoid using the wrong chapter."));
+        return;
+      }
+      if (!onNavigateSource) {
+        notify(tr(`请先切换到「${sourceChapter.title}」再重试这条提问。`, `Switch to “${sourceChapter.title}” before retrying this prompt.`));
+        return;
+      }
+      const navigated = await onNavigateSource({ kind: "chapter", sourceId: sourceChapterId });
+      if (navigated === false) return;
+    }
+    const result = await api<AnyRow[]>("ai:message:contexts", String(message.id));
+    if (!result.ok) {
+      notify(result.error || tr("无法恢复这次提问的引用。", "Could not restore the references for this prompt."));
+      return;
+    }
+    const restoredContexts = (result.data || []).map((item) => ({
+      label: String(item.label || ""),
+      kind: String(item.kind || ""),
+      content: String(item.content || ""),
+      sourceId: String(item.sourceId || ""),
+      ...(item.kind === "selection"
+        ? { from: message.selection_from ?? null, to: message.selection_to ?? null }
+        : {}),
+    }));
+    const storedStyleIds = (() => {
+      try {
+        const parsed = JSON.parse(String(message.style_ids_json || "[]"));
+        return Array.isArray(parsed)
+          ? [...new Set(parsed.map((id: unknown) => String(id || "").trim()).filter(Boolean))].slice(0, 6)
+          : [];
+      } catch {
+        return message.style_id ? [String(message.style_id)] : [];
+      }
+    })();
+    const branched = await api<{ conversationId: string }>("ai:conversation:branch", String(message.id));
+    if (!branched.ok || !branched.data?.conversationId) {
+      notify(branched.error || tr("创建对话分支失败，请稍后重试。", "Could not create a conversation branch. Please try again."));
+      return;
+    }
+    const branchId = String(branched.data.conversationId);
+    const loaded = await api("ai:session:loadConversation", branchId);
+    if (!loaded.ok) {
+      notify(loaded.error || tr("分支已创建，但暂时无法打开。", "The branch was created, but could not be opened."));
+      return;
+    }
+    const currentSession = await api<AnyRow>("ai:session:get");
+    if (currentSession.ok) {
+      draftConvRef.current = branchId;
+      draftVersionRef.current = Number(currentSession.data?.draftVersion || 0);
+    }
+    const task = tasks.find((item) => item.kind === message.task_kind);
+    if (task) {
+      setActiveTaskId(task.id || task.kind);
+      setMode(task.kind as typeof mode);
+    }
+    let draftStyleIds: string[] | null = null;
+    let styleRestoreNotice = "";
+    if (message.task_kind && !["chat", "check"].includes(String(message.task_kind))) {
+      const cardResult = await api<StyleCard[]>("ai:styles:list");
+      if (cardResult.ok) {
+        setStyleCards(cardResult.data || []);
+        const available = new Set((cardResult.data || []).map((card) => card.id));
+        const restorableIds = storedStyleIds.filter((id) => available.has(id));
+        draftStyleIds = restorableIds;
+        if (restorableIds.length < storedStyleIds.length) {
+          styleRestoreNotice = tr("部分历史技法卡已不存在，分支中已恢复仍可用的卡片。", "Some original technique cards are no longer available; the remaining cards were restored in this branch.");
+        }
+      } else styleRestoreNotice = tr("技法组合未能自动恢复，请发送前检查分支风格。", "The original technique set could not be restored; review the branch style before sending.");
+    }
+    const saved = await saveComposerState(String(message.content || ""), restoredContexts, branchId, draftStyleIds);
+    if (!saved.ok || saved.data?.accepted === false) {
+      notify(saved.error || tr("恢复提问失败，请稍后重试。", "Could not restore the prompt. Please try again."));
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLTextAreaElement>('[data-fd-id="ai-input"]')?.focus();
+    });
+    setHistoryOpen(false);
+    loadConversations({ offset: 0 });
+    notify(tr(
+      `已从此处创建分支，原对话保留；技法卡组合已作为分支专属设置恢复，不会更改作品默认风格。检查问题和引用后发送即可重试。${styleRestoreNotice ? ` ${styleRestoreNotice}` : ""}`,
+      `A new branch was created; the original conversation is unchanged. Its technique cards are restored as branch-only settings and won't change the novel default. Review the prompt and references, then send to retry.${styleRestoreNotice ? ` ${styleRestoreNotice}` : ""}`,
+    ));
+  }
   const currentTitle =
     conversations.find((c) => c.id === conversation)?.title ||
     tr("新对话", "New conversation");
@@ -1078,6 +1209,7 @@ export function AiPanel({
         renderMarkdown={renderMarkdown}
         actionsFor={actionsFor}
         onOpenSource={previewMessageSource}
+        onReusePrompt={(message) => void reusePrompt(message)}
         emptyState={
           <Empty
             title={tr("今天想写些什么？", "What would you like to write today?")}
@@ -1141,8 +1273,8 @@ export function AiPanel({
           <StyleCardPanel
             language={language}
             cards={styleCards}
-            selectedIds={styleIds}
-            onSelectionChange={selectStyles}
+            selectedIds={activeStyleIds}
+            onSelectionChange={selectComposerStyles}
             taskKind={mode}
             previewRules={stylePreviewRules}
             onReload={() => void reloadStyleCards()}

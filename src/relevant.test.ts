@@ -83,6 +83,21 @@ describe("relevantMaterials", () => {
     expect(out[0].content).toContain("剧情线：复仇主线");
   });
 
+  it("场景自定义属性可参与推荐并随引用进入 AI 上下文", () => {
+    const out = relevantMaterials(
+      [item({
+        id: "scene-custom-1",
+        kind: "scene",
+        title: "夜探仓库",
+        content_json: JSON.stringify({ customFields: [{ key: "行动目标", value: "取回密信" }], body: "" }),
+      })],
+      "她必须取回密信。",
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].reasons.join(" ")).toContain("命中自定义属性「取回密信」");
+    expect(out[0].content).toContain("自定义属性：行动目标：取回密信");
+  });
+
   it("英文界面返回英文候选理由", () => {
     const out = relevantMaterials(
       [item({ title: "苏晚", content_json: JSON.stringify({ alias: "晚晚" }) })],

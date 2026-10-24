@@ -3,9 +3,11 @@ import { BASE_STYLE_RULES, BUILTIN_STYLE_CARDS, NATURALIZE_RULES, buildTaskAndSt
 import { parseStyleCompositionBundle } from "../electron/ai-style-bundle";
 
 describe("AI 写作风格卡", () => {
-  it("提供四张稳定 ID 的内置卡，且不包含旧式硬性配额", () => {
-    expect(BUILTIN_STYLE_CARDS).toHaveLength(4);
-    expect(new Set(BUILTIN_STYLE_CARDS.map((x) => x.id)).size).toBe(4);
+  it("提供稳定 ID 的内置技法卡，覆盖通用叙事、现实职场与幻想融合且不包含硬性配额", () => {
+    expect(BUILTIN_STYLE_CARDS).toHaveLength(12);
+    expect(new Set(BUILTIN_STYLE_CARDS.map((x) => x.id)).size).toBe(12);
+    expect(BUILTIN_STYLE_CARDS.find((x) => x.id === "style-urban-workplace-agency")?.rules).toContain("职责边界");
+    expect(BUILTIN_STYLE_CARDS.find((x) => x.id === "style-fantasy-social-fusion")?.rules).toContain("世界内部自洽");
     const all = BUILTIN_STYLE_CARDS.map((x) => x.rules).join("\n");
     expect(all).not.toMatch(/对话.{0,8}(比例|占比)|每章必须|固定.{0,8}(数量|比例)/);
     for (const card of BUILTIN_STYLE_CARDS) expect(card.rules).toContain(BASE_STYLE_RULES);

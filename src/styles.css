@@ -917,6 +917,12 @@ button.danger-text:not(:disabled):hover {
 .character-progressions { display: grid; gap: var(--sp-2); min-width: 0; margin: 4px 0; padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: color-mix(in srgb, var(--panel) 42%, var(--paper)); }
 .character-progressions legend { padding: 0 5px; color: var(--ink); font-size: 12px; font-weight: 650; }
 .character-progressions > .hint { margin: 0; font-size: 10px; line-height: 1.5; }
+.scene-custom-fields { display: grid; gap: var(--sp-2); min-width: 0; margin: 4px 0; padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: color-mix(in srgb, var(--panel) 42%, var(--paper)); }
+.scene-custom-fields legend { padding: 0 5px; color: var(--ink); font-size: 12px; font-weight: 650; }
+.scene-custom-fields > .hint { margin: 0; font-size: 10px; line-height: 1.5; }
+.scene-custom-field-row { display: grid; grid-template-columns: minmax(90px, .7fr) minmax(140px, 1.3fr) 28px; align-items: center; gap: 6px; min-width: 0; }
+.scene-custom-field-row input { min-width: 0; }
+.scene-custom-field-add { justify-self: start; }
 .character-progression-row { display: grid; gap: 7px; min-width: 0; padding: var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper); }
 .character-progression-heading { display: grid; grid-template-columns: minmax(0, 1fr) 30px; gap: 6px; align-items: center; }
 .character-progression-heading .zw-select-trigger { min-width: 0; width: 100%; }

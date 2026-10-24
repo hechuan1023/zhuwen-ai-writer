@@ -1,4 +1,5 @@
 import { parseJson, parseTags } from "./shared";
+import { normalizeSceneCustomFields } from "../scene-fields";
 
 /** DB content_json → 编辑模型 */
 export function libraryContentToEditor(row: {
@@ -22,6 +23,7 @@ export function libraryContentToEditor(row: {
   }
   if (kind === "scene") {
     next.plotlinesText = Array.isArray(c.plotlines) ? c.plotlines.join("，") : String(c.plotlines || "");
+    next.customFields = normalizeSceneCustomFields(c.customFields);
   }
   if (!next.tagsText) next.tagsText = parseTags(row.tags_json || "[]");
   return next;
@@ -56,6 +58,7 @@ export function editorToLibraryContent(kind: string, editing: any): any {
         .map((value) => value.trim().slice(0, 80))
         .filter(Boolean))]
         .slice(0, 20),
+      customFields: normalizeSceneCustomFields(editing.customFields),
       when: editing.when || "",
     };
   if (kind === "relation")
@@ -124,6 +127,7 @@ export function normalizeLibraryDraft(kind: string, d: any) {
     cast: String(d.cast || ""),
     pov: String(d.pov || ""),
     plotlinesText: String(d.plotlinesText ?? (Array.isArray(d.plotlines) ? d.plotlines.join("，") : d.plotlines || "")),
+    customFields: normalizeSceneCustomFields(d.customFields),
     alias: String(d.alias || ""),
     appearance: String(d.appearance || ""),
     personality: String(d.personality || ""),

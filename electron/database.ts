@@ -247,6 +247,13 @@ function migrate(db: Db) {
     `)
     db.prepare('INSERT INTO schema_migrations VALUES(15,?)').run(now())
   })()
+  if (version < 16) db.transaction(() => {
+    db.exec(`ALTER TABLE ai_messages ADD COLUMN style_ids_json TEXT NOT NULL DEFAULT '[]';`)
+    const rows = db.prepare("SELECT id,style_id FROM ai_messages WHERE style_id IS NOT NULL AND style_id<>''").all() as { id: string; style_id: string }[]
+    const update = db.prepare("UPDATE ai_messages SET style_ids_json=? WHERE id=?")
+    for (const row of rows) update.run(JSON.stringify([row.style_id]), row.id)
+    db.prepare('INSERT INTO schema_migrations VALUES(16,?)').run(now())
+  })()
   // 已完成迁移的数据库也要能补齐或升级内置卡；不覆盖用户自定义记录。
   {
     const insert = db.prepare('INSERT OR IGNORE INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')

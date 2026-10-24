@@ -981,13 +981,30 @@ export function Workspace({
     setRight(true);
     setAiSceneDraftRequest({ nonce: crypto.randomUUID(), chapterId: targetChapter.id, scene });
   }
-  async function navigateToAiSource(source: { kind: string; sourceId: string }) {
+  async function navigateToAiSource(source: { kind: string; sourceId: string }): Promise<boolean | void> {
     const chapterKinds = new Set(["chapter", "selection", "summary", "continuation"]);
     if (chapterKinds.has(source.kind)) {
       const targetChapter = chapters.find((item) => item.id === source.sourceId);
-      if (!targetChapter) return notify(tr("来源章节已不存在，仍可查看保存的快照。", "The source chapter no longer exists; its saved snapshot is still available."));
-      if (await switchChapter(targetChapter)) setLeftView("chapters");
-      return;
+      if (!targetChapter) {
+        notify(tr("来源章节已不存在，仍可查看保存的快照。", "The source chapter no longer exists; its saved snapshot is still available."));
+        return false;
+      }
+      const full = await api<AnyRow>("chapters:get", targetChapter.id);
+      if (!full.ok || !full.data) {
+        notify(tr("无法读取来源章节，切换已取消。", "Could not load the source chapter; navigation was cancelled."));
+        return false;
+      }
+      if (!(await switchChapter(full.data))) return false;
+      await api("ai:session:patch", {
+        chapter: {
+          id: full.data.id,
+          title: full.data.title,
+          plain_text: full.data.plain_text,
+          revision: full.data.revision,
+        },
+      });
+      setLeftView("chapters");
+      return true;
     }
     const libraryKinds = new Set(["outline", "scene", "character", "world", "inspiration", "timeline", "foreshadow", "relation"]);
     if (!libraryKinds.has(source.kind) || !source.sourceId) return;
@@ -1831,7 +1848,7 @@ export function Workspace({
                 onToggleExpand={setAiExpanded}
                 sceneDraftRequest={aiSceneDraftRequest}
                 onSceneDraftRequestConsumed={() => setAiSceneDraftRequest(null)}
-                onNavigateSource={(source) => void navigateToAiSource(source)}
+                onNavigateSource={(source) => navigateToAiSource(source)}
               />
             </Suspense>
             <button

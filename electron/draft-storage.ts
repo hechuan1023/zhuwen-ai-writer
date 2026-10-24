@@ -18,6 +18,8 @@ export type DraftRecord = {
   convId: string;
   text: string;
   contexts: any[];
+  /** 分支重试时按会话保存的技法卡覆盖；不修改作品默认选择 */
+  styleIds?: string[];
   version: number;
   updatedAt: string;
 };
@@ -50,7 +52,7 @@ function isDraftRecord(x: any): x is DraftRecord {
 }
 
 export function isEmptyDraft(d: DraftRecord) {
-  return !String(d.text || "").trim() && !(Array.isArray(d.contexts) && d.contexts.length);
+  return !String(d.text || "").trim() && !(Array.isArray(d.contexts) && d.contexts.length) && !Array.isArray(d.styleIds);
 }
 
 export type DraftParseResult =
@@ -93,8 +95,27 @@ export function parseDraftStore(raw: string): DraftParseResult {
   const drafts: Record<string, DraftRecord> = {};
   let dropped = 0;
   for (const [k, v] of Object.entries(source)) {
-    if (isDraftRecord(v)) drafts[k] = v;
-    else dropped++;
+    if (!isDraftRecord(v)) {
+      dropped++;
+      continue;
+    }
+    const styleIds = (v as any).styleIds;
+    if (styleIds === undefined) drafts[k] = v;
+    else if (
+      Array.isArray(styleIds) &&
+      styleIds.length <= 6 &&
+      styleIds.every((id: unknown) => typeof id === "string" && id.length <= 200)
+    ) {
+      drafts[k] = {
+        ...v,
+        styleIds: [...new Set<string>(styleIds.map((id: string) => id.trim()).filter(Boolean))],
+      };
+    } else {
+      // 新增元数据损坏时保留用户正文和引用，只丢弃无法解释的风格覆盖。
+      const { styleIds: _invalidStyleIds, ...safeDraft } = v as any;
+      drafts[k] = safeDraft;
+      dropped++;
+    }
   }
   const tombstones: Record<string, number> = {};
   if (parsed.format === "zhuwen-ai-drafts" && parsed.tombstones && typeof parsed.tombstones === "object") {

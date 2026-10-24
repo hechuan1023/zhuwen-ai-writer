@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   DraftStorage,
   draftKey,
+  isEmptyDraft,
   parseDraftStore,
   parseDraftStoreOrThrow,
   pruneDrafts,
@@ -73,6 +74,12 @@ describe("pruneDrafts：数量阈值绝不删除非空草稿", () => {
     expect(out.empty2).toBeUndefined();
     expect(out.keep).toBeTruthy();
     expect(out.keepByAttachment).toBeTruthy();
+  });
+
+  it("仅有分支风格覆盖的草稿不会被当作空内容清理", () => {
+    const branchDraft = { ...record("", []), styleIds: ["style-urban-workplace-agency"] };
+    expect(isEmptyDraft(branchDraft)).toBe(false);
+    expect(pruneDrafts({ branchDraft }).branchDraft).toBeTruthy();
   });
 
   it("墓碑记录在 prune 中始终保留", () => {
@@ -270,6 +277,21 @@ describe("parseDraftStore：区分数据状态", () => {
     expect(r.kind).toBe("ok");
     if (r.kind === "ok") {
       expect(r.store.drafts.good.text).toBe("好草稿");
+      expect(r.dropped).toBe(1);
+    }
+  });
+  it("风格覆盖字段损坏时保留正文和引用，只丢弃该字段", () => {
+    const source = record("仍需保留的提示词", [{ kind: "scene", content: "场景快照" }]);
+    const r = parseDraftStore(JSON.stringify({
+      format: "zhuwen-ai-drafts",
+      version: 1,
+      drafts: { recoverable: { ...source, styleIds: ["too", "many", "ids", "are", "not", "allowed", "here"] } },
+    }));
+    expect(r.kind).toBe("ok");
+    if (r.kind === "ok") {
+      expect(r.store.drafts.recoverable.text).toBe("仍需保留的提示词");
+      expect(r.store.drafts.recoverable.contexts).toHaveLength(1);
+      expect(r.store.drafts.recoverable.styleIds).toBeUndefined();
       expect(r.dropped).toBe(1);
     }
   });

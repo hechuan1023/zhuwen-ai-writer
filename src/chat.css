@@ -349,6 +349,18 @@
 .zchat-act.icon-only {
   padding: 3px 5px;
 }
+.zchat-retry-prompt {
+  color: var(--accent, #4d7a68);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.zchat-retry-prompt:hover {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 10%, transparent));
+}
+.zchat-retry-prompt:focus-visible {
+  outline: 2px solid var(--accent, #4d7a68);
+  outline-offset: 1px;
+}
 .zchat-actions-hint {
   font-size: 11px;
   color: var(--muted, #8a8577);

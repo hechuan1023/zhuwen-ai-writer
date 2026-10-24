@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPlotlineMatrix, filterScenesByPov, filterScenesByTrack, groupScenesForTimeline, scenePovOptions, scenePlotlines, sceneTags, sceneTrackOptions } from "../src/ui/scene-planner-model";
+import { buildPlotlineMatrix, filterScenesByPov, filterScenesByTrack, groupScenesForTimeline, sceneCustomFields, scenePovOptions, scenePlotlines, sceneTags, sceneTrackOptions } from "../src/ui/scene-planner-model";
 
 describe("scene timeline ordering", () => {
   it("uses chapter order and preserves saved scene order without parsing free-text time labels", () => {
@@ -75,6 +75,31 @@ describe("scene label filters", () => {
     expect(filterScenesByTrack(scenes, "tag:宗门暗线").map((scene) => scene.id)).toEqual(["b"]);
     expect(filterScenesByTrack(scenes, "__unlabeled__").map((scene) => scene.id)).toEqual(["c"]);
     expect(filterScenesByTrack(scenes, "all")).toHaveLength(3);
+  });
+});
+
+describe("scene custom properties", () => {
+  it("reads normalized custom properties from scene content", () => {
+    expect(sceneCustomFields({
+      content_json: JSON.stringify({ customFields: [
+        { key: "地点", value: "雾桥" },
+        { key: "地点", value: "忽略重复" },
+        { key: "危险", value: "" },
+      ] }),
+    })).toEqual([{ key: "地点", value: "雾桥" }]);
+  });
+
+  it("offers searchable custom-property filters and excludes labeled scenes from unlabeled results", () => {
+    const scenes = [
+      { id: "a", content_json: JSON.stringify({ customFields: [{ key: "天气", value: "暴雨" }] }) },
+      { id: "b", content_json: JSON.stringify({ customFields: [{ key: "天气", value: "晴" }] }) },
+      { id: "c", content_json: JSON.stringify({}) },
+    ];
+    const options = sceneTrackOptions(scenes);
+    const rain = options.find((option) => option.label === "天气：暴雨");
+    expect(rain?.kind).toBe("custom");
+    expect(filterScenesByTrack(scenes, rain!.value).map((scene) => scene.id)).toEqual(["a"]);
+    expect(filterScenesByTrack(scenes, "__unlabeled__").map((scene) => scene.id)).toEqual(["c"]);
   });
 });
 

@@ -78,6 +78,7 @@ describe("scene / foreshadow / health tools", () => {
         cast: "甲,乙",
         pov: "甲",
         plotlines: ["复仇主线", "宗门暗线"],
+        customFields: [{ key: "地点", value: "雾桥" }, { key: "天气", value: "暴雨" }],
         when: "第3章",
       }),
     });
@@ -87,8 +88,21 @@ describe("scene / foreshadow / health tools", () => {
     expect(content.cast).toBe("甲,乙");
     expect(content.pov).toBe("甲");
     expect(content.plotlines).toEqual(["复仇主线", "宗门暗线"]);
+    expect(content.customFields).toEqual([{ key: "地点", value: "雾桥" }, { key: "天气", value: "暴雨" }]);
     expect(normalizeLibraryDraft("scene", model)).toContain('"pov":"甲"');
     expect(normalizeLibraryDraft("scene", model)).toContain('"plotlinesText":"复仇主线，宗门暗线"');
+    expect(normalizeLibraryDraft("scene", model)).toContain('"customFields":[{"key":"地点","value":"雾桥"},{"key":"天气","value":"暴雨"}]');
+  });
+
+  it("bounds scene custom properties and drops empty or duplicate names", () => {
+    const content = editorToLibraryContent("scene", {
+      customFields: [
+        { key: " 地点 ", value: " 码头 " },
+        { key: "地点", value: "重复项" },
+        { key: "", value: "无名称" },
+      ],
+    });
+    expect(content.customFields).toEqual([{ key: "地点", value: "码头" }]);
   });
 
   it("foreshadow lifecycle fields round-trip", () => {

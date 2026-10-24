@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 // Must stay inlined: sandboxed preloads cannot require local relative modules.
 const allowedChannels = new Set([
   'ai:cancel',
+  'ai:conversation:branch',
   'ai:conversation:trash',
   'ai:conversation:update',
   'ai:conversations',

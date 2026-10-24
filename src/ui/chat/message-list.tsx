@@ -96,10 +96,12 @@ function AssistantActions({
   content,
   language,
   actions,
+  onRetryPrompt,
 }: {
   content: string;
   language: string;
   actions: ReplyActions;
+  onRetryPrompt?: () => void;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const adoptItems: MenuItem[] = [
@@ -165,6 +167,18 @@ function AssistantActions({
   return (
     <div className="zchat-actions">
       <CopyButton text={content} language={language} compact />
+      {onRetryPrompt && (
+        <button
+          type="button"
+          className="zchat-act icon-only zchat-retry-prompt"
+          data-fd-id="ai-retry-from-reply"
+          aria-label={tr("编辑原提问并重试", "Edit the original prompt and retry")}
+          title={tr("从原提问创建分支，编辑后重试", "Branch from the original prompt, edit, then retry")}
+          onClick={onRetryPrompt}
+        >
+          <IconRetry />
+        </button>
+      )}
       {actions.floatOnlyHint ? (
         <span className="zchat-actions-hint">
           {tr("采纳修改请在主窗口操作", "Apply from the main window")}
@@ -210,6 +224,7 @@ export type MessageListProps = {
   retryLabel?: string;
   errorMessage?: string | null;
   onOpenSource?: (messageId: string, source: AnyRow) => void;
+  onReusePrompt?: (message: AnyRow) => void;
 };
 
 export function MessageList({
@@ -223,6 +238,7 @@ export function MessageList({
   onRetry,
   retryLabel,
   onOpenSource,
+  onReusePrompt,
 }: MessageListProps) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -307,11 +323,29 @@ export function MessageList({
                   content={String(m.content || "")}
                   language={language}
                   actions={actionsFor(m)}
+                  onRetryPrompt={(() => {
+                    const prompt = messages.find(
+                      (candidate) => candidate.role === "user" && candidate.id === m.source_message_id,
+                    );
+                    return prompt && onReusePrompt ? () => onReusePrompt(prompt) : undefined;
+                  })()}
                 />
               )}
               {isUser && !m.streaming && (
                 <div className="zchat-actions">
                   <CopyButton text={String(m.content || "")} language={language} compact />
+                  {onReusePrompt && (
+                    <button
+                      type="button"
+                      className="zchat-act icon-only zchat-retry-prompt"
+                      data-fd-id="ai-reuse-prompt"
+                      aria-label={tr("从这里分支并编辑", "Branch and edit from here")}
+                      title={tr("从此处创建分支并编辑提问", "Create a branch here and edit the prompt")}
+                      onClick={() => onReusePrompt(m)}
+                    >
+                      <IconRetry />
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -319,7 +353,7 @@ export function MessageList({
         );
       }),
     // 依赖消息数组与语言：内容变化（流式）时只重渲染列表，不重建结构
-    [messages, language, actionsFor, renderMarkdown, onOpenSource],
+    [messages, language, actionsFor, renderMarkdown, onOpenSource, onReusePrompt],
   );
 
   return (

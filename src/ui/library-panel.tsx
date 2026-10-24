@@ -611,6 +611,35 @@ export function LibraryPanel({
                 value={editing.plotlinesText || ""}
                 onChange={(e) => updateEditing({ plotlinesText: e.target.value })}
               />
+              <fieldset className="scene-custom-fields" data-fd-id="scene-custom-fields">
+                <legend>{tr("自定义属性", "Custom properties")}</legend>
+                <p className="hint">{tr("添加适合本书的场景信息，如地点、天气、目标或风险。相同名称只保留第一项。", "Add scene metadata for this novel, such as location, weather, goal, or risk. Duplicate names keep the first value.")}</p>
+                {(Array.isArray(editing.customFields) ? editing.customFields : []).map((field: AnyRow, index: number, fields: AnyRow[]) => (
+                  <div className="scene-custom-field-row" key={index}>
+                    <input
+                      aria-label={tr(`属性名称 ${index + 1}`, `Property name ${index + 1}`)}
+                      placeholder={tr("名称", "Name")}
+                      maxLength={40}
+                      value={field.key || ""}
+                      onChange={(event) => updateEditing({ customFields: fields.map((item, itemIndex) => itemIndex === index ? { ...item, key: event.target.value } : item) })}
+                    />
+                    <input
+                      aria-label={tr(`属性值 ${index + 1}`, `Property value ${index + 1}`)}
+                      placeholder={tr("属性值", "Value")}
+                      maxLength={240}
+                      value={field.value || ""}
+                      onChange={(event) => updateEditing({ customFields: fields.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item) })}
+                    />
+                    <button type="button" className="icon" aria-label={tr("移除自定义属性", "Remove custom property")} title={tr("移除属性", "Remove property")} onClick={() => updateEditing({ customFields: fields.filter((_, itemIndex) => itemIndex !== index) })}>×</button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="secondary scene-custom-field-add"
+                  disabled={(Array.isArray(editing.customFields) ? editing.customFields.length : 0) >= 12}
+                  onClick={() => updateEditing({ customFields: [...(Array.isArray(editing.customFields) ? editing.customFields : []), { key: "", value: "" }] })}
+                >＋ {tr("添加属性", "Add property")}</button>
+              </fieldset>
               <datalist id="scene-pov-names">
                 {[...new Set(allItems.filter((item) => item.kind === "scene").map((item) => String(parseJson(item.content_json).pov || "").trim()).filter(Boolean))].map((pov) => <option key={pov} value={pov} />)}
               </datalist>

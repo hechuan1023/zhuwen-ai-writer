@@ -1,3 +1,5 @@
+import { normalizeSceneCustomFields } from "../scene-fields";
+
 export type PlannerRow = Record<string, any>;
 
 export function scenePov(scene: PlannerRow) {
@@ -53,6 +55,17 @@ export function scenePlotlines(scene: PlannerRow) {
   return [...new Set(values.map((value: unknown) => String(value || "").trim()).filter(Boolean))];
 }
 
+export function sceneCustomFields(scene: PlannerRow) {
+  let content: PlannerRow = {};
+  try {
+    const parsed = typeof scene.content_json === "string" ? JSON.parse(scene.content_json || "{}") : scene.content_json;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) content = parsed;
+  } catch {
+    // Keep the planner usable if legacy scene metadata is malformed.
+  }
+  return normalizeSceneCustomFields(scene.customFields ?? content.customFields);
+}
+
 export function sceneTrackOptions(scenes: PlannerRow[]) {
   const counts = new Map<string, number>();
   for (const scene of scenes) {
@@ -64,20 +77,42 @@ export function sceneTrackOptions(scenes: PlannerRow[]) {
       const key = `tag:${label}`;
       counts.set(key, (counts.get(key) || 0) + 1);
     }
+    for (const field of sceneCustomFields(scene)) {
+      const key = `custom:${encodeURIComponent(JSON.stringify([field.key, field.value]))}`;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
   }
   return [...counts].map(([value, count]) => {
     const separator = value.indexOf(":");
-    return { value, kind: value.slice(0, separator), label: value.slice(separator + 1), count };
+    const kind = value.slice(0, separator);
+    let label = value.slice(separator + 1);
+    if (kind === "custom") {
+      try {
+        const [key, fieldValue] = JSON.parse(decodeURIComponent(label));
+        label = `${key}：${fieldValue}`;
+      } catch {
+        label = "自定义属性";
+      }
+    }
+    return { value, kind, label, count };
   });
 }
 
 export function filterScenesByTrack(scenes: PlannerRow[], track: string) {
   if (track === "all") return scenes;
-  if (track === "__unlabeled__") return scenes.filter((scene) => !sceneTags(scene).length && !scenePlotlines(scene).length);
+  if (track === "__unlabeled__") return scenes.filter((scene) => !sceneTags(scene).length && !scenePlotlines(scene).length && !sceneCustomFields(scene).length);
   const separator = track.indexOf(":");
   if (separator < 0) return [];
   const kind = track.slice(0, separator);
   const label = track.slice(separator + 1);
+  if (kind === "custom") {
+    try {
+      const [key, value] = JSON.parse(decodeURIComponent(label));
+      return scenes.filter((scene) => sceneCustomFields(scene).some((field) => field.key === key && field.value === value));
+    } catch {
+      return [];
+    }
+  }
   return scenes.filter((scene) => (kind === "plotline" ? scenePlotlines(scene) : kind === "tag" ? sceneTags(scene) : []).includes(label));
 }
 
