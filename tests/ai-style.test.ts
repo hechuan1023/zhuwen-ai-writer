@@ -1,16 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { BASE_STYLE_RULES, BUILTIN_STYLE_CARDS, NATURALIZE_RULES, buildTaskAndStyleInstructions, styleInstruction } from "../electron/ai-style-cards";
+import { BASE_STYLE_RULES, BUILTIN_STYLE_CARDS, NATURALIZE_RULES, buildTaskAndStyleInstructions, effectiveStyleRules, styleInstruction } from "../electron/ai-style-cards";
 import { parseStyleCompositionBundle } from "../electron/ai-style-bundle";
 
 describe("AI 写作风格卡", () => {
   it("提供稳定 ID 的内置技法卡，覆盖通用叙事、现实职场与幻想融合且不包含硬性配额", () => {
-    expect(BUILTIN_STYLE_CARDS).toHaveLength(12);
-    expect(new Set(BUILTIN_STYLE_CARDS.map((x) => x.id)).size).toBe(12);
+    expect(BUILTIN_STYLE_CARDS.length).toBeGreaterThanOrEqual(12);
+    expect(new Set(BUILTIN_STYLE_CARDS.map((x) => x.id)).size).toBe(BUILTIN_STYLE_CARDS.length);
+    expect(BUILTIN_STYLE_CARDS.map((x) => x.id)).toEqual(expect.arrayContaining([
+      "style-natural-narrative",
+      "style-serial-hook-payoff",
+      "style-system-agency-gameplay",
+      "style-lived-realism",
+      "style-urban-workplace-agency",
+      "style-fantasy-social-fusion",
+    ]));
     expect(BUILTIN_STYLE_CARDS.find((x) => x.id === "style-urban-workplace-agency")?.rules).toContain("职责边界");
     expect(BUILTIN_STYLE_CARDS.find((x) => x.id === "style-fantasy-social-fusion")?.rules).toContain("世界内部自洽");
     const all = BUILTIN_STYLE_CARDS.map((x) => x.rules).join("\n");
     expect(all).not.toMatch(/对话.{0,8}(比例|占比)|每章必须|固定.{0,8}(数量|比例)/);
-    for (const card of BUILTIN_STYLE_CARDS) expect(card.rules).toContain(BASE_STYLE_RULES);
+    for (const card of BUILTIN_STYLE_CARDS) expect(effectiveStyleRules(card)).toContain(BASE_STYLE_RULES);
   });
 
   it("普通聊天不注入正文风格，续写只注入一次可审阅规则", () => {
@@ -18,7 +26,28 @@ describe("AI 写作风格卡", () => {
     expect(styleInstruction(card, "chat")).toBe("");
     const instruction = styleInstruction(card, "continue");
     expect(instruction).toContain(card.name);
-    expect(instruction.match(/当前写作风格/g)).toHaveLength(1);
+    expect(instruction.match(/【组合写作方法：/g)).toHaveLength(1);
+    expect(instruction.match(/围绕人物当前要做的事展开场景/g)).toHaveLength(1);
+  });
+
+  it("只注入适用于当前任务的卡片；自然化兼容润色卡且不重复基础规则", () => {
+    const polishOnly = { ...BUILTIN_STYLE_CARDS.find((card) => card.id === "style-character-voice-tension")!, tasks: ["polish"] };
+    expect(buildTaskAndStyleInstructions(polishOnly, "continue")).toBe("");
+
+    const instruction = buildTaskAndStyleInstructions(polishOnly, "naturalize");
+    expect(instruction).toContain(NATURALIZE_RULES);
+    expect(instruction).toContain(polishOnly.name);
+    expect(instruction.match(/围绕人物当前要做的事展开场景/g)).toHaveLength(1);
+    expect(buildTaskAndStyleInstructions(polishOnly, "chat")).toBe("");
+    expect(buildTaskAndStyleInstructions(polishOnly, "check")).toBe("");
+  });
+
+  it("合并多张技法卡时基础规则只注入一次", () => {
+    const cards = BUILTIN_STYLE_CARDS.filter((card) => ["style-natural-narrative", "style-growth-progression", "style-suspense-information-control"].includes(card.id));
+    const instruction = buildTaskAndStyleInstructions(cards, "continue");
+    expect(instruction).toContain("成长体现为解决问题的能力变化");
+    expect(instruction).toContain("线索必须有可追溯的载体");
+    expect(instruction.match(/围绕人物当前要做的事展开场景/g)).toHaveLength(1);
   });
 
   it("自然化规则明确保留原稿事实并禁止未经授权扩写", () => {

@@ -3,6 +3,7 @@ import { marked } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { joinSegments, splitSegments } from "../segments";
 import { materialReferenceContent, relevantMaterials } from "../relevant";
+import { normalizeSceneTargetWords } from "../scene-fields";
 import { api, useAiSessionStore, fmt, kindNameFor, promptNameFor, parseJson, Empty, Modal, DiffModal, ConfirmDialog, PromptDialog, AnyRow, UiLanguage, aiDraftFlusher } from "./shared";
 import { ChatToolbar } from "./chat/chat-toolbar";
 import { HistoryDrawer } from "./chat/history-drawer";
@@ -292,6 +293,8 @@ export function AiPanel({
     if (!request || session?.novelId !== novelId || request.chapterId !== chapterId || consumedSceneDraft.current === request.nonce) return;
     consumedSceneDraft.current = request.nonce;
     const scene = request.scene || {};
+    const sceneContent = parseJson(scene.content_json || "{}");
+    const targetWords = normalizeSceneTargetWords(scene.targetWords ?? sceneContent.targetWords);
     const sceneContext = {
       label: `${scene.title || tr("未命名场景", "Untitled scene")} · ${tr("场景细纲", "Scene outline")}`,
       kind: "scene",
@@ -311,8 +314,8 @@ export function AiPanel({
     setActiveTaskId("draft-scene");
     setMode("outline");
     updateDraft(tr(
-      `请依据引用的场景细纲，为「${scene.title || "本场"}」起草正文。遵守已确认设定与人物知识边界，兑现细纲中的目标、冲突和回报；不要擅自改变既定事实。只输出可直接进入小说的正文，不要标题、提纲或解释。`,
-      `Draft the prose for “${scene.title || "this scene"}” using the attached scene outline. Respect confirmed canon and character knowledge; deliver the outlined goal, conflict, and payoff without changing established facts. Output only manuscript-ready prose, with no heading, outline, or explanation.`,
+      `请依据引用的场景细纲，为「${scene.title || "本场"}」起草正文。遵守已确认设定与人物知识边界，兑现细纲中的目标、冲突和回报；不要擅自改变既定事实。${targetWords ? `本场目标篇幅约 ${fmt(targetWords)} 字，尽量接近目标，不要为凑字数重复或注水。` : ""}只输出可直接进入小说的正文，不要标题、提纲或解释。`,
+      `Draft the prose for “${scene.title || "this scene"}” using the attached scene outline. Respect confirmed canon and character knowledge; deliver the outlined goal, conflict, and payoff without changing established facts.${targetWords ? ` Aim for approximately ${fmt(targetWords)} Chinese characters for this scene; stay near the target without padding or repetition.` : ""} Output only manuscript-ready prose, with no heading, outline, or explanation.`,
     ));
     onSceneDraftRequestConsumed?.();
   // updateDraft is a function declaration; the nonce prevents duplicate consumption while session snapshots settle.

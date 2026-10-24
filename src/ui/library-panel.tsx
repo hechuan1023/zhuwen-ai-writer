@@ -705,6 +705,22 @@ export function LibraryPanel({
                 value={editing.plotlinesText || ""}
                 onChange={(e) => updateEditing({ plotlinesText: e.target.value })}
               />
+              <label className="scene-target-words-field">
+                <span>{tr("场景目标字数（可选）", "Scene word target (optional)")}</span>
+                <input
+                  data-fd-id="scene-target-words"
+                  type="number"
+                  min={1}
+                  max={100000}
+                  step={100}
+                  inputMode="numeric"
+                  aria-label={tr("场景目标字数", "Scene word target")}
+                  placeholder={tr("例如 1200", "e.g. 1200")}
+                  value={editing.targetWords ?? ""}
+                  onChange={(event) => updateEditing({ targetWords: event.target.value })}
+                />
+                <small>{tr("仅作篇幅规划，不会自动截断或限制 AI 输出。", "Planning guidance only; it will not truncate or limit AI output.")}</small>
+              </label>
               <fieldset className="scene-custom-fields" data-fd-id="scene-custom-fields">
                 <legend>{tr("自定义属性", "Custom properties")}</legend>
                 <p className="hint">{tr("添加适合本书的场景信息，如地点、天气、目标或风险。相同名称只保留第一项。", "Add scene metadata for this novel, such as location, weather, goal, or risk. Duplicate names keep the first value.")}</p>

@@ -19,6 +19,7 @@ import { DailyGoalMeter } from "./daily-goal";
 import { WritingStatsCenter } from "./stats-center";
 import { Select } from "./select";
 import { applyReduceMotion } from "./motion";
+import { findRepeatedPhrases } from "./repetition-audit";
 import { buildEnvironment, WritingEnvironment } from "./presets";
 import { patchAppearance } from "./prefs";
 
@@ -136,6 +137,8 @@ export function Workspace({
     [findOpen, setFindOpen] = useState(false),
     [findText, setFindText] = useState(""),
     [replaceText, setReplaceText] = useState(""),
+    [phraseAuditOpen, setPhraseAuditOpen] = useState(false),
+    [phraseAuditResults, setPhraseAuditResults] = useState<{ phrase: string; count: number }[]>([]),
     [showReplace, setShowReplace] = useState(false),
     [matchCount, setMatchCount] = useState(0),
     [searchOpen, setSearchOpen] = useState(false),
@@ -805,6 +808,21 @@ export function Workspace({
     editor.commands.scrollIntoView();
   }
   findNextRef.current = findNext;
+  function openPhraseAudit() {
+    const textRuns: string[] = [];
+    editor?.state.doc.descendants((node) => {
+      if (node.isText && node.text) textRuns.push(node.text);
+    });
+    setPhraseAuditResults(findRepeatedPhrases(textRuns));
+    setPhraseAuditOpen(true);
+  }
+  function findAuditedPhrase(phrase: string) {
+    setFindText(phrase);
+    setShowReplace(false);
+    setPhraseAuditOpen(false);
+    setFindOpen(true);
+    window.setTimeout(() => findNextRef.current(phrase), 80);
+  }
   async function runBookSearch() {
     const query = bookQuery.trim();
     if (!query) {
@@ -1329,6 +1347,9 @@ export function Workspace({
           >
             <button onClick={() => setSummaryOpen(true)}>
               {tx(language, "summary")}
+            </button>
+            <button disabled={!editor || !chapter} onClick={openPhraseAudit} data-fd-id="phrase-audit-open">
+              {tr("检查本章高频表达", "Review repeated phrases")}
             </button>
             <button
               disabled={!chapter}
@@ -2173,6 +2194,25 @@ export function Workspace({
                 </button>
               ))}
             </div>
+          </div>
+        </Modal>
+      )}
+      {phraseAuditOpen && (
+        <Modal title={tr("本章高频表达", "Repeated phrases in this chapter")} close={() => setPhraseAuditOpen(false)}>
+          <div className="phrase-audit" data-fd-id="phrase-audit-results">
+            <p className="hint">{tr("本机仅分析当前章节，列出出现至少 3 次的连续短语。结果是供作者复核的提示，不代表表达错误，也不会自动修改正文。", "This chapter is analyzed locally. Phrases appearing at least 3 times are listed as review suggestions—not errors—and the text is never changed automatically.")}</p>
+            {phraseAuditResults.length ? (
+              <div className="phrase-audit-list">
+                {phraseAuditResults.map(({ phrase, count }) => (
+                  <button type="button" className="phrase-audit-row" key={phrase} onClick={() => findAuditedPhrase(phrase)}>
+                    <span className="phrase-audit-copy"><b>{phrase}</b><small>{tr("本章重复表达 · 点击定位并在查找栏继续核对", "Repeated in this chapter · click to locate and review in Find")}</small></span>
+                    <span className="phrase-audit-count">{tr(`${count} 处`, `${count} matches`)}<i aria-hidden="true">→</i></span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="phrase-audit-empty">{tr("暂未发现出现 3 次以上的连续短语。", "No repeated phrases (3+ occurrences) found in this chapter.")}</p>
+            )}
           </div>
         </Modal>
       )}

@@ -1,5 +1,5 @@
 import { parseJson, parseTags } from "./shared";
-import { normalizeSceneCustomFields } from "../scene-fields";
+import { normalizeSceneCustomFields, normalizeSceneTargetWords } from "../scene-fields";
 
 /** DB content_json → 编辑模型 */
 export function libraryContentToEditor(row: {
@@ -28,6 +28,7 @@ export function libraryContentToEditor(row: {
   if (kind === "scene") {
     next.plotlinesText = Array.isArray(c.plotlines) ? c.plotlines.join("，") : String(c.plotlines || "");
     next.customFields = normalizeSceneCustomFields(c.customFields);
+    next.targetWords = normalizeSceneTargetWords(c.targetWords) ?? "";
   }
   if (!next.tagsText) next.tagsText = parseTags(row.tags_json || "[]");
   return next;
@@ -63,6 +64,7 @@ export function editorToLibraryContent(kind: string, editing: any): any {
         .filter(Boolean))]
         .slice(0, 20),
       customFields: normalizeSceneCustomFields(editing.customFields),
+      targetWords: normalizeSceneTargetWords(editing.targetWords),
       when: editing.when || "",
     };
   if (kind === "relation")
@@ -145,6 +147,7 @@ export function normalizeLibraryDraft(kind: string, d: any) {
     pov: String(d.pov || ""),
     plotlinesText: String(d.plotlinesText ?? (Array.isArray(d.plotlines) ? d.plotlines.join("，") : d.plotlines || "")),
     customFields: normalizeSceneCustomFields(d.customFields),
+    targetWords: String(d.targetWords ?? ""),
     alias: String(d.alias || ""),
     appearance: String(d.appearance || ""),
     personality: String(d.personality || ""),

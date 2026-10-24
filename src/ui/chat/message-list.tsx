@@ -14,9 +14,10 @@ import {
 } from "./icons";
 
 /** 回到底部按钮：仅在用户上翻离开底部时出现 */
-function ScrollToBottom() {
+function ScrollToBottom({ language }: { language: string }) {
   const { isAtBottom, scrollToBottom } = useStickToBottomContext();
   const [visible, setVisible] = useState(false);
+  const label = language === "en" ? "Scroll to bottom" : "回到底部";
   useEffect(() => {
     if (isAtBottom) {
       setVisible(false);
@@ -31,8 +32,8 @@ function ScrollToBottom() {
       type="button"
       className="zchat-to-bottom"
       data-fd-id="ai-to-bottom"
-      aria-label="回到底部"
-      title="回到底部"
+      aria-label={label}
+      title={label}
       onClick={() => scrollToBottom()}
     >
       <IconArrowDown />
@@ -422,7 +423,7 @@ export function MessageList({
             </div>
           )}
         </StickToBottom.Content>
-        <ScrollToBottom />
+        <ScrollToBottom language={language} />
       </StickToBottom>
     </div>
   );

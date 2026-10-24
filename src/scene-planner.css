@@ -53,6 +53,10 @@
 .scene-lane-head b { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .scene-lane-index { display: grid; place-items: center; width: 29px; height: 29px; flex: none; border-radius: 9px; background: var(--accent-soft); color: var(--accent); font-family: var(--font-num); font-size: 10px; font-weight: 700; }
 .scene-lane-count { display: grid; place-items: center; min-width: 23px; height: 23px; padding: 0 6px; border-radius: 99px; background: var(--panel-2); color: var(--muted); font-family: var(--font-num); font-size: 10px; }
+.scene-chapter-length { display: flex; align-items: center; gap: 8px; margin: 8px 2px 0; }
+.scene-chapter-length-track,.scene-timeline-length-track { display: block; flex: 1; height: 4px; overflow: hidden; border-radius: 99px; background: var(--panel-2); }
+.scene-chapter-length-track span,.scene-timeline-length-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 72%, var(--accent-2)), var(--accent)); }
+.scene-chapter-length small,.scene-timeline-length small { flex: none; color: var(--muted); font-family: var(--font-num); font-size: 9px; font-variant-numeric: tabular-nums; }
 .scene-lane-open { width: 100%; margin-top: 8px; padding: 5px 7px; border: 0; background: transparent; color: var(--accent); text-align: left; font-size: 10px; }
 .scene-lane-open:hover { background: var(--accent-soft); }
 .scene-lane-status { display: flex; align-items: center; justify-content: space-between; gap: 7px; margin-top: 3px; padding: 5px 7px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper); }
@@ -73,6 +77,11 @@
 .scene-card-sort { margin-left: auto; font-size: 12px; }
 .scene-card-title { display: block; width: 100%; margin: 7px 0 0; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: left; font-size: 12px; font-weight: 650; line-height: 1.5; }
 .scene-card-title:hover { color: var(--accent); }
+.scene-card-target,.scene-timeline-target { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 8px; margin-top: 7px; color: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+.scene-card-target i,.scene-timeline-target > i { grid-column: 1 / -1; display: block; height: 4px; overflow: hidden; border-radius: 99px; background: var(--panel-2); }
+.scene-card-target i b,.scene-timeline-target > i b { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+.scene-card-target small { color: var(--accent); font-size: 9px; }
+.scene-timeline-target { grid-template-columns: 1fr auto; max-width: 300px; margin-top: 8px; }
 .scene-card-role { margin: 4px 0 0; color: var(--accent); font-size: 10px; }
 .scene-card-body { display: -webkit-box; overflow: hidden; margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
 .scene-card-payoff { display: grid; gap: 4px; margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--line); }
@@ -123,6 +132,8 @@
 .scene-timeline-chapter-head > div { min-width: 0; flex: 1; }
 .scene-timeline-chapter-head small { color: var(--muted); font-size: 10px; }
 .scene-timeline-chapter-head h2 { overflow: hidden; margin: 3px 0 0; color: var(--ink); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.scene-timeline-length { display: flex; align-items: center; gap: 9px; margin-top: 7px; }
+.scene-timeline-length-track { max-width: 260px; }
 .scene-timeline-chapter-head > button { flex: none; min-height: 28px; padding: 4px 9px; border: 0; background: transparent; color: var(--accent); font-size: 10px; }
 .scene-timeline-events { position: relative; display: grid; gap: 12px; margin: 14px 0 0 13px; padding-left: 22px; border-left: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line)); }
 .scene-timeline-event { position: relative; min-width: 0; }

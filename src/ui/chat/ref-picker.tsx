@@ -30,20 +30,57 @@ export function RefPicker({
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const panelRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const [loadingChapter, setLoadingChapter] = useState<string | null>(null);
   const isAdded = (kind: string, sourceId?: string) =>
     selectedSources.some((source) => source.kind === kind && source.sourceId === sourceId);
 
   useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== "Tab") return;
+
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusable = Array.from(panel.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )).filter((element) => element.getAttribute("aria-hidden") !== "true" && element.getClientRects().length > 0);
+      if (!focusable.length) {
+        e.preventDefault();
+        panel.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener("keydown", onKey, true);
+      if (previousFocus?.isConnected) {
+        window.requestAnimationFrame(() => previousFocus.focus({ preventScroll: true }));
+      }
+    };
+  }, []);
 
   const others = bookChapters.filter((c) => c.id !== chapterId);
 
@@ -54,14 +91,16 @@ export function RefPicker({
         className="zchat-picker"
         ref={panelRef}
         role="dialog"
-        aria-label={tr("添加引用", "Add reference")}
+        aria-modal="true"
+        aria-labelledby="ai-ref-picker-title"
         data-fd-id="ai-ref-picker"
       >
         <div className="zchat-picker-head">
-          <b>{tr("添加引用", "Add reference")}</b>
+          <b id="ai-ref-picker-title">{tr("添加引用", "Add reference")}</b>
           <button
             type="button"
             className="zchat-icon-btn"
+            ref={closeButtonRef}
             aria-label={tr("关闭", "Close")}
             title={tr("关闭", "Close")}
             onClick={onClose}
@@ -81,7 +120,7 @@ export function RefPicker({
               <IconSparkle /> {tr("本地匹配 · 相关资料", "Local matches · related materials")}
               <small className="zchat-picker-local-only">{tr("不调用 AI", "No AI call")}</small>
             </h4>
-            <p className="zchat-picker-match-note">{tr("按正文、选区、人物/地点/势力别名、资料标签和所属章节给出候选；你点选后才会加入请求。", "Candidates use text, selection, character/place/faction aliases, tags, and chapter links. Nothing is sent until you add it.")}</p>
+            <p className="zchat-picker-match-note">{tr("按正文、选区、人物/地点/势力别名、资料关键词片段、标签和所属章节给出候选；关键词仅作本地提示，你点选后才会加入请求。", "Candidates use text, selection, character/place/faction aliases, material keyword fragments, tags, and chapter links. Keyword matches are local hints; nothing is sent until you add it.")}</p>
             {suggestions.length ? (
               <div className="zchat-suggestion-list">
                 {suggestions.map((suggestion) => {

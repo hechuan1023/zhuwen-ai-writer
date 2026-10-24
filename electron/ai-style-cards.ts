@@ -192,6 +192,38 @@ export const BUILTIN_STYLE_CARDS: AiStyleCard[] = [
 融合传统文化或专业知识时区分虚构规则与可核实事实；尊重用户资料，依据不足就保留为待确认设定。`,
   },
   {
+    id: "style-system-agency-gameplay",
+    name: "系统博弈与主体能动",
+    description: "让人物理解、利用、协商或反抗系统规则，并承担选择后果。",
+    tasks: ["continue", "outline", "polish"],
+    version: 1,
+    builtin: 1,
+    rules: `${BASE_STYLE_RULES}
+
+把系统、契约、组织机制或规则环境当作会影响选择的力量，而不是替主角自动解决问题的旁白工具；先依据用户设定明确其权限、边界、激励与代价，不擅自添加系统功能。
+人物可以服从、试探、利用、谈判、合作或反抗，但行动要建立在已知信息与可验证线索上；不可行时先呈现失败、损失或修正判断，不临时创造漏洞解围。
+每次与系统机制交互，至少改变一项真实条件：可用资源、风险、知识、关系、权限或下一步选择。即时奖励同时带来约束、债务、暴露、依赖或新的责任时，要符合世界规则。
+系统反馈不能替代人物动机、关系冲突和场景行动；避免连续弹窗、任务清单、数值升级或提示语堆叠成正文主体。
+系统的立场不预设为善意或恶意。若故事要质疑或反抗它，逐步呈现规则如何分配权力、谁承担成本、人物为何愿意行动，以及反抗会牵连谁。
+大纲需区分已确认规则、人物假设、待验证机制和策略代价；正文只呈现视角人物能够观察、推断或承受的部分。`,
+  },
+  {
+    id: "style-lived-realism",
+    name: "现实经验与生活肌理",
+    description: "从小切口和可观察的生活细节写出人物处境，不把主题写成口号。",
+    tasks: ["continue", "outline", "polish"],
+    version: 1,
+    builtin: 1,
+    rules: `${BASE_STYLE_RULES}
+
+从人物真实可感的工作、照料、居住、健康、金钱、时间或关系压力切入；选择会影响当前行动的细节，不把日常写成资料清单。
+现实矛盾同时保留制度、资源与个人选择的作用，不将复杂处境归结成单一坏人、励志口号或主题先行的结论。
+人物可以有能力、局限、矛盾和改变缓慢的部分；让态度通过具体选择、代价、习惯与关系反馈呈现，不替某一群体概括统一经验。
+保持情节张力，但允许克制、停顿、未解决和普通人的有限性；阶段结果要回应前面建立的问题，也要呈现解决不了或需要继续承担的部分。
+专业、地域、历史与健康细节只在资料或作者提供的事实范围内确定；缺少依据时不编造权威结论，可把核实需求留给作者。
+润色优先保留原稿独特的观察和语气，去除口号化总结、重复煽情与为制造反转而扭曲生活逻辑的段落。`,
+  },
+  {
     id: "style-resource-management-loop",
     name: "经营建设与资源循环",
     description: "让建设收益、资源代价和新的经营难题形成连续因果。",
@@ -252,7 +284,9 @@ export function effectiveStyleRules(card: AiStyleCard | null) {
 
 export function buildTaskAndStyleInstructions(card: AiStyleCard | AiStyleCard[] | null, task: string) {
   const cards = (Array.isArray(card) ? card : card ? [card] : []).filter(Boolean);
-  const styleCards = task === "chat" || task === "check" ? [] : cards;
+  const styleCards = task === "chat" || task === "check"
+    ? []
+    : cards.filter((item) => item.tasks.includes(task) || (task === "naturalize" && item.tasks.includes("polish")));
   const specificRules = styleCards
     .map((item) => {
       const rules = effectiveStyleRules(item);

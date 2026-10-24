@@ -50,8 +50,10 @@ export function ChatMenu({
   const wrapRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const openAtEndRef = useRef(false);
 
   const enabled = items.map((it, i) => (it.disabled ? -1 : i)).filter((i) => i >= 0);
+  const selectionMenu = items.some((it) => typeof it.selected === "boolean");
 
   const close = useCallback(
     (restoreFocus = true) => {
@@ -83,10 +85,17 @@ export function ChatMenu({
 
   useEffect(() => {
     if (open) {
-      const first = enabled[0];
-      setActive(first ?? 0);
+      const selectedIndex = items.findIndex((item, index) => item.selected && enabled.includes(index));
+      const initial = openAtEndRef.current
+        ? enabled[enabled.length - 1]
+        : selectedIndex >= 0
+          ? selectedIndex
+          : enabled[0];
+      const first = initial ?? 0;
+      openAtEndRef.current = false;
+      setActive(first);
       // 打开后聚焦第一项，键盘可直接操作
-      requestAnimationFrame(() => itemRefs.current[first ?? 0]?.focus());
+      requestAnimationFrame(() => itemRefs.current[first]?.focus());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -100,6 +109,13 @@ export function ChatMenu({
         : enabled[(cur + dir + enabled.length) % enabled.length];
     setActive(next);
     itemRefs.current[next]?.focus();
+  }
+
+  function focusEdge(edge: "first" | "last") {
+    const index = edge === "first" ? enabled[0] : enabled[enabled.length - 1];
+    if (index === undefined) return;
+    setActive(index);
+    itemRefs.current[index]?.focus();
   }
 
   return (
@@ -116,11 +132,10 @@ export function ChatMenu({
         data-fd-id={dataFdId}
         onClick={() => (open ? close() : setOpen(true))}
         onKeyDown={(e) => {
-          if (e.key === "ArrowDown") {
-            if (!open) {
-              e.preventDefault();
-              setOpen(true);
-            }
+          if (!open && ["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) {
+            e.preventDefault();
+            openAtEndRef.current = e.key === "ArrowUp";
+            setOpen(true);
           }
         }}
       >
@@ -132,6 +147,9 @@ export function ChatMenu({
           role="menu"
           id={id}
           aria-label={ariaLabel}
+          onBlur={(e) => {
+            if (!wrapRef.current?.contains(e.relatedTarget as Node | null)) close(false);
+          }}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") {
               e.preventDefault();
@@ -139,8 +157,14 @@ export function ChatMenu({
             } else if (e.key === "ArrowUp") {
               e.preventDefault();
               move(-1);
+            } else if (e.key === "Home") {
+              e.preventDefault();
+              focusEdge("first");
+            } else if (e.key === "End") {
+              e.preventDefault();
+              focusEdge("last");
             } else if (e.key === "Tab") {
-              close(false);
+              // Let the browser move focus normally; onBlur closes after it leaves the menu.
             }
           }}
         >
@@ -160,10 +184,10 @@ export function ChatMenu({
                   itemRefs.current[i] = el;
                 }}
                 type="button"
-                role="menuitem"
+                role={selectionMenu ? "menuitemradio" : "menuitem"}
                 tabIndex={i === active ? 0 : -1}
                 className={`zchat-menu-item ${it.danger ? "danger" : ""} ${it.disabled ? "disabled" : ""} ${it.selected ? "selected" : ""}`}
-                aria-current={it.selected ? "true" : undefined}
+                aria-checked={selectionMenu ? Boolean(it.selected) : undefined}
                 aria-disabled={it.disabled || undefined}
                 disabled={it.disabled}
                 data-fd-id={it.id}
@@ -177,6 +201,7 @@ export function ChatMenu({
                 {it.icon ? <span className="zchat-menu-icon">{it.icon}</span> : null}
                 <span className="zchat-menu-label">{it.label}</span>
                 {it.hint ? <small className="zchat-menu-hint">{it.hint}</small> : null}
+                {selectionMenu ? <span className="zchat-menu-check" aria-hidden="true">{it.selected ? "✓" : ""}</span> : null}
               </button>
             </Fragment>
           ))}

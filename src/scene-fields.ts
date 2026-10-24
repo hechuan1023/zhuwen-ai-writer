@@ -1,5 +1,13 @@
 export type SceneCustomField = { key: string; value: string };
 
+/** Optional author-planned word target; keep legacy scene JSON without a value unchanged. */
+export function normalizeSceneTargetWords(value: unknown): number | null {
+  if (value == null || String(value).trim() === "") return null;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return null;
+  return Math.min(100_000, Math.max(1, Math.floor(number)));
+}
+
 export function normalizeSceneCustomFields(value: unknown): SceneCustomField[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();

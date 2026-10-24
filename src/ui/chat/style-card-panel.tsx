@@ -21,6 +21,8 @@ function styleLabel(card: StyleCard, language: string) {
     "style-cultural-modernization": ["Cultural translation", "Put traditional culture into character action and modern emotional stakes."],
     "style-urban-workplace-agency": ["Urban work & lived detail", "Ground urban stories in concrete work processes, interests, and life choices."],
     "style-fantasy-social-fusion": ["Fantasy & social systems", "Make institutions, resources, and social pressures part of a coherent fantasy world."],
+    "style-system-agency-gameplay": ["System strategy & agency", "Let characters understand, negotiate with, exploit, or resist rules—and bear the consequences."],
+    "style-lived-realism": ["Everyday realism & lived texture", "Use small, observable details to ground characters without turning themes into slogans."],
     "style-resource-management-loop": ["Resource & settlement loop", "Connect investment, work, visible gains, costs, and the next bottleneck."],
     "style-relationship-progression": ["Relationship progression", "Use goals, boundaries, choices, and concrete actions to move relationships."],
     "style-rule-instance-progression": ["Rule-based instances", "Use verifiable rules, active testing, staged payoffs, and a persistent arc."],
@@ -63,6 +65,12 @@ const TECHNIQUE_PRESETS = [
     name: ["现实机制幻想连载", "Social-systems fantasy serial"],
     description: ["世界规则 + 成长代价 + 求生行动 + 阶段回报", "World rules + growth costs + survival actions + staged payoff"],
     cardIds: ["style-fantasy-social-fusion", "style-growth-progression", "style-close-survival", "style-serial-hook-payoff"],
+  },
+  {
+    id: "genre-system-agency",
+    name: ["系统博弈成长连载", "System-strategy growth serial"],
+    description: ["人物能动 + 规则验证 + 信息差 + 连载兑现", "Character agency + rule testing + information gaps + serial payoff"],
+    cardIds: ["style-system-agency-gameplay", "style-rule-instance-progression", "style-suspense-information-control", "style-serial-hook-payoff"],
   },
   {
     id: "genre-resource-management",
@@ -278,7 +286,7 @@ export function StyleCardPanel({
                 </button>
                 <div className="zchat-style-row-actions">
                   <button type="button" title={tr("查看规则", "View rules")} onClick={() => setDetail(card)}>⌄</button>
-                  <button type="button" title={tr("复制为自定义", "Copy as custom")} onClick={() => setEdit({ ...card, id: "", name: `${card.name}（自定义）`, builtin: 0 })}><IconCopy /></button>
+                  <button type="button" title={tr("复制为自定义", "Copy as custom")} onClick={() => setEdit({ ...card, id: "", name: `${styleLabel(card, language).name}${tr("（自定义）", " (custom)")}`, builtin: 0 })}><IconCopy /></button>
                   {!card.builtin && <>
                     <button type="button" title={tr("导出技法卡", "Export technique card")} aria-label={tr("导出技法卡", "Export technique card")} data-fd-id="ai-style-export" onClick={async () => { const result = await api<any>("ai:style:export", card.id); if (!result.ok) setError(result.error || tr("导出失败", "Export failed")); }}><IconDownload /></button>
                     <button type="button" title={tr("编辑", "Edit")} onClick={() => setEdit(card)}>✎</button>
@@ -347,5 +355,5 @@ function StyleEditor({ card, language, onCancel, onSaved, onError }: { card: Sty
   const [tasks, setTasks] = useState(card.tasks.filter((task) => taskOptions.some(([id]) => id === task)));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  return <Modal title={tr("编辑写作风格", "Edit writing style")} close={onCancel}><div className="zchat-style-editor"><label>{tr("名称", "Name")}<input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></label><label>{tr("说明", "Description")}<input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={240} /></label><fieldset className="zchat-style-task-options"><legend>{tr("适用任务", "Apply to tasks")}</legend>{taskOptions.map(([id, zh, en]) => <label key={id}><input type="checkbox" checked={tasks.includes(id)} onChange={(event) => setTasks((current) => event.target.checked ? [...current, id] : current.filter((task) => task !== id))} />{tr(zh, en)}</label>)}</fieldset><label>{tr("规则", "Rules")}<textarea value={rules} onChange={(e) => setRules(e.target.value)} maxLength={20000} rows={12} /></label></div>{error && <p className="hint error">{error}</p>}<div className="row end"><button type="button" onClick={onCancel} disabled={saving}>{tr("取消", "Cancel")}</button><button type="button" className="primary" disabled={saving || !name.trim() || !rules.trim() || !tasks.length} onClick={async () => { setSaving(true); setError(""); const r = await api("ai:style:save", { id: card.id || undefined, name: name.trim(), description: description.trim(), rules: rules.trim(), tasks }); setSaving(false); if (r.ok) onSaved(); else { const message = r.error || tr("保存失败", "Save failed"); setError(message); onError(message); } }}>{saving ? tr("保存中…", "Saving…") : tr("保存", "Save")}</button></div></Modal>;
+  return <Modal title={tr("编辑写作风格", "Edit writing style")} close={onCancel}><div className="zchat-style-editor"><label>{tr("名称", "Name")}<input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></label><label>{tr("说明", "Description")}<input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={240} /></label><fieldset className="zchat-style-task-options"><legend>{tr("适用任务", "Apply to tasks")}</legend>{taskOptions.map(([id, zh, en]) => <label key={id}><input type="checkbox" checked={tasks.includes(id)} onChange={(event) => setTasks((current) => event.target.checked ? [...current, id] : current.filter((task) => task !== id))} />{tr(zh, en)}</label>)}</fieldset><label>{tr("规则", "Rules")}<textarea aria-label={tr("技法规则", "Technique rules")} placeholder={tr("例如：先依据视角人物掌握的证据行动；规则冲突时不临时增加设定解围。", "Example: Let the viewpoint character act on available evidence; don't invent a new rule to escape a contradiction.")} value={rules} onChange={(e) => setRules(e.target.value)} maxLength={20000} rows={12} /><small className="zchat-style-rule-count">{rules.length.toLocaleString(language === "en" ? "en-US" : "zh-CN")} / 20,000</small></label><p className="hint zchat-style-editor-help">{tr("写可执行的表达偏好，并明确适用任务；规则影响写法，不会替作品新增事实或覆盖作者设定。", "Write actionable style preferences for the selected tasks. They guide expression; they do not add story facts or override your canon.")}</p></div>{error && <p className="hint error">{error}</p>}<div className="row end"><button type="button" onClick={onCancel} disabled={saving}>{tr("取消", "Cancel")}</button><button type="button" className="primary" disabled={saving || !name.trim() || !rules.trim() || !tasks.length} onClick={async () => { setSaving(true); setError(""); const r = await api("ai:style:save", { id: card.id || undefined, name: name.trim(), description: description.trim(), rules: rules.trim(), tasks }); setSaving(false); if (r.ok) onSaved(); else { const message = r.error || tr("保存失败", "Save failed"); setError(message); onError(message); } }}>{saving ? tr("保存中…", "Saving…") : tr("保存", "Save")}</button></div></Modal>;
 }

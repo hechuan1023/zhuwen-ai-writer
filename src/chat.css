@@ -170,6 +170,16 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.zchat-menu-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  color: var(--accent, #4d7a68);
+  font-size: 12px;
+  font-weight: 700;
+}
 
 /* ── 未配置连接提示 ───────────────────────────────────────── */
 .zchat-notice {
@@ -1244,6 +1254,8 @@ button.zchat-style-saved-apply:not(.primary):not(.danger):not(.danger-text):not(
 .zchat-style-editor { display: grid; gap: 12px; }
 .zchat-style-editor label { display: grid; gap: 5px; font-size: 12px; }
 .zchat-style-editor textarea { resize: vertical; line-height: 1.55; }
+.zchat-style-rule-count { justify-self: end; margin-top: -3px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.zchat-style-editor-help { margin: -3px 0 0; line-height: 1.5; }
 .zchat-style-task-options { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 0; padding: 8px 10px 10px; border: 1px solid var(--line); border-radius: 9px; }
 .zchat-style-task-options legend { padding: 0 5px; color: var(--muted); font-size: 11px; }
 .zchat-style-task-options label { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }

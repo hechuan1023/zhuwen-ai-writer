@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, parseJson, UiLanguage } from "./shared";
 import { Select } from "./select";
+import { normalizeSceneTargetWords } from "../scene-fields";
 import { buildPlotlineMatrix, filterScenesByPov, filterScenesByTrack, groupScenesForTimeline, sceneCustomFields, scenePlotlines, scenePovOptions, sceneTags, sceneTrackOptions } from "./scene-planner-model";
 
 type SceneRow = Record<string, any>;
@@ -53,10 +54,34 @@ export function ScenePlanner({
     () => [...scenes].sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)),
     [scenes],
   );
+  const sceneTargetTotals = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const scene of orderedScenes) {
+      const chapterId = String(scene.chapter_id || "");
+      const target = normalizeSceneTargetWords(dataFor(scene).targetWords) || 0;
+      if (chapterId && target) totals.set(chapterId, (totals.get(chapterId) || 0) + target);
+    }
+    return totals;
+  }, [orderedScenes]);
+  const targetShare = (scene: SceneRow) => {
+    const chapterId = String(scene.chapter_id || "");
+    const target = normalizeSceneTargetWords(dataFor(scene).targetWords) || 0;
+    const total = sceneTargetTotals.get(chapterId) || 0;
+    return target && total ? Math.round(target / total * 100) : 0;
+  };
   const visibleChapters = chapters.filter((chapter) =>
     (volumeFilter === "all" ? true : volumeFilter === "unvolumed" ? !chapter.volume_id : chapter.volume_id === volumeFilter) &&
     (statusFilter === "all" || (chapter.status || "draft") === statusFilter),
   );
+  const maxChapterWords = visibleChapters.reduce(
+    (maximum, chapter) => Math.max(maximum, Math.max(0, Number(chapter.word_count) || 0)),
+    0,
+  );
+  const chapterWords = (chapter: SceneRow) => Math.max(0, Number(chapter.word_count) || 0);
+  const chapterLengthPercent = (chapter: SceneRow) => maxChapterWords
+    ? Math.round(chapterWords(chapter) / maxChapterWords * 100)
+    : 0;
+  const formatWords = (value: number) => new Intl.NumberFormat(language === "en" ? "en-US" : "zh-CN").format(value);
   const statusOptions = [
     { value: "all", label: tr("全部状态", "All statuses") },
     { value: "draft", label: tr("草稿", "Draft") },
@@ -176,7 +201,7 @@ export function ScenePlanner({
               <span className="scene-lane-count">{unassigned.length}</span>
             </header>
             <div className="scene-lane-cards">
-              {unassigned.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft={false} language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, null, scene.id)} />)}
+              {unassigned.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} targetShare={null} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft={false} language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, null, scene.id)} />)}
               {!unassigned.length && <div className="scene-lane-empty">{canReorderVisible ? tr("把未安排的场景拖到这里", "Drop unassigned scenes here") : tr("当前筛选下没有待安排场景", "No unassigned scenes match these filters")}</div>}
             </div>
             <button className="scene-lane-add" onClick={() => onCreateScene()}>{tr("＋ 添加场景", "+ Add scene")}</button>
@@ -197,6 +222,10 @@ export function ScenePlanner({
                   <div><span className="scene-lane-index">{String(index + 1).padStart(2, "0")}</span><div><small>{volume?.title || tr("未分卷", "No volume")}{chapter.id === currentChapter?.id ? ` · ${tr("当前章", "OPEN")}` : ""}</small><b>{chapter.title}</b></div></div>
                   <span className="scene-lane-count">{laneScenes.length}</span>
                 </header>
+                <div className="scene-chapter-length" title={tr("与当前显示章节比较的实际正文篇幅，不代表目标完成度", "Actual manuscript length relative to visible chapters; not target progress")}>
+                  <div className="scene-chapter-length-track" aria-hidden="true"><span style={{ width: `${chapterLengthPercent(chapter)}%` }} /></div>
+                  <small>{formatWords(chapterWords(chapter))} {tr("字", "words")}</small>
+                </div>
                 <button className="scene-lane-open" onClick={() => onOpenChapter(chapter)}>{tr("打开章节正文", "Open chapter")}</button>
                 <div className={`scene-lane-status status-${chapter.status || "draft"}`}>
                   <span>{tr("章节进度", "Chapter status")}</span>
@@ -210,7 +239,7 @@ export function ScenePlanner({
                   />
                 </div>
                 <div className="scene-lane-cards">
-                  {laneScenes.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, chapter.id, scene.id)} />)}
+                  {laneScenes.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} targetShare={targetShare(scene)} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, chapter.id, scene.id)} />)}
                   {!laneScenes.length && <div className="scene-lane-empty">{povFilter === "all" && trackFilter === "all" ? tr("拖入一个场景，开始拆解本章推进", "Drop a scene here to plan this chapter") : tr("当前筛选下暂无场景", "No scenes match these filters")}</div>}
                 </div>
                 <button className="scene-lane-add" onClick={() => onCreateScene(chapter)}>{tr("＋ 添加到本章", "+ Add to chapter")}</button>
@@ -228,7 +257,7 @@ export function ScenePlanner({
             return <section className={`scene-timeline-chapter status-${chapter.status || "draft"}`} key={chapter.id} data-fd-id={`timeline-chapter-${chapter.id}`}>
               <header className="scene-timeline-chapter-head">
                 <span className="scene-timeline-chapter-index">{String(chapterIndex + 1).padStart(2, "0")}</span>
-                <div><small>{volume?.title || tr("未分卷", "No volume")} · {statusName(chapter.status || "draft")}</small><h2>{chapter.title}</h2></div>
+                <div><small>{volume?.title || tr("未分卷", "No volume")} · {statusName(chapter.status || "draft")}</small><h2>{chapter.title}</h2><div className="scene-timeline-length" title={tr("与当前显示章节比较的实际正文篇幅，不代表目标完成度", "Actual manuscript length relative to visible chapters; not target progress")}><span className="scene-timeline-length-track" aria-hidden="true"><i style={{ width: `${chapterLengthPercent(chapter)}%` }} /></span><small>{formatWords(chapterWords(chapter))} {tr("字", "words")}</small></div></div>
                 <button type="button" onClick={() => onOpenChapter(chapter)}>{tr("打开章节", "Open chapter")}</button>
               </header>
               {chapterScenes.length ? <div className="scene-timeline-events">
@@ -239,6 +268,7 @@ export function ScenePlanner({
                     <div className="scene-timeline-card">
                       <header><span className="scene-timeline-time">{data.when || tr("未填写时间标记", "No time marker")}</span>{data.plotRole && <span className="scene-timeline-role">{data.plotRole}</span>}{scenePlotlines(data).slice(0, 2).map((plotline) => <span className="scene-timeline-tag plotline" key={`plotline:${plotline}`}>{plotline}</span>)}{sceneTags(data).slice(0, 2).map((tag) => <span className="scene-timeline-tag" key={`tag:${tag}`}>{tag}</span>)}{sceneCustomFields(data).slice(0, 2).map((field) => <span className="scene-timeline-tag custom" key={`custom:${field.key}`} title={`${field.key}: ${field.value}`}>{field.key}: {field.value}</span>)}</header>
                       <button type="button" className="scene-timeline-title" onClick={() => onOpenScene(scene)}>{scene.title || tr("未命名场景", "Untitled scene")}</button>
+                      {normalizeSceneTargetWords(data.targetWords) != null && <div className="scene-timeline-target" title={tr("相对条表示该场景目标字数占本章所有已规划场景目标字数的比例，不是写作进度", "The bar shows this scene's share of all planned scene targets in this chapter, not writing progress")}><span>{tr("目标", "Target")} {formatWords(normalizeSceneTargetWords(data.targetWords) || 0)} {tr("字", "words")}</span><span>{targetShare(scene)}%</span><i aria-hidden="true"><b style={{ width: `${targetShare(scene)}%` }} /></i></div>}
                       {data.body && <p>{data.body}</p>}
                       {(data.coolPoint || data.hook) && <small>{data.coolPoint && `${tr("回报", "Payoff")}: ${data.coolPoint}`}{data.coolPoint && data.hook ? " · " : ""}{data.hook && `${tr("章末钩子", "Hook")}: ${data.hook}`}</small>}
                       <footer><span>{data.cast ? data.cast.split(/[,，、;；]+/).filter(Boolean).slice(0, 4).join(" · ") : tr("未记录出场人物", "No cast notes")}</span><button type="button" title={tr("把细纲带入 AI 面板，检查后再发送", "Bring outline to AI for review")} onClick={() => onDraftScene(scene)}>{tr("✦ AI 起草", "✦ Draft with AI")}</button></footer>
@@ -278,6 +308,7 @@ export function ScenePlanner({
 }
 function SceneCard({
   scene,
+  targetShare,
   dragging,
   canReorder,
   language,
@@ -289,6 +320,7 @@ function SceneCard({
   onDrop,
 }: {
   scene: SceneRow;
+  targetShare: number | null;
   dragging: boolean;
   canReorder: boolean;
   language: UiLanguage;
@@ -300,6 +332,8 @@ function SceneCard({
   onDrop: (event: React.DragEvent<HTMLElement>) => void;
 }) {
   const tr = (zh: string, en: string) => language === "en" ? en : zh;
+  const targetWords = normalizeSceneTargetWords(scene.targetWords);
+  const formattedTarget = targetWords == null ? "" : new Intl.NumberFormat(language === "en" ? "en-US" : "zh-CN").format(targetWords);
   return (
     <article
       className={`scene-card ${dragging ? "dragging" : ""}`}
@@ -312,6 +346,7 @@ function SceneCard({
     >
       <div className="scene-card-top"><span className="scene-drag-grip" aria-hidden="true">⠿</span><span className={`scene-status ${scene.status === "confirmed" ? "confirmed" : ""}`}>{scene.status === "confirmed" ? tr("已确认", "Canon") : tr("待确认", "Draft")}</span><span className="scene-card-sort">↕</span></div>
       <button className="scene-card-title" onClick={onOpen}>{scene.title || tr("未命名场景", "Untitled scene")}</button>
+      {targetWords != null && <div className="scene-card-target" title={tr("相对条表示该场景目标字数占本章所有已规划场景目标字数的比例，不是写作进度", "The bar shows this scene's share of all planned scene targets in this chapter, not writing progress")}><span>{tr("目标", "Target")} {formattedTarget} {tr("字", "words")}</span>{targetShare != null && <><small>{targetShare}%</small><i aria-hidden="true"><b style={{ width: `${targetShare}%` }} /></i></>}</div>}
       {scene.plotRole && <p className="scene-card-role">{scene.plotRole}</p>}
       {scene.body && <p className="scene-card-body">{scene.body}</p>}
       {(scene.coolPoint || scene.hook) && <div className="scene-card-payoff">{scene.coolPoint && <span><i>✦</i>{scene.coolPoint}</span>}{scene.hook && <span><i>↗</i>{scene.hook}</span>}</div>}

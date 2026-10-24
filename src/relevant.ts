@@ -57,6 +57,71 @@ function countOccurrences(corpus: string, term: string) {
   return (corpus.match(new RegExp(escapeRegExp(term), "g")) || []).length;
 }
 
+const KEYWORD_FIELDS: Record<string, string[]> = {
+  character: ["body", "goal", "motive", "conflict", "personality", "speech", "knowledge", "taboo", "checklist"],
+  world: ["body"],
+  scene: ["body", "coolPoint", "hook"],
+  foreshadow: ["body", "prereq", "payoff", "effect"],
+  timeline: ["body"],
+  relation: ["body"],
+  outline: ["body"],
+  inspiration: ["body"],
+};
+
+const COMMON_KEYWORDS = new Set([
+  "一个", "一些", "这个", "那个", "自己", "可以", "因为", "所以", "但是", "然后", "如果", "已经", "还是", "只是", "没有", "不是", "需要", "进行", "出现", "发生", "能够", "通过", "对于", "关于", "其中", "之后", "之前", "时候", "地方", "东西", "人物", "角色", "故事", "章节", "场景", "正文", "设定",
+]);
+
+/** Extract bounded, locally searchable phrases; CJK uses overlapping bigrams/trigrams without claiming semantic understanding. */
+function contentKeywords(kind: string, content: Record<string, any>): string[] {
+  const values = (KEYWORD_FIELDS[kind] || ["body"])
+    .flatMap((field) => {
+      const value = content[field];
+      return Array.isArray(value) ? value.map((item) => String(item || "")) : [String(value || "")];
+    })
+    .join(" ")
+    .slice(0, 2400);
+  const keywords = new Set<string>();
+  const chunks = values.split(/[\s，,。.!！?？；;：:、（）()\[\]【】{}<>“”‘’"'—–-]+/u);
+  for (const chunk of chunks) {
+    const normalized = normalize(chunk);
+    if (!normalized) continue;
+    for (const match of normalized.matchAll(/[\p{Script=Han}]+|[\p{L}\p{N}][\p{L}\p{N}'-]{2,}/gu)) {
+      const token = match[0];
+      if (/^[\p{Script=Han}]+$/u.test(token)) {
+        for (let index = 0; index <= token.length - 2; index += 1) {
+          const phrase = token.slice(index, index + 2);
+          if (!COMMON_KEYWORDS.has(phrase)) keywords.add(phrase);
+          if (keywords.size >= 160) return [...keywords];
+        }
+        for (let index = 0; index <= token.length - 3; index += 1) {
+          const phrase = token.slice(index, index + 3);
+          if (!COMMON_KEYWORDS.has(phrase)) keywords.add(phrase);
+          if (keywords.size >= 160) return [...keywords];
+        }
+      } else if (!COMMON_KEYWORDS.has(token)) {
+        keywords.add(token);
+      }
+      if (keywords.size >= 160) return [...keywords];
+    }
+  }
+  return [...keywords];
+}
+
+function chinesePhraseCounts(text: string): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const match of text.matchAll(/[\p{Script=Han}]+/gu)) {
+    const run = match[0];
+    for (let size = 2; size <= 3; size += 1) {
+      for (let index = 0; index <= run.length - size; index += 1) {
+        const phrase = run.slice(index, index + size);
+        counts.set(phrase, (counts.get(phrase) || 0) + 1);
+      }
+    }
+  }
+  return counts;
+}
+
 function contextContent(
   item: Material,
   maxChars = 6000,
@@ -68,7 +133,7 @@ function contextContent(
   const fields: Record<string, string[]> = {
     character: ["alias", "body", "goal", "motive", "conflict", "personality", "speech", "knowledge", "taboo", "checklist"],
     world: ["category", "alias", "body"],
-    scene: ["when", "pov", "plotlines", "customFields", "plotRole", "cast", "coolPoint", "hook", "body"],
+    scene: ["when", "targetWords", "pov", "plotlines", "customFields", "plotRole", "cast", "coolPoint", "hook", "body"],
     foreshadow: ["body", "plantAt", "planAt", "prereq", "payoff", "effect", "importance"],
     timeline: ["when", "body"],
     relation: ["label", "body"],
@@ -78,7 +143,7 @@ function contextContent(
   const labels: Record<string, string> = {
     body: "说明", goal: "目标", motive: "动机", conflict: "矛盾", personality: "性格",
     speech: "语言习惯", knowledge: "知识边界", taboo: "底线", checklist: "核对项",
-    category: "分类", alias: "别名", when: "位置/时间", pov: "视角人物", plotlines: "剧情线", customFields: "自定义属性", plotRole: "剧情作用", cast: "出场人物",
+    category: "分类", alias: "别名", when: "位置/时间", targetWords: "目标字数", pov: "视角人物", plotlines: "剧情线", customFields: "自定义属性", plotRole: "剧情作用", cast: "出场人物",
     coolPoint: "回报", hook: "钩子", plantAt: "埋设位置", planAt: "计划回收",
     prereq: "回收前提", payoff: "回收方式", effect: "回收影响", importance: "重要度",
     label: "关系",
@@ -142,8 +207,22 @@ export function relevantMaterials(
 ): MaterialSuggestion[] {
   const text = normalize(corpus || "");
   const selection = normalize(context.selectionText || "");
+  if (!text && !selection) return [];
+  const textChinesePhrases = chinesePhraseCounts(text);
+  const selectionChinesePhrases = chinesePhraseCounts(selection);
   const out: MaterialSuggestion[] = [];
   const seen = new Set<string>();
+  const keywordTermsByMaterial = new Map<string, string[]>();
+  const keywordDocumentFrequency = new Map<string, number>();
+  for (const material of items) {
+    if (!material || material.deleted_at || !material.id) continue;
+    const key = `${material.kind}:${material.id}`;
+    const terms = contentKeywords(String(material.kind || ""), parseObject(material.content_json));
+    if (!terms.length) continue;
+    keywordTermsByMaterial.set(key, terms);
+    for (const term of terms) keywordDocumentFrequency.set(term, (keywordDocumentFrequency.get(term) || 0) + 1);
+  }
+  const keywordDocumentCount = keywordTermsByMaterial.size;
   for (const item of items) {
     if (!item || item.deleted_at || !item.id) continue;
     const content = parseObject(item.content_json);
@@ -160,7 +239,7 @@ export function relevantMaterials(
     const customFields = item.kind === "scene" ? normalizeSceneCustomFields(content.customFields) : [];
     const aliases = item.kind === "character" || item.kind === "world" ? parseAliases(item.content_json) : [];
     const tags = parseTags(item.tags_json);
-    const terms = new Map<string, "title" | "alias" | "tag" | "person" | "plotline" | "custom">();
+    const terms = new Map<string, "title" | "alias" | "tag" | "person" | "plotline" | "custom" | "keyword">();
     if (title) terms.set(title, "title");
     for (const term of aliases) if (!terms.has(term)) terms.set(term, "alias");
     for (const term of participantTerms) if (term && !terms.has(term)) terms.set(term, "person");
@@ -170,6 +249,8 @@ export function relevantMaterials(
       if (!terms.has(field.value)) terms.set(field.value, "custom");
     }
     for (const term of tags) if (term && !terms.has(term)) terms.set(term, "tag");
+    for (const term of keywordTermsByMaterial.get(`${item.kind}:${item.id}`) || [])
+      if (term && !terms.has(term)) terms.set(term, "keyword");
 
     let score = 0;
     let count = 0;
@@ -178,12 +259,23 @@ export function relevantMaterials(
     const reasons: string[] = [];
     let participantsHit = 0;
     const en = context.language === "en";
+    const commonKeywordLimit = Math.max(5, Math.ceil(keywordDocumentCount * 0.3));
     for (const [rawTerm, type] of terms) {
       const term = normalize(rawTerm);
-      const fullCount = countOccurrences(text, term);
-      const selectionCount = countOccurrences(selection, term);
+      if (type === "keyword" && (keywordDocumentFrequency.get(term) || 0) > commonKeywordLimit) continue;
+      const isChinesePhrase = type === "keyword" && /^[\p{Script=Han}]{2,3}$/u.test(term);
+      const fullCount = isChinesePhrase
+        ? textChinesePhrases.get(term) || 0
+        : countOccurrences(text, term);
+      const selectionCount = isChinesePhrase
+        ? selectionChinesePhrases.get(term) || 0
+        : countOccurrences(selection, term);
       const weight = type === "title" ? 3 : type === "tag" ? 1 : 2;
-      const weighted = fullCount * weight + selectionCount * 3;
+      const documentFrequency = keywordDocumentFrequency.get(term) || 1;
+      const keywordWeight = Math.min(2.25, 0.55 + Math.log2((keywordDocumentCount + 1) / (documentFrequency + 1)) * 0.3);
+      const weighted = type === "keyword"
+        ? Math.min(fullCount, 4) * keywordWeight + Math.min(selectionCount, 3) * 3
+        : fullCount * weight + selectionCount * 3;
       if (!fullCount && !selectionCount) continue;
       score += weighted;
       if (type === "person") participantsHit += 1;
@@ -198,6 +290,7 @@ export function relevantMaterials(
       else if (type === "person") reasons.push(en ? `Mentioned character “${rawTerm}” · ${fullCount}` : `提及人物「${rawTerm}」${fullCount} 次`);
       else if (type === "plotline") reasons.push(en ? `Plotline match “${rawTerm}” · ${fullCount}` : `命中剧情线「${rawTerm}」${fullCount} 次`);
       else if (type === "custom") reasons.push(en ? `Custom property match “${rawTerm}” · ${fullCount}` : `命中自定义属性「${rawTerm}」${fullCount} 次`);
+      else if (type === "keyword") reasons.push(en ? `Material keyword fragment “${rawTerm}” · ${fullCount}` : `命中资料关键词片段「${rawTerm}」${fullCount} 次`);
       else reasons.push(en ? `Tag match “${rawTerm}” · ${fullCount}` : `命中标签「${rawTerm}」${fullCount} 次`);
     }
     if (item.kind === "relation" && participantsHit >= 2) {
