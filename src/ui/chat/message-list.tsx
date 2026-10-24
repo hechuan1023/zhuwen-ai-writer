@@ -108,14 +108,22 @@ function AssistantActions({
       label: tr("插入光标", "Insert at cursor"),
       icon: <IconQuote />,
       disabled: !actions.canApply || actions.requiresComparison,
-      hint: actions.requiresComparison ? tr("自然化润色必须先查看差异", "Naturalize must be compared first") : (actions.canApply ? undefined : actions.applyDisabledReason),
+      hint: !actions.canApply
+        ? actions.applyDisabledReason
+        : actions.requiresComparison
+          ? tr("自然化润色必须先查看差异", "Naturalize must be compared first")
+          : undefined,
       onSelect: actions.onInsertCursor,
     },
     {
       id: "ai-adopt-replace",
       label: tr("替换选区", "Replace selection"),
       disabled: !actions.canApply || actions.requiresComparison,
-      hint: actions.canApply ? undefined : actions.applyDisabledReason,
+      hint: !actions.canApply
+        ? actions.applyDisabledReason
+        : actions.requiresComparison
+          ? tr("自然化润色必须先查看差异", "Naturalize must be compared first")
+          : undefined,
       onSelect: actions.onReplaceSelection,
     },
     {
@@ -131,6 +139,11 @@ function AssistantActions({
       id: "ai-adopt-segments",
       label: tr("逐句采纳", "Adopt by sentence"),
       disabled: !actions.canApply || actions.requiresComparison,
+      hint: !actions.canApply
+        ? actions.applyDisabledReason
+        : actions.requiresComparison
+          ? tr("自然化润色必须先查看差异", "Naturalize must be compared first")
+          : undefined,
       onSelect: actions.onSegments,
     },
     {
@@ -196,6 +209,7 @@ export type MessageListProps = {
   onRetry?: () => void;
   retryLabel?: string;
   errorMessage?: string | null;
+  onOpenSource?: (messageId: string, source: AnyRow) => void;
 };
 
 export function MessageList({
@@ -208,6 +222,7 @@ export function MessageList({
   errorMessage,
   onRetry,
   retryLabel,
+  onOpenSource,
 }: MessageListProps) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -247,6 +262,32 @@ export function MessageList({
                 {renderMarkdown(m.content)}
                 {m.streaming && <i className="zchat-cursor" aria-hidden="true" />}
               </div>
+              {!isUser && Array.isArray(m.source_refs) && m.source_refs.length > 0 && (
+                <div className="zchat-msg-sources" aria-label={tr("本次回复引用来源", "Sources used for this reply")}>
+                  <span>{tr("依据", "Sources")}</span>
+                  {m.source_refs.map((source: AnyRow, sourceIndex: number) => (
+                    <button
+                      type="button"
+                      key={`${source.kind}:${source.source_id || sourceIndex}`}
+                      title={tr("查看本次请求保存的来源快照", "View the source snapshot saved with this request")}
+                      onClick={() => onOpenSource?.(String(m.source_message_id || ""), source)}
+                    >
+                      <IconQuote />
+                      <span>{source.label || source.kind}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!isUser && m.source_stale && (
+                <div className="zchat-source-stale" role="status">
+                  {tr("生成后正文有更新 · 采纳前请核对", "Manuscript changed since generation · review before adopting")}
+                </div>
+              )}
+              {!isUser && m.source_chapter_other && (
+                <div className="zchat-source-origin" role="status">
+                  {tr("回复生成于：", "Generated for: ")}{m.source_chapter_title || tr("其他章节", "another chapter")}
+                </div>
+              )}
               {!isUser && !m.streaming && (
                 <AssistantActions
                   content={String(m.content || "")}
@@ -264,7 +305,7 @@ export function MessageList({
         );
       }),
     // 依赖消息数组与语言：内容变化（流式）时只重渲染列表，不重建结构
-    [messages, language, actionsFor, renderMarkdown],
+    [messages, language, actionsFor, renderMarkdown, onOpenSource],
   );
 
   return (

@@ -34,6 +34,17 @@ const SummaryModal = lazy(() =>
   import("./summary-modal").then((m) => ({ default: m.SummaryModal })),
 );
 
+type AiSceneDraftRequest = {
+  nonce: string;
+  chapterId: string;
+  scene: AnyRow;
+};
+type SourceNavigationRequest = {
+  nonce: string;
+  kind: string;
+  sourceId: string;
+};
+
 const bounded = (value: unknown, min: number, max: number, fallback: number) => {
   const number = Number(value);
   return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
@@ -187,6 +198,8 @@ export function Workspace({
     [panelOpacity, setPanelOpacity] = useState(0.72),
     [reduceTransparency, setReduceTransparency] = useState(false),
     [reduceMotion, setReduceMotion] = useState(false);
+  const [aiSceneDraftRequest, setAiSceneDraftRequest] = useState<AiSceneDraftRequest | null>(null);
+  const [sourceNavigationRequest, setSourceNavigationRequest] = useState<SourceNavigationRequest | null>(null);
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const languageRef = useRef(language);
   languageRef.current = language;
@@ -953,13 +966,33 @@ export function Workspace({
     return () => registerCloseGuard(async () => true);
   }, [registerCloseGuard, notify, language]);
   async function switchChapter(next: AnyRow) {
-    if (next.id === chapter?.id) return;
-    if (!(await save(true))) return;
+    if (next.id === chapter?.id) return true;
+    if (!(await save(true))) return false;
     const full = await api("chapters:get", next.id);
     const row = full.ok && full.data ? full.data : next;
     setChapter(row);
     chapterRef.current = row;
     api("novels:update", { id: novel.id, last_chapter_id: row.id });
+    return true;
+  }
+  async function prepareSceneDraft(scene: AnyRow, targetChapter: AnyRow) {
+    if (!(await switchChapter(targetChapter))) return;
+    setFocus(false);
+    setRight(true);
+    setAiSceneDraftRequest({ nonce: crypto.randomUUID(), chapterId: targetChapter.id, scene });
+  }
+  async function navigateToAiSource(source: { kind: string; sourceId: string }) {
+    const chapterKinds = new Set(["chapter", "selection", "summary", "continuation"]);
+    if (chapterKinds.has(source.kind)) {
+      const targetChapter = chapters.find((item) => item.id === source.sourceId);
+      if (!targetChapter) return notify(tr("来源章节已不存在，仍可查看保存的快照。", "The source chapter no longer exists; its saved snapshot is still available."));
+      if (await switchChapter(targetChapter)) setLeftView("chapters");
+      return;
+    }
+    const libraryKinds = new Set(["outline", "scene", "character", "world", "inspiration", "timeline", "foreshadow", "relation"]);
+    if (!libraryKinds.has(source.kind) || !source.sourceId) return;
+    setLeftView("library");
+    setSourceNavigationRequest({ nonce: crypto.randomUUID(), kind: source.kind, sourceId: source.sourceId });
   }
   async function addChapter(volumeId?: string) {
     if (!(await save(true))) return;
@@ -1536,6 +1569,9 @@ export function Workspace({
                     chapters={chapters}
                     volumes={volumes}
                     onSelectChapter={(targetChapter) => void switchChapter(targetChapter)}
+                    onDraftScene={(scene, targetChapter) => void prepareSceneDraft(scene, targetChapter)}
+                    sourceNavigationRequest={sourceNavigationRequest}
+                    onSourceNavigationConsumed={() => setSourceNavigationRequest(null)}
                     notify={notify}
                     language={language}
                     onDirtyChange={(d) => {
@@ -1785,6 +1821,9 @@ export function Workspace({
                 language={language}
                 expanded={aiExpanded}
                 onToggleExpand={setAiExpanded}
+                sceneDraftRequest={aiSceneDraftRequest}
+                onSceneDraftRequestConsumed={() => setAiSceneDraftRequest(null)}
+                onNavigateSource={(source) => void navigateToAiSource(source)}
               />
             </Suspense>
             <button

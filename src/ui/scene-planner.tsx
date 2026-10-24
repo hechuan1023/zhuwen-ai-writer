@@ -12,6 +12,7 @@ export function ScenePlanner({
   language,
   onClose,
   onOpenScene,
+  onDraftScene,
   onCreateScene,
   onOpenChapter,
   onMoveScene,
@@ -24,6 +25,7 @@ export function ScenePlanner({
   language: UiLanguage;
   onClose: () => void;
   onOpenScene: (scene: SceneRow) => void;
+  onDraftScene: (scene: SceneRow) => void;
   onCreateScene: (chapter?: SceneRow) => void;
   onOpenChapter: (chapter: SceneRow) => void;
   onMoveScene: (sceneId: string, chapterId: string | null, beforeId?: string) => void;
@@ -97,7 +99,7 @@ export function ScenePlanner({
               <span className="scene-lane-count">{unassigned.length}</span>
             </header>
             <div className="scene-lane-cards">
-              {unassigned.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} dragging={draggingId === scene.id} canReorder={canReorder} language={language} onOpen={() => onOpenScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, null, scene.id)} />)}
+              {unassigned.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} dragging={draggingId === scene.id} canReorder={canReorder} canDraft={false} language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, null, scene.id)} />)}
               {!unassigned.length && <div className="scene-lane-empty">{tr("把未安排的场景拖到这里", "Drop unassigned scenes here")}</div>}
             </div>
             <button className="scene-lane-add" onClick={() => onCreateScene()}>{tr("＋ 添加场景", "+ Add scene")}</button>
@@ -120,7 +122,7 @@ export function ScenePlanner({
                 </header>
                 <button className="scene-lane-open" onClick={() => onOpenChapter(chapter)}>{tr("打开章节正文", "Open chapter")}</button>
                 <div className="scene-lane-cards">
-                  {laneScenes.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} dragging={draggingId === scene.id} canReorder={canReorder} language={language} onOpen={() => onOpenScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, chapter.id, scene.id)} />)}
+                  {laneScenes.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} dragging={draggingId === scene.id} canReorder={canReorder} canDraft language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, chapter.id, scene.id)} />)}
                   {!laneScenes.length && <div className="scene-lane-empty">{tr("拖入一个场景，开始拆解本章推进", "Drop a scene here to plan this chapter")}</div>}
                 </div>
                 <button className="scene-lane-add" onClick={() => onCreateScene(chapter)}>{tr("＋ 添加到本章", "+ Add to chapter")}</button>
@@ -133,12 +135,15 @@ export function ScenePlanner({
       </div>
     </section>
   );
+}
 function SceneCard({
   scene,
   dragging,
   canReorder,
   language,
   onOpen,
+  onDraft,
+  canDraft,
   onDragStart,
   onDragEnd,
   onDrop,
@@ -148,6 +153,8 @@ function SceneCard({
   canReorder: boolean;
   language: UiLanguage;
   onOpen: () => void;
+  onDraft: () => void;
+  canDraft: boolean;
   onDragStart: (event: React.DragEvent<HTMLElement>) => void;
   onDragEnd: () => void;
   onDrop: (event: React.DragEvent<HTMLElement>) => void;
@@ -170,6 +177,7 @@ function SceneCard({
       {(scene.coolPoint || scene.hook) && <div className="scene-card-payoff">{scene.coolPoint && <span><i>✦</i>{scene.coolPoint}</span>}{scene.hook && <span><i>↗</i>{scene.hook}</span>}</div>}
       {scene.cast && <div className="scene-card-cast">{scene.cast.split(/[,，、;；]+/).filter(Boolean).slice(0, 4).map((person: string) => <span key={person}>{person.trim()}</span>)}</div>}
       {scene.when && <small className="scene-card-when">{scene.when}</small>}
+      <button className="scene-card-draft" type="button" disabled={!canDraft} title={!canDraft ? tr("请先把场景分配到章节", "Assign this scene to a chapter first") : tr("把细纲带入 AI 面板，检查后再发送", "Bring this outline to AI; review before sending")} onClick={(event) => { event.stopPropagation(); onDraft(); }}>{tr("✦ 用 AI 起草", "✦ Draft with AI")}</button>
     </article>
   );
 }

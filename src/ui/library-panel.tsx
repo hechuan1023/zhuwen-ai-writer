@@ -25,6 +25,9 @@ export function LibraryPanel({
   chapters = [],
   volumes = [],
   onSelectChapter,
+  onDraftScene,
+  sourceNavigationRequest,
+  onSourceNavigationConsumed,
   notify,
   language = "zh-CN",
   onDirtyChange,
@@ -35,6 +38,9 @@ export function LibraryPanel({
   chapters?: AnyRow[];
   volumes?: AnyRow[];
   onSelectChapter?: (chapter: AnyRow) => void;
+  onDraftScene?: (scene: AnyRow, chapter: AnyRow) => void;
+  sourceNavigationRequest?: { nonce: string; kind: string; sourceId: string } | null;
+  onSourceNavigationConsumed?: () => void;
   notify: (s: string) => void;
   language?: UiLanguage;
   onDirtyChange?: (dirty: boolean) => void;
@@ -47,6 +53,7 @@ export function LibraryPanel({
       : fallback;
   const [kind, setKind] = useState("outline"),
     [items, setItems] = useState<AnyRow[]>([]),
+    [loadedKind, setLoadedKind] = useState(""),
     [allItems, setAllItems] = useState<AnyRow[]>([]),
     [presence, setPresence] = useState<Record<string, AnyRow>>({}),
     [presenceTotal, setPresenceTotal] = useState(0),
@@ -68,6 +75,7 @@ export function LibraryPanel({
     >(null);
   const draftVersion = useRef(0);
   const listSeq = useRef(0);
+  const openedSourceRequest = useRef("");
   const leaveResolver = useRef<((ok: boolean) => void) | null>(null);
 
   const toEditorModel = (row: AnyRow): AnyRow => libraryContentToEditor(row);
@@ -236,6 +244,8 @@ export function LibraryPanel({
   const load = useCallback(() => {
     const seq = ++listSeq.current;
     setListError("");
+    setLoadedKind("");
+    setItems([]);
     api("library:list", {
       novelId: novel.id,
       kind,
@@ -244,9 +254,11 @@ export function LibraryPanel({
       if (seq !== listSeq.current) return;
       if (!r.ok) {
         setListError(r.error || "list failed");
+        setLoadedKind(kind);
         return;
       }
       setItems(r.data);
+      setLoadedKind(kind);
     });
   }, [novel.id, kind, deferredSearch]);
   useEffect(() => {
@@ -262,6 +274,33 @@ export function LibraryPanel({
       live = false;
     };
   }, [novel.id]);
+  useEffect(() => {
+    const request = sourceNavigationRequest;
+    if (!request || openedSourceRequest.current === request.nonce) return;
+    if (search.trim()) {
+      setSearch("");
+      return;
+    }
+    if (kind !== request.kind) {
+      switchKind(request.kind);
+      return;
+    }
+    if (loadedKind !== kind) return;
+    if (listError) {
+      onSourceNavigationConsumed?.();
+      notify(listError);
+      return;
+    }
+    const source = items.find((item) => item.id === request.sourceId);
+    if (!source) {
+      onSourceNavigationConsumed?.();
+      notify(tr("原始资料已不存在，但本次 AI 引用快照仍保存在对话中。", "The original material no longer exists, but its snapshot is preserved in this conversation."));
+      return;
+    }
+    openedSourceRequest.current = request.nonce;
+    openEditor(source);
+    onSourceNavigationConsumed?.();
+  }, [sourceNavigationRequest, kind, items, search, loadedKind, listError]);
   useEffect(() => {
     if (!editing && !graphOpen && !trashTarget) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -779,6 +818,13 @@ export function LibraryPanel({
           language={language}
           onClose={() => setPlannerOpen(false)}
           onOpenScene={(scene) => openEditor(scene)}
+          onDraftScene={(scene) => {
+            const targetChapter = chapters.find((item) => item.id === scene.chapter_id);
+            if (targetChapter) {
+              onDraftScene?.(scene, targetChapter);
+              setPlannerOpen(false);
+            }
+          }}
           onCreateScene={(targetChapter) => openEditor(null, targetChapter ? { chapter_id: targetChapter.id } : {})}
           onOpenChapter={(targetChapter) => onSelectChapter?.(targetChapter)}
           onMoveScene={(sceneId, chapterId, beforeId) => void moveScene(sceneId, chapterId, beforeId)}

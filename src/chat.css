@@ -321,6 +321,15 @@
 .zchat-actions:focus-within {
   opacity: 1;
 }
+.zchat-msg-sources { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 8px; color: var(--muted, #8a8577); font-size: 10px; }
+.zchat-msg-sources > span { margin-right: 1px; }
+.zchat-msg-sources button { display: inline-flex; align-items: center; gap: 4px; max-width: min(260px, 100%); padding: 3px 7px; border: 1px solid var(--line, #e2ddd2); border-radius: 999px; background: color-mix(in srgb, var(--panel) 42%, transparent); color: var(--muted, #8a8577); font-size: 10px; cursor: pointer; }
+.zchat-msg-sources button:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft, var(--accent2)); color: var(--accent, #4d7a68); }
+.zchat-msg-sources button:focus-visible { outline: 2px solid var(--accent, #4d7a68); outline-offset: 1px; }
+.zchat-msg-sources button svg { width: 12px; height: 12px; flex: none; }
+.zchat-msg-sources button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zchat-source-stale { display: inline-flex; margin-top: 7px; padding: 3px 7px; border: 1px solid color-mix(in srgb, var(--warning, #a67c3a) 30%, var(--line)); border-radius: 6px; background: color-mix(in srgb, var(--warning, #a67c3a) 9%, var(--paper)); color: var(--warning, #a67c3a); font-size: 10px; }
+.zchat-source-origin { display: inline-flex; margin-top: 7px; padding: 3px 7px; border: 1px solid var(--line, #e2ddd2); border-radius: 6px; color: var(--muted, #8a8577); font-size: 10px; }
 .zchat-act {
   display: inline-flex;
   align-items: center;
@@ -1031,6 +1040,8 @@
 .zchat-ref-preview pre {
   max-height: 55vh;
 }
+.zchat-source-open { min-height: 30px; margin-top: 10px; padding: 5px 10px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line)); border-radius: 8px; background: var(--accent-soft, var(--accent2)); color: var(--accent); font-size: 11px; }
+.zchat-source-open:hover { border-color: var(--accent); }
 
 /* ── 减少动效 / 减少透明 ──────────────────────────────────── */
 .reduce-motion .zchat-cursor {

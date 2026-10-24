@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { marked } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { joinSegments, splitSegments } from "../segments";
-import { relevantMaterials } from "../relevant";
+import { materialReferenceContent, relevantMaterials } from "../relevant";
 import { api, useAiSessionStore, fmt, kindNameFor, promptNameFor, parseJson, Empty, Modal, DiffModal, ConfirmDialog, PromptDialog, AnyRow, UiLanguage, aiDraftFlusher } from "./shared";
 import { ChatToolbar } from "./chat/chat-toolbar";
 import { HistoryDrawer } from "./chat/history-drawer";
@@ -44,6 +44,9 @@ export function AiPanel({
   language = "zh-CN",
   expanded,
   onToggleExpand,
+  sceneDraftRequest,
+  onSceneDraftRequestConsumed,
+  onNavigateSource,
 }: {
   novel: AnyRow;
   chapter: AnyRow | null;
@@ -56,6 +59,9 @@ export function AiPanel({
   /** 主窗口内展开聊天区（与独立浮窗区分） */
   expanded?: boolean;
   onToggleExpand?: (next: boolean) => void;
+  sceneDraftRequest?: { nonce: string; chapterId: string; scene: AnyRow } | null;
+  onSceneDraftRequestConsumed?: () => void;
+  onNavigateSource?: (source: { kind: string; sourceId: string }) => void;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const [session, patch] = useAiSessionStore();
@@ -69,8 +75,15 @@ export function AiPanel({
     [compare, setCompare] = useState<{ msg: AnyRow; original: string } | null>(
       null,
     ),
-    [segments, setSegments] = useState<{ msg: AnyRow } | null>(null);
+    [segments, setSegments] = useState<{ msg: AnyRow } | null>(null),
+    [revisionApproval, setRevisionApproval] = useState<{
+      chapterTitle: string;
+      sourceRevision: number;
+      currentRevision: number;
+      resume: () => void;
+    } | null>(null);
   const autoSelected = useRef("");
+  const consumedSceneDraft = useRef("");
   const [mode, setMode] = useState<"chat" | "continue" | "naturalize" | "polish" | "outline" | "check">("chat");
   const [activeTaskId, setActiveTaskId] = useState("discuss-plot");
   const [styleId, setStyleId] = useState("");
@@ -224,6 +237,37 @@ export function AiPanel({
     });
     return () => { live = false; };
   }, [styleId, mode]);
+  useEffect(() => {
+    const request = sceneDraftRequest;
+    if (!request || session?.novelId !== novelId || request.chapterId !== chapterId || consumedSceneDraft.current === request.nonce) return;
+    consumedSceneDraft.current = request.nonce;
+    const scene = request.scene || {};
+    const sceneContext = {
+      label: `${scene.title || tr("未命名场景", "Untitled scene")} · ${tr("场景细纲", "Scene outline")}`,
+      kind: "scene",
+      sourceId: String(scene.id || ""),
+      content: materialReferenceContent({
+        ...scene,
+        kind: "scene",
+        content_json: scene.content_json || JSON.stringify(scene),
+      }),
+    };
+    patch({
+      contexts: [
+        ...(session?.contexts || []).filter((item: AnyRow) => !(item.kind === "scene" && item.sourceId === sceneContext.sourceId)),
+        sceneContext,
+      ],
+    });
+    setActiveTaskId("draft-scene");
+    setMode("outline");
+    updateDraft(tr(
+      `请依据引用的场景细纲，为「${scene.title || "本场"}」起草正文。遵守已确认设定与人物知识边界，兑现细纲中的目标、冲突和回报；不要擅自改变既定事实。只输出可直接进入小说的正文，不要标题、提纲或解释。`,
+      `Draft the prose for “${scene.title || "this scene"}” using the attached scene outline. Respect confirmed canon and character knowledge; deliver the outlined goal, conflict, and payoff without changing established facts. Output only manuscript-ready prose, with no heading, outline, or explanation.`,
+    ));
+    onSceneDraftRequestConsumed?.();
+  // updateDraft is a function declaration; the nonce prevents duplicate consumption while session snapshots settle.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sceneDraftRequest, chapterId, session?.novelId, session?.contexts, novelId]);
   useEffect(() => {
     const off = window.zhuwen.onAiConversations((payload) => {
       const rows = Array.isArray(payload) ? payload : payload?.rows;
@@ -548,6 +592,36 @@ export function AiPanel({
       notify(r.error || tr("发送失败，内容已放回输入框，可修改后重试", "Sending failed. Your text was restored to the composer for retrying"));
     } else loadConversations();
   }
+  async function verifyAdoptionSource(
+    sourceChapterId: string | null | undefined,
+    sourceRevision: number | null | undefined,
+    approvedRevision: number | undefined,
+    resume: (revision: number) => void,
+  ) {
+    if (sourceChapterId && chapter && sourceChapterId !== chapter.id) {
+      const sourceTitle = bookChapters.find((item) => item.id === sourceChapterId)?.title || tr("原章节", "source chapter");
+      notify(tr(
+        `这条回复来自「${sourceTitle}」，当前打开的是「${chapter.title}」。请先切换到来源章节，再采纳。`,
+        `This reply was generated for “${sourceTitle}”, but “${chapter.title}” is open. Switch to its source chapter before adopting it.`,
+      ));
+      return false;
+    }
+    if (sourceRevision == null || !chapter) return true;
+    const latest = await api<AnyRow>("chapters:get", chapter.id);
+    if (!latest.ok || !latest.data) {
+      notify(tr("无法核对当前章节版本，未采纳 AI 内容。", "Could not verify the current chapter revision; nothing was adopted."));
+      return false;
+    }
+    const currentRevision = Number(latest.data.revision ?? chapter.revision);
+    if (currentRevision === Number(sourceRevision) || approvedRevision === currentRevision) return true;
+    setRevisionApproval({
+      chapterTitle: chapter.title,
+      sourceRevision: Number(sourceRevision),
+      currentRevision,
+      resume: () => resume(currentRevision),
+    });
+    return false;
+  }
   async function apply(
     mode: "insert" | "replace",
     content: string,
@@ -555,11 +629,17 @@ export function AiPanel({
     savedSelection?: string,
     savedFrom?: number | null,
     savedTo?: number | null,
+    sourceChapterId?: string,
+    approvedRevision?: number,
   ) {
     if (!editor || !chapter || !content) return;
+    if (sourceChapterId && sourceChapterId !== chapter.id) {
+      await verifyAdoptionSource(sourceChapterId, sourceRevision, approvedRevision, () => {});
+      return;
+    }
     const selected = savedSelection ?? contexts.find((x) => x.kind === "selection")?.content;
-    if (mode === "replace" && (!selected || (chapter.revision !== sourceRevision && sourceRevision != null)))
-      return notify(tr("正文已发生变化，请重新选择原文后再替换", "The manuscript changed. Select the original text again before replacing it"));
+    if (mode === "replace" && !selected)
+      return notify(tr("缺少原始选区快照，无法安全替换。", "The original selection snapshot is missing, so replacement is not safe."));
     if (mode === "replace") {
       const currentSelection = editor.state.selection;
       if (savedFrom != null && savedTo != null && (currentSelection.from !== savedFrom || currentSelection.to !== savedTo))
@@ -569,6 +649,9 @@ export function AiPanel({
     }
     if (save && !(await save(true)))
       return notify(tr("正文尚未保存，已取消写入 AI 内容", "The manuscript could not be saved, so the AI text was not inserted"));
+    if (!(await verifyAdoptionSource(sourceChapterId, sourceRevision, approvedRevision, (revision) => {
+      void apply(mode, content, sourceRevision, savedSelection, savedFrom, savedTo, sourceChapterId, revision);
+    }))) return;
     const snapshot = await api("revisions:create", {
       chapterId: chapter.id,
       source: "before_ai_apply",
@@ -591,10 +674,18 @@ export function AiPanel({
     }
     notify(tr("已写入正文，可使用 Ctrl+Z 撤销", "Inserted into the manuscript. Use Ctrl+Z to undo"));
   }
-  async function applyEnd(content: string) {
+  async function applyEnd(
+    content: string,
+    sourceRevision?: number,
+    sourceChapterId?: string,
+    approvedRevision?: number,
+  ) {
     if (!editor || !chapter || !content) return;
     if (save && !(await save(true)))
       return notify(tr("正文尚未保存，已取消追加 AI 内容", "The manuscript could not be saved, so the AI text was not appended"));
+    if (!(await verifyAdoptionSource(sourceChapterId, sourceRevision, approvedRevision, (revision) => {
+      void applyEnd(content, sourceRevision, sourceChapterId, revision);
+    }))) return;
     const snapshot = await api("revisions:create", {
       chapterId: chapter.id,
       source: "before_ai_apply",
@@ -636,6 +727,23 @@ export function AiPanel({
     selectionText,
     hasChapterText: Boolean(chapterText().trim()),
   });
+  const sourceRevisionNow = Number(session?.chapter?.revision ?? chapter?.revision ?? -1);
+  const messagesForUi = useMemo(
+    () => messages.map((message: AnyRow) => {
+      const messageChapterId = String(message.chapter_id || "");
+      const messageRevision = message.source_revision == null ? null : Number(message.source_revision);
+      return {
+        ...message,
+        source_stale: Boolean(
+          messageChapterId && messageChapterId === chapterId && messageRevision != null &&
+          sourceRevisionNow >= 0 && messageRevision !== sourceRevisionNow,
+        ),
+        source_chapter_other: Boolean(messageChapterId && chapterId && messageChapterId !== chapterId),
+        source_chapter_title: bookChapters.find((item) => item.id === messageChapterId)?.title || "",
+      };
+    }),
+    [messages, chapterId, sourceRevisionNow, bookChapters],
+  );
   const breakdown = contextBreakdown(
     contexts,
     messages.filter((m) => !m.streaming).length,
@@ -647,6 +755,17 @@ export function AiPanel({
   const contextPercent = Math.round((breakdown.totalChars / contextLimitChars) * 100);
   const [contextOpen, setContextOpen] = useState(false);
   const [refPreview, setRefPreview] = useState<AnyRow | null>(null);
+  const previewMessageSource = useCallback(async (messageId: string, source: AnyRow) => {
+    if (!messageId) return;
+    const result = await api<AnyRow[]>("ai:message:contexts", messageId);
+    if (!result.ok) return notify(result.error || (language === "en" ? "Could not load the source snapshot" : "无法读取引用快照"));
+    const found = (result.data || []).find((item) =>
+      item.kind === source.kind &&
+      (source.source_id ? item.sourceId === source.source_id : item.label === source.label),
+    );
+    if (found) setRefPreview(found);
+    else notify(language === "en" ? "No matching source snapshot was saved for this message" : "这条消息没有保存对应引用快照");
+  }, [language, notify]);
   const previewSeq = useRef(0);
   async function openContext() {
     setContextOpen(true);
@@ -752,6 +871,12 @@ export function AiPanel({
       ),
     },
     {
+      id: "draft-scene",
+      kind: "outline",
+      label: tr("起草场景", "Draft scene"),
+      hint: tr("根据场景细纲起草；发送前可编辑要求。", "Draft from a scene outline; review the prompt before sending."),
+    },
+    {
       id: "expand-selection",
       kind: "polish",
       label: tr("扩写选区", "Expand selection"),
@@ -788,6 +913,11 @@ export function AiPanel({
   const actionsFor = useCallback(
     (m: AnyRow): ReplyActions => {
       const naturalize = m.task_kind === "naturalize";
+      const sourceChapterMismatch = Boolean(m.chapter_id && chapterId && m.chapter_id !== chapterId);
+      const sourceChapterTitle = bookChapters.find((item) => item.id === m.chapter_id)?.title || tr("来源章节", "source chapter");
+      const replyDisabledReason = sourceChapterMismatch
+        ? tr(`回复来自「${sourceChapterTitle}」，请切换回该章节`, `Reply is from “${sourceChapterTitle}”. Switch to that chapter first.`)
+        : applyDisabledReason;
       const openComparison = () => {
         const saved = m.selection_text || contexts.find((x) => x.kind === "selection")?.content;
         if (!saved) {
@@ -797,14 +927,14 @@ export function AiPanel({
         setCompare({ msg: m, original: saved });
       };
       return ({
-      canApply: canApplyFromReply,
-      applyDisabledReason,
-      canAppendToEnd: !float && m.id === continuationId,
+      canApply: canApplyFromReply && !sourceChapterMismatch,
+      applyDisabledReason: replyDisabledReason,
+      canAppendToEnd: !float && m.id === continuationId && !sourceChapterMismatch,
       requiresComparison: naturalize,
-      onInsertCursor: () => naturalize ? openComparison() : void apply("insert", m.content, m.source_revision),
+      onInsertCursor: () => naturalize ? openComparison() : void apply("insert", m.content, m.source_revision, undefined, undefined, undefined, m.chapter_id),
       onReplaceSelection: () =>
-        naturalize ? openComparison() : void apply("replace", m.content, m.source_revision),
-      onAppendToEnd: () => naturalize ? openComparison() : void applyEnd(m.content),
+        naturalize ? openComparison() : void apply("replace", m.content, m.source_revision, m.selection_text || undefined, m.selection_from, m.selection_to, m.chapter_id),
+      onAppendToEnd: () => naturalize ? openComparison() : void applyEnd(m.content, m.source_revision, m.chapter_id),
       onSegments: () => naturalize ? openComparison() : setSegments({ msg: m }),
       onCompare: openComparison,
       onSaveInspiration: () => {
@@ -827,7 +957,21 @@ export function AiPanel({
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [contexts, chapterId, continuationId, editor, float, language, novelId],
+    [
+      applyDisabledReason,
+      bookChapters,
+      canApplyFromReply,
+      chapter?.id,
+      chapter?.title,
+      chapterId,
+      contexts,
+      continuationId,
+      editor,
+      float,
+      language,
+      novelId,
+      notify,
+    ],
   );
   const renderMarkdown = useCallback(
     (text: string) => <MdView text={text} />,
@@ -882,11 +1026,12 @@ export function AiPanel({
         </div>
       )}
       <MessageList
-        messages={messages}
+        messages={messagesForUi}
         language={language}
         conversationId={conversation}
         renderMarkdown={renderMarkdown}
         actionsFor={actionsFor}
+        onOpenSource={previewMessageSource}
         emptyState={
           <Empty
             title={tr("今天想写些什么？", "What would you like to write today?")}
@@ -1068,8 +1213,40 @@ export function AiPanel({
               {tr("字", "chars")}
             </p>
             <pre>{refPreview.content}</pre>
+            {refPreview.sourceId && onNavigateSource && [
+              "chapter", "selection", "summary", "continuation", "outline", "scene", "character", "world", "inspiration", "timeline", "foreshadow", "relation",
+            ].includes(refPreview.kind) && (
+              <button
+                type="button"
+                className="zchat-source-open"
+                onClick={() => {
+                  const source = { kind: String(refPreview.kind || ""), sourceId: String(refPreview.sourceId) };
+                  setRefPreview(null);
+                  onNavigateSource(source);
+                }}
+              >
+                {tr("打开原始资料", "Open original source")}
+              </button>
+            )}
           </div>
         </Modal>
+      )}
+      {revisionApproval && (
+        <ConfirmDialog
+          title={tr("章节已更新", "Chapter changed")}
+          message={tr(
+            `这条回复基于「${revisionApproval.chapterTitle}」第 ${revisionApproval.sourceRevision} 版；当前正文已是第 ${revisionApproval.currentRevision} 版。请确认仍要把旧回复写入当前正文。`,
+            `This reply was generated from “${revisionApproval.chapterTitle}” revision ${revisionApproval.sourceRevision}; the manuscript is now revision ${revisionApproval.currentRevision}. Confirm that you still want to apply the older reply.`,
+          )}
+          confirmLabel={tr("仍要采纳", "Apply anyway")}
+          cancelLabel={tr("返回检查", "Review first")}
+          onCancel={() => setRevisionApproval(null)}
+          onConfirm={() => {
+            const pending = revisionApproval;
+            setRevisionApproval(null);
+            pending.resume();
+          }}
+        />
       )}
       {compare && (
         <DiffModal
@@ -1083,7 +1260,7 @@ export function AiPanel({
           onApply={async () => {
             const msg = compare.msg;
             setCompare(null);
-            await apply("replace", msg.content, msg.source_revision, compare.original, msg.selection_from, msg.selection_to);
+            await apply("replace", msg.content, msg.source_revision, compare.original, msg.selection_from, msg.selection_to, msg.chapter_id);
           }}
         />
       )}
@@ -1095,7 +1272,7 @@ export function AiPanel({
           onAdopt={async (content, mode) => {
             const msg = segments.msg;
             setSegments(null);
-            await apply(mode, content, msg.source_revision);
+            await apply(mode, content, msg.source_revision, msg.selection_text || undefined, msg.selection_from, msg.selection_to, msg.chapter_id);
           }}
           language={language}
         />

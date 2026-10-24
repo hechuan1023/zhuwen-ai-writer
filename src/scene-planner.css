@@ -66,6 +66,10 @@
 .scene-card-cast { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
 .scene-card-cast span { padding: 2px 6px; border-radius: 99px; background: var(--panel); color: var(--muted); font-size: 9px; }
 .scene-card-when { display: block; margin-top: 7px; color: var(--faint); font-size: 9px; }
+.scene-card-draft { width: 100%; min-height: 29px; margin-top: 9px; padding: 5px 8px; border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line)); border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent); text-align: center; font-size: 10px; font-weight: 650; cursor: pointer; transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur) var(--ease); }
+.scene-card-draft:hover:not(:disabled) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--paper)); transform: translateY(-1px); }
+.scene-card-draft:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.scene-card-draft:disabled { opacity: .48; cursor: not-allowed; }
 .scene-lane-empty { display: grid; flex: 1; min-height: 68px; place-items: center; padding: 10px; border: 1px dashed var(--line-strong); border-radius: var(--r-md); color: var(--faint); text-align: center; font-size: 10px; line-height: 1.5; }
 .scene-lane-add,.scene-lane-new-chapter { min-height: 32px; border: 1px dashed var(--line-strong); border-radius: var(--r-md); background: transparent; color: var(--muted); font-size: 10px; }
 .scene-lane-add:hover,.scene-lane-new-chapter:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
@@ -82,5 +86,5 @@
   .scene-lane,.scene-card { transition: none; }
   .scene-card:hover { transform: none; }
 }
-.reduce-motion .scene-lane,.reduce-motion .scene-card { transition: none; }
-.reduce-motion .scene-card:hover { transform: none; }
+.reduce-motion .scene-lane,.reduce-motion .scene-card,.reduce-motion .scene-card-draft { transition: none; }
+.reduce-motion .scene-card:hover,.reduce-motion .scene-card-draft:hover { transform: none; }

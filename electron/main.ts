@@ -2396,8 +2396,33 @@ function registerIpc(userDir: string) {
       aiSession.text = "";
       aiSession.messages = [
         ...aiSession.messages,
-        { role: "user", content: p.prompt },
-        { role: "assistant", content: "", streaming: true, conversationId: conv },
+        {
+          id: uid,
+          role: "user",
+          content: p.prompt,
+          chapter_id: p.chapterId ?? null,
+          source_revision: p.sourceRevision ?? null,
+          source_message_id: uid,
+          source_refs: (p.contexts || []).map((x: any) => ({
+            label: String(x.label || ""),
+            kind: String(x.kind || ""),
+            source_id: x.sourceId || null,
+          })),
+        },
+        {
+          role: "assistant",
+          content: "",
+          streaming: true,
+          conversationId: conv,
+          chapter_id: p.chapterId ?? null,
+          source_revision: p.sourceRevision ?? null,
+          source_message_id: uid,
+          source_refs: (p.contexts || []).map((x: any) => ({
+            label: String(x.label || ""),
+            kind: String(x.kind || ""),
+            source_id: x.sourceId || null,
+          })),
+        },
       ];
       broadcastSession();
       broadcastConversations(String(p.novelId || aiSession.novelId || ""));
@@ -2626,10 +2651,42 @@ function registerIpc(userDir: string) {
       aiSession.messages = [];
     } else {
       aiSession.conversationId = conversationId;
-      aiSession.messages = all(
-        "SELECT * FROM ai_messages WHERE conversation_id=? ORDER BY created_at",
+      const rows: any[] = all(
+        "SELECT * FROM ai_messages WHERE conversation_id=? ORDER BY created_at,rowid",
         conversationId,
       );
+      const userIds = rows.filter((row) => row.role === "user").map((row) => row.id);
+      const snapshots: any[] = userIds.length
+        ? all(
+            `SELECT message_id,label,kind,source_id FROM message_context_snapshots WHERE message_id IN (${userIds.map(() => "?").join(",")}) ORDER BY created_at,rowid`,
+            ...userIds,
+          )
+        : [];
+      const refsByMessage = new Map<string, any[]>();
+      for (const snapshot of snapshots) {
+        refsByMessage.set(snapshot.message_id, [
+          ...(refsByMessage.get(snapshot.message_id) || []),
+          { label: snapshot.label, kind: snapshot.kind, source_id: snapshot.source_id },
+        ]);
+      }
+      let lastSourceMessageId = "";
+      let lastSourceRefs: any[] = [];
+      aiSession.messages = rows.map((row) => {
+        if (row.role === "user") {
+          lastSourceMessageId = row.id;
+          lastSourceRefs = refsByMessage.get(row.id) || [];
+          return {
+            ...row,
+            source_message_id: row.id,
+            source_refs: lastSourceRefs,
+          };
+        }
+        return {
+          ...row,
+          source_message_id: row.role === "assistant" ? lastSourceMessageId : "",
+          source_refs: row.role === "assistant" ? lastSourceRefs : [],
+        };
+      });
     }
     loadConversationDraft(
       String(aiSession.novelId || ""),
@@ -2637,6 +2694,20 @@ function registerIpc(userDir: string) {
     );
     broadcastSession();
     return ok(true);
+  });
+  ipcMain.handle("ai:message:contexts", (_, messageId) => {
+    const row: any = get(
+      "SELECT m.id,c.novel_id FROM ai_messages m JOIN ai_conversations c ON c.id=m.conversation_id WHERE m.id=? AND m.role='user'",
+      String(messageId || ""),
+    );
+    if (!row || row.novel_id !== aiSession.novelId)
+      return fail("引用快照不存在或不属于当前作品");
+    return ok(
+      all(
+        "SELECT label,kind,content,source_id AS sourceId FROM message_context_snapshots WHERE message_id=? ORDER BY created_at,rowid",
+        row.id,
+      ),
+    );
   });
   ipcMain.handle("ai:float:open", () => {
     openFloatWindow();
