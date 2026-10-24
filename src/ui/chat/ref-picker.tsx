@@ -81,7 +81,7 @@ export function RefPicker({
               <IconSparkle /> {tr("本地匹配 · 相关资料", "Local matches · related materials")}
               <small className="zchat-picker-local-only">{tr("不调用 AI", "No AI call")}</small>
             </h4>
-            <p className="zchat-picker-match-note">{tr("按正文、选区、人物别名、资料标签和所属章节给出候选；你点选后才会加入请求。", "Candidates use text, selection, aliases, tags, and chapter links. Nothing is sent until you add it.")}</p>
+            <p className="zchat-picker-match-note">{tr("按正文、选区、人物/地点/势力别名、资料标签和所属章节给出候选；你点选后才会加入请求。", "Candidates use text, selection, character/place/faction aliases, tags, and chapter links. Nothing is sent until you add it.")}</p>
             {suggestions.length ? (
               <div className="zchat-suggestion-list">
                 {suggestions.map((suggestion) => {

@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { countText, localDate, newId, openDatabase, timestamp } from './database'
+import { BUILTIN_STYLE_CARDS } from './ai-style-cards'
 
 const dir=mkdtempSync(join(tmpdir(),'zhuwen-smoke-'))
 try{
@@ -55,9 +56,12 @@ try{
   assert.equal((db.prepare('SELECT COUNT(*) n FROM chapters WHERE novel_id=?').get(novel) as any).n,0,'永久删除小说级联清除章节')
   assert.equal((db.prepare('SELECT COUNT(*) n FROM ai_conversations WHERE novel_id=?').get(novel) as any).n,0,'永久删除小说级联清除会话')
   const schemaVersion:any=db.prepare('SELECT MAX(version) v FROM schema_migrations').get()
-  assert.equal(schemaVersion.v,10,'数据库迁移到版本 10')
+  assert.equal(schemaVersion.v,15,'数据库迁移到版本 15')
+  assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('world_chapter_mention_index','world_chapter_mentions') ORDER BY name").all().length===2,'地点与势力提及索引表创建')
+  assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ai_style_compositions'").get(),'自定义技法组合表创建')
   const styles:any[] = db.prepare('SELECT * FROM ai_style_cards ORDER BY id').all()
-  assert.equal(styles.length,4,'内置写作风格卡补齐且不重复')
+  assert.equal(styles.length,BUILTIN_STYLE_CARDS.length,'全部内置写作风格卡补齐且不重复')
+  assert.equal(new Set(styles.map((x:any)=>x.id)).size,BUILTIN_STYLE_CARDS.length,'内置风格卡 ID 唯一')
   assert.ok(styles.every((x:any)=>x.builtin===1 && x.rules.length>20),'内置风格规则完整')
   assert.ok(db.prepare("SELECT task_kind,style_id,style_name,style_version,style_rules,selection_from,selection_to FROM ai_messages").all() !== undefined,'消息具备任务与风格快照字段')
   const chapterColumns:any[]=db.prepare('PRAGMA table_info(chapters)').all()
@@ -72,7 +76,7 @@ try{
   const dbBytes=readFileSync(path).toString('utf8')
   assert.ok(!dbBytes.includes('sk-test-should-never-appear'),'数据库不含 API Key 测试串')
   db.close()
-  console.log('SMOKE_OK migration style_cards style_snapshot unicode_save optimistic_revision trash_restore library_trash word_count local_calendar_date secret_schema_absence novel_trash chapter_reorder ai_conversation cascade_purge summary_schema ai_indexes')
+  console.log('SMOKE_OK migration style_cards style_snapshot unicode_save optimistic_revision trash_restore library_trash world_mention_index word_count local_calendar_date secret_schema_absence novel_trash chapter_reorder ai_conversation cascade_purge summary_schema ai_indexes')
 }finally{
   try{rmSync(dir,{recursive:true,force:true,maxRetries:5,retryDelay:100})}catch{ /* temp cleanup is best-effort */ }
 }

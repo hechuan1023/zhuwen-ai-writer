@@ -22,6 +22,9 @@ const allowedChannels = new Set([
   'ai:style:export',
   'ai:style:import',
   'ai:style:estimate',
+  'ai:style-compositions:list',
+  'ai:style-compositions:save',
+  'ai:style-compositions:delete',
   'app:close-ready',
   'appearance:chooseBackground',
   'backup:chooseDir',
@@ -85,6 +88,7 @@ const allowedChannels = new Set([
   'writing:today',
   'writing:focusPing',
   'writing:focusEnd',
+  'world:presence',
 ])
 
 contextBridge.exposeInMainWorld('zhuwen', {

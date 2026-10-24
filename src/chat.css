@@ -1141,6 +1141,18 @@
 .zchat-style-presets-grid button:disabled { opacity: .5; cursor: not-allowed; }
 .zchat-style-presets-grid b { font-size: 11px; }
 .zchat-style-presets-grid small { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.zchat-style-saved > header { align-items: center; }
+.zchat-style-saved > header button { min-height: 28px; padding: 4px 9px; font-size: 10px; }
+.zchat-style-saved-list { display: grid; gap: 6px; }
+.zchat-style-saved-list article { min-width: 0; display: flex; align-items: center; gap: 6px; padding: 6px 7px 6px 10px; border: 1px solid var(--line); border-radius: var(--r-md, 10px); background: var(--paper); }
+.zchat-style-saved-list article.active { border-color: var(--accent); background: var(--accent-soft); }
+.zchat-style-saved-apply { min-width: 0; flex: 1; display: grid; gap: 3px; padding: 2px; border: 0; background: transparent; text-align: left; }
+button.zchat-style-saved-apply:not(.primary):not(.danger):not(.danger-text):not(:disabled):hover { background: transparent; }
+.zchat-style-saved-apply b, .zchat-style-saved-apply small { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.zchat-style-saved-apply b { font-size: 11px; }
+.zchat-style-saved-apply small { color: var(--muted); font-size: 10px; line-height: 1.4; white-space: nowrap; }
+.zchat-style-saved-list .zchat-style-row-actions { align-self: center; }
+.zchat-style-editor .zchat-style-task-options { max-height: 200px; overflow: auto; }
 .zchat-style-editor { display: grid; gap: 12px; }
 .zchat-style-editor label { display: grid; gap: 5px; font-size: 12px; }
 .zchat-style-editor textarea { resize: vertical; line-height: 1.55; }

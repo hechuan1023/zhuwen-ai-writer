@@ -208,6 +208,45 @@ function migrate(db: Db) {
     `)
     db.prepare('INSERT INTO schema_migrations VALUES(13,?)').run(now())
   })()
+  if (version < 14) db.transaction(() => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS world_chapter_mention_index(
+        chapter_id TEXT PRIMARY KEY REFERENCES chapters(id) ON DELETE CASCADE,
+        novel_id TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+        chapter_data_version INTEGER NOT NULL,
+        entity_fingerprint TEXT NOT NULL,
+        indexed_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS world_chapter_mentions(
+        novel_id TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+        world_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE,
+        chapter_id TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+        mention_count INTEGER NOT NULL,
+        first_offset INTEGER NOT NULL,
+        matched_terms_json TEXT NOT NULL DEFAULT '[]',
+        PRIMARY KEY(world_id,chapter_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_world_mentions_novel_entity ON world_chapter_mentions(novel_id,world_id,chapter_id);
+      CREATE INDEX IF NOT EXISTS idx_world_mentions_chapter ON world_chapter_mentions(chapter_id);
+      CREATE INDEX IF NOT EXISTS idx_world_mention_index_novel_chapter ON world_chapter_mention_index(novel_id,chapter_id);
+    `)
+    db.prepare('INSERT INTO schema_migrations VALUES(14,?)').run(now())
+  })()
+  if (version < 15) db.transaction(() => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ai_style_compositions(
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        style_ids_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        data_version INTEGER NOT NULL DEFAULT 1
+      );
+      CREATE INDEX IF NOT EXISTS idx_ai_style_compositions_updated ON ai_style_compositions(updated_at DESC,name,id);
+    `)
+    db.prepare('INSERT INTO schema_migrations VALUES(15,?)').run(now())
+  })()
   // 已完成迁移的数据库也要能补齐或升级内置卡；不覆盖用户自定义记录。
   {
     const insert = db.prepare('INSERT OR IGNORE INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')

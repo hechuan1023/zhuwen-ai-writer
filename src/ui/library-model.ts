@@ -87,7 +87,7 @@ export function editorToLibraryContent(kind: string, editing: any): any {
         .filter((entry: any) => entry.change || entry.evidence),
     };
   if (kind === "world")
-    return { body: editing.body || "", category: editing.category || "" };
+    return { body: editing.body || "", category: editing.category || "", alias: editing.alias || "" };
   return { body: editing.body || "" };
 }
 

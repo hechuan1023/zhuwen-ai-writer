@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnyRow, Modal, ConfirmDialog, api } from "../shared";
 import { ChatMenu, type MenuItem } from "./menu";
 import { IconChevronDown, IconCopy, IconDownload, IconSparkle, IconUpload } from "./icons";
 
 export type StyleCard = AnyRow & { tasks: string[]; version: number };
+type StyleComposition = { id: string; name: string; description: string; styleIds: string[]; updatedAt?: string };
 
 function styleLabel(card: StyleCard, language: string) {
   if (language !== "en" || !card.builtin) return { name: card.name, description: card.description };
@@ -80,6 +81,26 @@ export function StyleCardPanel({
   const [deleteCard, setDeleteCard] = useState<StyleCard | null>(null);
   const [error, setError] = useState("");
   const [importing, setImporting] = useState(false);
+  const [compositions, setCompositions] = useState<StyleComposition[]>([]);
+  const [compositionEditor, setCompositionEditor] = useState<StyleComposition | null>(null);
+  const [deleteComposition, setDeleteComposition] = useState<StyleComposition | null>(null);
+  const [savingComposition, setSavingComposition] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    api<StyleComposition[]>("ai:style-compositions:list").then((result) => {
+      if (!live) return;
+      if (result.ok) setCompositions(Array.isArray(result.data) ? result.data : []);
+      else setError(result.error || tr("读取自定义组合失败", "Could not load saved sets"));
+    });
+    return () => { live = false; };
+  }, [open]);
+  const compositionName = (id: string) => {
+    const card = cards.find((item) => item.id === id);
+    return card ? styleLabel(card, language).name : id;
+  };
+  const isCompositionSelected = (styleIds: string[]) =>
+    styleIds.length === selectedIds.length && styleIds.every((id) => selectedIds.includes(id));
   const items: MenuItem[] = cards.map((card) => ({
     id: `style-${card.id}`,
     label: styleLabel(card, language).name,
@@ -137,6 +158,33 @@ export function StyleCardPanel({
               })}
             </div>
           </section>
+          <section className="zchat-style-presets zchat-style-saved" data-fd-id="ai-style-saved-compositions">
+            <header>
+              <b>{tr("我的技法组合", "My technique sets")}</b>
+              <button type="button" disabled={!selectedIds.length} onClick={() => setCompositionEditor({ id: "", name: "", description: "", styleIds: [...selectedIds] })}>
+                {tr("保存当前组合", "Save current set")}
+              </button>
+            </header>
+            <p>{tr("保存在本机，可在不同作品间复用。保存组合不会改变当前作品的勾选；应用时再替换当前组合。", "Saved on this device and reusable across novels. Saving does not change the current selection; apply a set when you want to replace it.")}</p>
+            {compositions.length ? (
+              <div className="zchat-style-saved-list">
+                {compositions.map((composition) => {
+                  const active = isCompositionSelected(composition.styleIds);
+                  return <article className={active ? "active" : ""} key={composition.id}>
+                    <button type="button" className="zchat-style-saved-apply" aria-pressed={active} onClick={() => onSelectionChange(composition.styleIds)}>
+                      <b>{composition.name}</b>
+                      <small>{composition.description || composition.styleIds.map(compositionName).join(language === "en" ? " + " : " + ")}</small>
+                      <small className="zchat-style-tasks">{tr(`${composition.styleIds.length} 张技法卡`, `${composition.styleIds.length} techniques`)}</small>
+                    </button>
+                    <div className="zchat-style-row-actions">
+                      <button type="button" title={tr("编辑组合", "Edit set")} aria-label={tr(`编辑组合 ${composition.name}`, `Edit set ${composition.name}`)} onClick={() => setCompositionEditor({ ...composition, styleIds: [...composition.styleIds] })}>✎</button>
+                      <button type="button" className="danger-text" title={tr("删除组合", "Delete set")} aria-label={tr(`删除组合 ${composition.name}`, `Delete set ${composition.name}`)} onClick={() => setDeleteComposition(composition)}>×</button>
+                    </div>
+                  </article>;
+                })}
+              </div>
+            ) : <div className="zchat-picker-empty">{tr("还没有保存的组合。先勾选技法卡，再点“保存当前组合”。", "No saved sets yet. Select techniques, then choose “Save current set”.")}</div>}
+          </section>
           <div className="zchat-style-toolbar">
             <span>{tr("技法卡可导出为文件，在不同作品或设备间复用。", "Export a technique card to reuse it across projects or devices.")}</span>
             <button type="button" className="secondary" disabled={importing} onClick={async () => {
@@ -174,8 +222,42 @@ export function StyleCardPanel({
         </Modal>
       )}
       {detail && <Modal title={styleLabel(detail, language).name} close={() => setDetail(null)}><p className="hint">{styleLabel(detail, language).description}</p><p className="hint">{tr("适用任务：", "Tasks: ")}{detail.tasks.map((x) => taskLabel(x, language)).join(language === "en" ? ", " : "、")}</p><pre className="zchat-style-rules">{detail.rules}</pre></Modal>}
+      {compositionEditor && (
+        <Modal title={tr(compositionEditor.id ? "编辑技法组合" : "保存技法组合", compositionEditor.id ? "Edit technique set" : "Save technique set")} close={() => !savingComposition && setCompositionEditor(null)}>
+          <div className="zchat-style-editor">
+            <label>{tr("名称", "Name")}<input value={compositionEditor.name} maxLength={80} onChange={(event) => setCompositionEditor({ ...compositionEditor, name: event.target.value })} /></label>
+            <label>{tr("说明（可选）", "Description (optional)")}<input value={compositionEditor.description} maxLength={240} onChange={(event) => setCompositionEditor({ ...compositionEditor, description: event.target.value })} /></label>
+            <fieldset className="zchat-style-task-options">
+              <legend>{tr(`选择技法卡（${compositionEditor.styleIds.length}/6）`, `Choose techniques (${compositionEditor.styleIds.length}/6)`)}</legend>
+              {cards.map((card) => {
+                const checked = compositionEditor.styleIds.includes(card.id);
+                return <label key={card.id}><input type="checkbox" checked={checked} disabled={!checked && compositionEditor.styleIds.length >= 6} onChange={(event) => setCompositionEditor({ ...compositionEditor, styleIds: event.target.checked ? [...compositionEditor.styleIds, card.id] : compositionEditor.styleIds.filter((id) => id !== card.id) })} />{styleLabel(card, language).name}</label>;
+              })}
+            </fieldset>
+          </div>
+          {error && <p className="hint error" role="alert">{error}</p>}
+          <div className="row end">
+            <button type="button" disabled={savingComposition} onClick={() => setCompositionEditor(null)}>{tr("取消", "Cancel")}</button>
+            <button type="button" className="primary" disabled={savingComposition || !compositionEditor.name.trim() || compositionEditor.styleIds.length < 1} onClick={async () => {
+              setSavingComposition(true); setError("");
+              const result = await api<StyleComposition>("ai:style-compositions:save", compositionEditor);
+              setSavingComposition(false);
+              if (!result.ok) { setError(result.error || tr("保存失败", "Save failed")); return; }
+              setCompositions((current) => [...current.filter((item) => item.id !== result.data.id), result.data].sort((a, b) => a.name.localeCompare(b.name)));
+              onSelectionChange(result.data.styleIds);
+              setCompositionEditor(null);
+            }}>{savingComposition ? tr("保存中…", "Saving…") : tr("保存组合", "Save set")}</button>
+          </div>
+        </Modal>
+      )}
+      {deleteComposition && <ConfirmDialog title={tr("删除技法组合", "Delete technique set")} message={tr(`删除「${deleteComposition.name}」？不会删除组合中的技法卡。`, `Delete “${deleteComposition.name}”? The technique cards themselves will remain.`)} confirmLabel={tr("删除", "Delete")} cancelLabel={tr("取消", "Cancel")} danger onCancel={() => setDeleteComposition(null)} onConfirm={async () => {
+        const result = await api("ai:style-compositions:delete", deleteComposition.id);
+        if (!result.ok) setError(result.error || tr("删除失败", "Delete failed"));
+        else setCompositions((current) => current.filter((item) => item.id !== deleteComposition.id));
+        setDeleteComposition(null);
+      }} />}
       {edit && <StyleEditor card={edit} language={language} onCancel={() => setEdit(null)} onSaved={() => { setEdit(null); onReload(); }} onError={setError} />}
-      {deleteCard && <ConfirmDialog title={tr("删除自定义风格", "Delete custom style")} message={tr(`删除「${deleteCard.name}」？使用它的作品只会移除此卡，其他已选技法会保留。`, `Delete “${deleteCard.name}”? Novels using it will remove only this card; other selected techniques will remain.`)} confirmLabel={tr("删除", "Delete")} cancelLabel={tr("取消", "Cancel")} danger onCancel={() => setDeleteCard(null)} onConfirm={async () => { const r = await api("ai:style:delete", deleteCard.id); setDeleteCard(null); if (!r.ok) setError(r.error || "Delete failed"); else { onReload(); } }} />}
+      {deleteCard && <ConfirmDialog title={tr("删除自定义风格", "Delete custom style")} message={tr(`删除「${deleteCard.name}」？使用它的作品只会移除此卡，其他已选技法会保留。`, `Delete “${deleteCard.name}”? Novels using it will remove only this card; other selected techniques will remain.`)} confirmLabel={tr("删除", "Delete")} cancelLabel={tr("取消", "Cancel")} danger onCancel={() => setDeleteCard(null)} onConfirm={async () => { const r = await api("ai:style:delete", deleteCard.id); setDeleteCard(null); if (!r.ok) setError(r.error || "Delete failed"); else { setCompositions((current) => current.flatMap((item) => { const styleIds = item.styleIds.filter((id) => id !== deleteCard.id); return styleIds.length ? [{ ...item, styleIds }] : []; })); onReload(); } }} />}
     </div>
   );
 }

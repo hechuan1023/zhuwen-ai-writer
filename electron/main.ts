@@ -1448,6 +1448,128 @@ function registerIpc(userDir: string) {
     return ok({ presence, total: chapters.length });
   });
 
+  ipcMain.handle("world:presence", (_, p) => {
+    const novelId = String(p?.novelId || "");
+    const includeMatches = Boolean(p?.includeMatches);
+    if (!novelId) return fail("作品信息无效");
+    const entities: any[] = all(
+      "SELECT id,title,content_json FROM library_items WHERE novel_id=? AND kind='world' AND deleted_at IS NULL ORDER BY sort_order,title,id",
+      novelId,
+    ).flatMap((row: any) => {
+      let data: any = {};
+      try { data = JSON.parse(row.content_json || "{}"); } catch {}
+      const category = String(data.category || "").trim();
+      if (category !== "地点" && category !== "势力") return [];
+      const aliases = Array.isArray(data.alias) ? data.alias : String(data.alias || "").split(/[,，、;；]+/);
+      const terms = [...new Map([row.title, ...aliases]
+        .map((term: unknown) => String(term || "").trim())
+        .filter((term: string) => term.length >= 2)
+        .map((term: string) => [term.toLocaleLowerCase(), term])).values()];
+      return [{ id: row.id, title: row.title, category, terms }];
+    });
+    const fingerprint = createHash("sha256")
+      .update(JSON.stringify(entities.map(({ id, category, terms }) => [id, category, terms])))
+      .digest("hex");
+    const chapters: any[] = all(
+      `SELECT c.id,c.title,c.data_version,c.sort_order,v.sort_order volume_sort_order FROM chapters c
+       LEFT JOIN volumes v ON v.id=c.volume_id
+       WHERE c.novel_id=? AND c.deleted_at IS NULL
+       ORDER BY COALESCE(v.sort_order,-1),c.sort_order,c.id`,
+      novelId,
+    );
+    const indexedRows: any[] = all(
+      "SELECT chapter_id,chapter_data_version,entity_fingerprint FROM world_chapter_mention_index WHERE novel_id=?",
+      novelId,
+    );
+    const indexed = new Map(indexedRows.map((row) => [row.chapter_id, row]));
+    const staleChapters = chapters.filter((chapter) => {
+      const state: any = indexed.get(chapter.id);
+      return !state || Number(state.chapter_data_version) !== Number(chapter.data_version) || state.entity_fingerprint !== fingerprint;
+    });
+    if (staleChapters.length) {
+      const clearChapter = db.prepare("DELETE FROM world_chapter_mentions WHERE chapter_id=?");
+      const addMention = db.prepare("INSERT INTO world_chapter_mentions(novel_id,world_id,chapter_id,mention_count,first_offset,matched_terms_json) VALUES(?,?,?,?,?,?)");
+      const saveState = db.prepare("INSERT INTO world_chapter_mention_index(chapter_id,novel_id,chapter_data_version,entity_fingerprint,indexed_at) VALUES(?,?,?,?,?) ON CONFLICT(chapter_id) DO UPDATE SET novel_id=excluded.novel_id,chapter_data_version=excluded.chapter_data_version,entity_fingerprint=excluded.entity_fingerprint,indexed_at=excluded.indexed_at");
+      db.transaction(() => {
+        for (const chapter of staleChapters) {
+          const body: any = get("SELECT plain_text FROM chapters WHERE id=? AND deleted_at IS NULL", chapter.id);
+          const text = String(body?.plain_text || "");
+          clearChapter.run(chapter.id);
+          for (const entity of entities) {
+            const alternatives = entity.terms.slice().sort((a: string, b: string) => b.length - a.length)
+              .map((term: string) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+            const matcher = alternatives.length ? new RegExp(`(?:${alternatives.join("|")})`, "gi") : null;
+            const termByLower = new Map<string, string>(entity.terms.map((term: string) => [term.toLocaleLowerCase(), term]));
+            const matchedTerms = new Set<string>();
+            let count = 0;
+            let firstOffset = -1;
+            let match: RegExpExecArray | null;
+            while (matcher && (match = matcher.exec(text)) !== null) {
+              if (firstOffset < 0) firstOffset = match.index;
+              count++;
+              const matchedTerm = termByLower.get(match[0].toLocaleLowerCase());
+              if (matchedTerm) matchedTerms.add(matchedTerm);
+            }
+            if (count) addMention.run(novelId, entity.id, chapter.id, count, firstOffset, JSON.stringify([...matchedTerms]));
+          }
+          saveState.run(chapter.id, novelId, Number(chapter.data_version), fingerprint, timestamp());
+        }
+      })();
+    }
+    const summaryRows: any[] = all(
+      `WITH chapter_order AS (
+         SELECT c.id,ROW_NUMBER() OVER (ORDER BY COALESCE(v.sort_order,-1),c.sort_order,c.id)-1 AS chapter_index
+         FROM chapters c LEFT JOIN volumes v ON v.id=c.volume_id
+         WHERE c.novel_id=? AND c.deleted_at IS NULL
+       )
+       SELECT m.world_id,COUNT(*) appearances,SUM(m.mention_count) mentions,MAX(o.chapter_index) last_index
+       FROM world_chapter_mentions m JOIN chapter_order o ON o.id=m.chapter_id
+       WHERE m.novel_id=? GROUP BY m.world_id`,
+      novelId,
+      novelId,
+    );
+    const summaryByEntity = new Map(summaryRows.map((row) => [row.world_id, row]));
+    const selectedId = includeMatches ? String(p?.worldId || "") : "";
+    const presence: Record<string, any> = {};
+    for (const entity of entities) {
+      if (includeMatches && entity.id !== selectedId) continue;
+      const summary: any = summaryByEntity.get(entity.id);
+      const value: any = {
+        appearances: Number(summary?.appearances || 0),
+        mentions: Number(summary?.mentions || 0),
+        sinceLast: summary ? chapters.length - 1 - Number(summary.last_index) : chapters.length,
+      };
+      if (includeMatches) {
+        const rows: any[] = all(
+          `SELECT m.chapter_id,m.mention_count,m.first_offset,m.matched_terms_json,c.title chapter_title,c.plain_text
+           FROM world_chapter_mentions m JOIN chapters c ON c.id=m.chapter_id
+           LEFT JOIN volumes v ON v.id=c.volume_id
+           WHERE m.novel_id=? AND m.world_id=? AND c.deleted_at IS NULL
+           ORDER BY COALESCE(v.sort_order,-1) DESC,c.sort_order DESC,c.id DESC LIMIT 200`,
+          novelId,
+          entity.id,
+        ).reverse();
+        value.matches = rows.map((row) => {
+          let matchedTerms: string[] = [];
+          try { matchedTerms = JSON.parse(row.matched_terms_json || "[]"); } catch {}
+          const text = String(row.plain_text || "");
+          const offset = Math.max(0, Number(row.first_offset) || 0);
+          const start = Math.max(0, offset - 42);
+          const end = Math.min(text.length, offset + 82);
+          return {
+            chapterId: row.chapter_id,
+            chapterTitle: row.chapter_title,
+            mentions: Number(row.mention_count || 0),
+            matchedTerms,
+            snippet: `${start > 0 ? "…" : ""}${text.slice(start, end).replace(/\s+/g, " ").trim()}${end < text.length ? "…" : ""}`,
+          };
+        });
+      }
+      presence[entity.id] = value;
+    }
+    return ok({ presence, total: chapters.length });
+  });
+
   ipcMain.handle("volumes:create", (_, p) => {
     const id = newId(),
       t = timestamp(),
@@ -2331,6 +2453,41 @@ function registerIpc(userDir: string) {
       }),
     ),
   );
+  ipcMain.handle("ai:style-compositions:list", () => {
+    const rows: any[] = all("SELECT id,name,description,style_ids_json,updated_at FROM ai_style_compositions ORDER BY name COLLATE NOCASE,id");
+    return ok(rows.flatMap((row) => {
+      let styleIds: string[] = [];
+      try { styleIds = JSON.parse(row.style_ids_json || "[]"); } catch {}
+      styleIds = [...new Set(styleIds.map((id) => String(id || "").trim()).filter((id) => Boolean(styleCardRow(id))))];
+      if (!styleIds.length) return [];
+      return [{ id: row.id, name: row.name, description: row.description, styleIds, updatedAt: row.updated_at }];
+    }));
+  });
+  ipcMain.handle("ai:style-compositions:save", (_, p) => {
+    const name = String(p?.name || "").trim();
+    const description = String(p?.description || "").trim();
+    if (!name || name.length > 80) return fail("组合名称需为 1 到 80 个字符");
+    if (description.length > 240) return fail("组合说明不能超过 240 个字符");
+    const styleIds = [...new Set<string>((Array.isArray(p?.styleIds) ? p.styleIds : [])
+      .map((id: unknown) => String(id || "").trim())
+      .filter((id: string) => Boolean(id)))];
+    if (!styleIds.length || styleIds.length > 6) return fail("组合需包含 1 到 6 张技法卡");
+    if (styleIds.some((id) => !styleCardRow(id))) return fail("组合中包含不存在的技法卡");
+    const id = String(p?.id || newId());
+    const old = get("SELECT id FROM ai_style_compositions WHERE id=?", id);
+    if (p?.id && !old) return fail("要编辑的技法组合不存在");
+    const t = timestamp();
+    db.prepare("INSERT INTO ai_style_compositions(id,name,description,style_ids_json,created_at,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,style_ids_json=excluded.style_ids_json,updated_at=excluded.updated_at,data_version=data_version+1")
+      .run(id, name, description, JSON.stringify(styleIds), t, t);
+    return ok({ id, name, description, styleIds });
+  });
+  ipcMain.handle("ai:style-compositions:delete", (_, id) => {
+    const compositionId = String(id || "");
+    const row = get("SELECT id FROM ai_style_compositions WHERE id=?", compositionId);
+    if (!row) return fail("技法组合不存在");
+    db.prepare("DELETE FROM ai_style_compositions WHERE id=?").run(compositionId);
+    return ok(true);
+  });
   ipcMain.handle("ai:style-selection:get", (_, novelId) => {
     const row: any = get(
       "SELECT style_id,style_ids_json FROM novel_ai_styles WHERE novel_id=?",
@@ -2452,6 +2609,16 @@ function registerIpc(userDir: string) {
         const remaining = ids.filter((styleId) => styleId !== String(id));
         if (remaining.length !== ids.length)
           update.run(remaining[0] || null, JSON.stringify(remaining), timestamp(), selection.novel_id);
+      }
+      const compositions: any[] = all("SELECT id,style_ids_json FROM ai_style_compositions");
+      for (const composition of compositions) {
+        let ids: string[] = [];
+        try { ids = JSON.parse(composition.style_ids_json || "[]"); } catch {}
+        const remaining = ids.filter((styleId) => styleId !== String(id));
+        if (!remaining.length) db.prepare("DELETE FROM ai_style_compositions WHERE id=?").run(composition.id);
+        else if (remaining.length !== ids.length)
+          db.prepare("UPDATE ai_style_compositions SET style_ids_json=?,updated_at=?,data_version=data_version+1 WHERE id=?")
+            .run(JSON.stringify(remaining), timestamp(), composition.id);
       }
       db.prepare("DELETE FROM ai_style_cards WHERE id=?").run(id);
     })();

@@ -56,8 +56,9 @@ export function LibraryPanel({
     [loadedKind, setLoadedKind] = useState(""),
     [allItems, setAllItems] = useState<AnyRow[]>([]),
     [presence, setPresence] = useState<Record<string, AnyRow>>({}),
+    [worldPresence, setWorldPresence] = useState<Record<string, AnyRow>>({}),
     [presenceTotal, setPresenceTotal] = useState(0),
-    [presenceDetail, setPresenceDetail] = useState<{ title: string; data: AnyRow; loading?: boolean; error?: string } | null>(null),
+    [presenceDetail, setPresenceDetail] = useState<{ title: string; entityKind: "character" | "world"; data: AnyRow; loading?: boolean; error?: string } | null>(null),
     [search, setSearch] = useState(""),
     [editing, setEditing] = useState<AnyRow | null>(null),
     [baseline, setBaseline] = useState<AnyRow | null>(null),
@@ -342,6 +343,25 @@ export function LibraryPanel({
       live = false;
     };
   }, [novel.id, allItems]);
+  useEffect(() => {
+    let live = true;
+    const hasTrackableWorld = allItems.some((item) => {
+      if (item.kind !== "world") return false;
+      const category = parseJson(item.content_json).category;
+      return category === "地点" || category === "势力";
+    });
+    if (!hasTrackableWorld) {
+      setWorldPresence({});
+      return;
+    }
+    api("world:presence", { novelId: novel.id }).then((r) => {
+      if (r.ok && live) {
+        setWorldPresence(r.data.presence || {});
+        setPresenceTotal(r.data.total || 0);
+      }
+    });
+    return () => { live = false; };
+  }, [novel.id, allItems]);
   const parsed = (x: AnyRow) => ({ ...x, ...parseJson(x.content_json) });
   const characterNames = allItems
     .filter((x) => x.kind === "character")
@@ -506,6 +526,7 @@ export function LibraryPanel({
           <div className="library-edit">
           <input
             autoFocus
+            data-fd-id="library-item-title"
             placeholder={tr("标题", "Title")}
             value={editing.title}
             onChange={(e) => updateEditing({ title: e.target.value })}
@@ -540,20 +561,31 @@ export function LibraryPanel({
             </>
           )}
           {kind === "world" && (
-            <Select
-              value={editing.category || ""}
-              aria-label={tr("世界设定分类", "World category")}
-              onValueChange={(v) => updateEditing({ category: v })}
-              options={[
-                { value: "", label: tr("未分类", "Uncategorized") },
-                { value: "地点", label: tr("地点", "Location") },
-                { value: "势力", label: tr("势力", "Faction") },
-                { value: "规则", label: tr("规则", "Rule") },
-                { value: "历史事件", label: tr("历史事件", "Historical event") },
-                { value: "专有名词", label: tr("专有名词", "Term") },
-                { value: "物品", label: tr("物品", "Object") },
-              ]}
-            />
+            <>
+              <Select
+                id="world-category"
+                value={editing.category || ""}
+                aria-label={tr("世界设定分类", "World category")}
+                onValueChange={(v) => updateEditing({ category: v })}
+                options={[
+                  { value: "", label: tr("未分类", "Uncategorized") },
+                  { value: "地点", label: tr("地点", "Location") },
+                  { value: "势力", label: tr("势力", "Faction") },
+                  { value: "规则", label: tr("规则", "Rule") },
+                  { value: "历史事件", label: tr("历史事件", "Historical event") },
+                  { value: "专有名词", label: tr("专有名词", "Term") },
+                  { value: "物品", label: tr("物品", "Object") },
+                ]}
+              />
+              {(editing.category === "地点" || editing.category === "势力") && (
+                <input
+                  data-fd-id="world-alias"
+                  placeholder={tr("别名（逗号分隔，用于全书提及核对）", "Aliases (comma-separated; used in manuscript mention tracking)")}
+                  value={editing.alias || ""}
+                  onChange={(e) => updateEditing({ alias: e.target.value })}
+                />
+              )}
+            </>
           )}
           {kind === "scene" && (
             <>
@@ -622,6 +654,7 @@ export function LibraryPanel({
             </div>
           )}
           <textarea
+            data-fd-id="library-item-body"
             placeholder={
               kind === "relation"
                 ? tr("关系说明（如：师徒 / 相互利用 / 旧识）", "Relationship (e.g. mentor / rivals / old friends)")
@@ -889,8 +922,9 @@ export function LibraryPanel({
           )}
           {sortedItems.map((x) => {
             const c = parseJson(x.content_json);
-            const pres =
-              kind === "character" ? presence[x.id] : undefined;
+            const isTrackedWorld = kind === "world" && (c.category === "地点" || c.category === "势力");
+            const pres = kind === "character" ? presence[x.id] : isTrackedWorld ? worldPresence[x.id] : undefined;
+            const entityKind = kind === "character" ? "character" : "world";
             return (
               <article
                 onClick={() => openEditor(x)}
@@ -940,28 +974,28 @@ export function LibraryPanel({
                       type="button"
                       className={`badge character-presence-trigger ${pres.appearances ? "confirmed" : "idea"}`}
                       title={tr(`按全书 ${presenceTotal} 章统计；点击查看命中片段`, `Calculated across ${presenceTotal} chapters; click to inspect matches`)}
-                      aria-label={tr(`${x.title}出场 ${pres.appearances} 章，${pres.mentions || 0} 次提及；查看详情`, `${x.title} appears in ${pres.appearances} chapters, ${pres.mentions || 0} mentions; view details`)}
+                      aria-label={tr(`${x.title}${entityKind === "character" ? "出场" : "被提及"} ${pres.appearances} 章，${pres.mentions || 0} 次；查看详情`, `${x.title} ${entityKind === "character" ? "appears in" : "is mentioned in"} ${pres.appearances} chapters, ${pres.mentions || 0} times; view details`)}
                       onClick={(event) => {
                         event.stopPropagation();
                         const sequence = ++presenceDetailSeq.current;
-                        setPresenceDetail({ title: x.title, data: pres, loading: true });
-                        api<any>("characters:presence", { novelId: novel.id, characterId: x.id, includeMatches: true }).then((result) => {
+                        setPresenceDetail({ title: x.title, entityKind, data: pres, loading: true });
+                        api<any>(entityKind === "character" ? "characters:presence" : "world:presence", { novelId: novel.id, [entityKind === "character" ? "characterId" : "worldId"]: x.id, includeMatches: true }).then((result) => {
                           if (sequence !== presenceDetailSeq.current) return;
                           if (!result.ok) {
-                            setPresenceDetail({ title: x.title, data: pres, error: result.error || tr("读取提及详情失败", "Could not load mention details") });
+                            setPresenceDetail({ title: x.title, entityKind, data: pres, error: result.error || tr("读取提及详情失败", "Could not load mention details") });
                             return;
                           }
-                          setPresenceDetail({ title: x.title, data: result.data.presence?.[x.id] || pres });
+                          setPresenceDetail({ title: x.title, entityKind, data: result.data.presence?.[x.id] || pres });
                         });
                       }}
                     >
                       {pres.appearances
-                        ? tr(`出场 ${pres.appearances} 章${
+                        ? tr(`${entityKind === "character" ? "出场" : "提及"} ${pres.appearances} 章${
                             pres.sinceLast >= 3
-                              ? ` · 已 ${pres.sinceLast} 章未出场`
+                              ? ` · 已 ${pres.sinceLast} 章${entityKind === "character" ? "未出场" : "未提及"}`
                               : ""
-                          }`, `Appears in ${pres.appearances} chapters${pres.sinceLast >= 3 ? ` · absent for ${pres.sinceLast} chapters` : ""}`)
-                        : tr("未出场", "Not present")}
+                          }`, `${entityKind === "character" ? "Appears in" : "Mentioned in"} ${pres.appearances} chapters${pres.sinceLast >= 3 ? ` · ${pres.sinceLast} chapters without ${entityKind === "character" ? "an appearance" : "a mention"}` : ""}`)
+                        : tr(entityKind === "character" ? "未出场" : "未提及", entityKind === "character" ? "No appearances" : "Not mentioned")}
                     </button>
                   )}
                 </div>
@@ -980,6 +1014,9 @@ export function LibraryPanel({
                   {kind === "character" && c.alias
                     ? tr(`别名：${c.alias} · `, `Aliases: ${c.alias} · `)
                     : ""}
+                  {kind === "world" && c.alias
+                    ? tr(`别名：${c.alias} · `, `Aliases: ${c.alias} · `)
+                    : ""}
                   {parseTags(x.tags_json)} · {time(x.updated_at, language)}
                 </small>
               </article>
@@ -995,7 +1032,7 @@ export function LibraryPanel({
       {presenceDetail && (
         <Modal title={tr(`${presenceDetail.title} · 全书提及`, `${presenceDetail.title} · Manuscript mentions`)} close={() => { presenceDetailSeq.current++; setPresenceDetail(null); }}>
           <p className="hint">{tr(
-            `扫描 ${presenceTotal} 章，命中 ${presenceDetail.data.appearances} 章、${presenceDetail.data.mentions || 0} 次。匹配人物名及别名；请结合片段核对同名词。`,
+          `扫描 ${presenceTotal} 章，命中 ${presenceDetail.data.appearances} 章、${presenceDetail.data.mentions || 0} 次。匹配名称及别名；请结合片段核对同名词。`,
             `Scanned ${presenceTotal} chapters; matched ${presenceDetail.data.appearances} chapters and ${presenceDetail.data.mentions || 0} occurrences. Names and aliases are substring matches, so review snippets for false positives.`,
           )}</p>
           {presenceDetail.loading && <p className="hint">{tr("正在扫描相关章节…", "Scanning matching chapters…")}</p>}

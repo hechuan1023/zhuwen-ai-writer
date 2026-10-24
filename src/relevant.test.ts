@@ -55,6 +55,32 @@ describe("relevantMaterials", () => {
     expect(out[0].count).toBe(1);
   });
 
+  it("地点别名可命中并随引用提供给 AI", () => {
+    const out = relevantMaterials(
+      [item({
+        id: "place-1",
+        kind: "world",
+        title: "霜河关",
+        content_json: JSON.stringify({ category: "地点", alias: "北境关口、旧霜关", body: "北境商路要塞" }),
+      })],
+      "北境关口的守军封锁了山道。",
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].matched).toBe("北境关口");
+    expect(out[0].reasons[0]).toContain("别名");
+    expect(out[0].content).toContain("别名：北境关口、旧霜关");
+  });
+
+  it("英文界面返回英文候选理由", () => {
+    const out = relevantMaterials(
+      [item({ title: "苏晚", content_json: JSON.stringify({ alias: "晚晚" }) })],
+      "晚晚低头不语。",
+      12,
+      { language: "en" },
+    );
+    expect(out[0].reasons[0]).toContain("Alias match");
+  });
+
   it("忽略单字与未出现的资料", () => {
     const out = relevantMaterials(
       [

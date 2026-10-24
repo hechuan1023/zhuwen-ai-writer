@@ -15,6 +15,7 @@ export type MaterialMatchContext = {
   selectionText?: string;
   chapterTitles?: Record<string, string>;
   chapterOrder?: Record<string, number>;
+  language?: string;
 };
 
 function parseObject(value: unknown): Record<string, any> {
@@ -57,8 +58,8 @@ function countOccurrences(corpus: string, term: string) {
 function contextContent(item: Material, maxChars = 6000, chapterTitles: Record<string, string> = {}, chapterOrder: Record<string, number> = {}) {
   const c = parseObject(item.content_json);
   const fields: Record<string, string[]> = {
-    character: ["body", "goal", "motive", "conflict", "personality", "speech", "knowledge", "taboo", "checklist"],
-    world: ["category", "body"],
+    character: ["alias", "body", "goal", "motive", "conflict", "personality", "speech", "knowledge", "taboo", "checklist"],
+    world: ["category", "alias", "body"],
     scene: ["when", "plotRole", "cast", "coolPoint", "hook", "body"],
     foreshadow: ["body", "plantAt", "planAt", "prereq", "payoff", "effect", "importance"],
     timeline: ["when", "body"],
@@ -69,7 +70,7 @@ function contextContent(item: Material, maxChars = 6000, chapterTitles: Record<s
   const labels: Record<string, string> = {
     body: "说明", goal: "目标", motive: "动机", conflict: "矛盾", personality: "性格",
     speech: "语言习惯", knowledge: "知识边界", taboo: "底线", checklist: "核对项",
-    category: "分类", when: "位置/时间", plotRole: "剧情作用", cast: "出场人物",
+    category: "分类", alias: "别名", when: "位置/时间", plotRole: "剧情作用", cast: "出场人物",
     coolPoint: "回报", hook: "钩子", plantAt: "埋设位置", planAt: "计划回收",
     prereq: "回收前提", payoff: "回收方式", effect: "回收影响", importance: "重要度",
     label: "关系",
@@ -129,7 +130,7 @@ export function relevantMaterials(
       : item.kind === "scene"
         ? String(content.cast || "").split(/[,，、;；]+/).map((s) => s.trim())
         : [];
-    const aliases = item.kind === "character" ? parseAliases(item.content_json) : [];
+    const aliases = item.kind === "character" || item.kind === "world" ? parseAliases(item.content_json) : [];
     const tags = parseTags(item.tags_json);
     const terms = new Map<string, "title" | "alias" | "tag" | "person">();
     if (title) terms.set(title, "title");
@@ -143,6 +144,7 @@ export function relevantMaterials(
     let bestWeighted = 0;
     const reasons: string[] = [];
     let participantsHit = 0;
+    const en = context.language === "en";
     for (const [rawTerm, type] of terms) {
       const term = normalize(rawTerm);
       const fullCount = countOccurrences(text, term);
@@ -157,19 +159,19 @@ export function relevantMaterials(
         matched = rawTerm;
       }
       bestWeighted = Math.max(bestWeighted, weighted);
-      if (selectionCount) reasons.push(`选区提及「${rawTerm}」${selectionCount} 次`);
-      else if (type === "title") reasons.push(`正文提及「${rawTerm}」${fullCount} 次`);
-      else if (type === "alias") reasons.push(`命中别名「${rawTerm}」${fullCount} 次`);
-      else if (type === "person") reasons.push(`提及人物「${rawTerm}」${fullCount} 次`);
-      else reasons.push(`命中标签「${rawTerm}」${fullCount} 次`);
+      if (selectionCount) reasons.push(en ? `Selection mentions “${rawTerm}” ${selectionCount} time(s)` : `选区提及「${rawTerm}」${selectionCount} 次`);
+      else if (type === "title") reasons.push(en ? `Text mentions “${rawTerm}” · ${fullCount}` : `正文提及「${rawTerm}」${fullCount} 次`);
+      else if (type === "alias") reasons.push(en ? `Alias match “${rawTerm}” · ${fullCount}` : `命中别名「${rawTerm}」${fullCount} 次`);
+      else if (type === "person") reasons.push(en ? `Mentioned character “${rawTerm}” · ${fullCount}` : `提及人物「${rawTerm}」${fullCount} 次`);
+      else reasons.push(en ? `Tag match “${rawTerm}” · ${fullCount}` : `命中标签「${rawTerm}」${fullCount} 次`);
     }
     if (item.kind === "relation" && participantsHit >= 2) {
       score += 4;
-      reasons.unshift("关系双方均在正文出现");
+      reasons.unshift(en ? "Both sides of this relationship appear in the text" : "关系双方均在正文出现");
     }
     if (item.kind === "scene" && context.chapterId && item.chapter_id === context.chapterId) {
       score += 8;
-      reasons.unshift("已关联当前章节");
+      reasons.unshift(en ? "Linked to the current chapter" : "已关联当前章节");
     }
     if (score <= 0) continue;
     const key = `${item.kind}:${item.id}`;

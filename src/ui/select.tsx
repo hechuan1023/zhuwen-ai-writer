@@ -296,6 +296,7 @@ export function Select({
             role="listbox"
             id={listboxId}
             aria-labelledby={id}
+            aria-label={id ? undefined : rest["aria-label"]}
             tabIndex={searchable ? undefined : 0}
             aria-activedescendant={!searchable && filtered[activeIndex] && !filtered[activeIndex].disabled ? `${listboxId}-option-${activeIndex}` : undefined}
           >
