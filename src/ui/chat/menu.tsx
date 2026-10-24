@@ -13,6 +13,7 @@ export type MenuItem = {
   icon?: ReactNode;
   danger?: boolean;
   disabled?: boolean;
+  selected?: boolean;
   /** 次要说明，如快捷键或作用范围 */
   hint?: string;
   onSelect: () => void;
@@ -149,7 +150,8 @@ export function ChatMenu({
               type="button"
               role="menuitem"
               tabIndex={i === active ? 0 : -1}
-              className={`zchat-menu-item ${it.danger ? "danger" : ""} ${it.disabled ? "disabled" : ""}`}
+              className={`zchat-menu-item ${it.danger ? "danger" : ""} ${it.disabled ? "disabled" : ""} ${it.selected ? "selected" : ""}`}
+              aria-current={it.selected ? "true" : undefined}
               aria-disabled={it.disabled || undefined}
               disabled={it.disabled}
               data-fd-id={it.id}

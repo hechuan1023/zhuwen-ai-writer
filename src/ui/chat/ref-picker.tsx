@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AnyRow, fmt, kindNameFor, kinds } from "../shared";
-import { IconClose, IconDoc, IconQuote, IconSparkle, IconUser } from "./icons";
+import { IconCheck, IconClose, IconDoc, IconQuote, IconSparkle, IconUser } from "./icons";
 import type { MaterialSuggestion } from "../../relevant";
+import { materialReferenceContent } from "../../relevant";
 
 /** 引用选择器：浮层，不占常驻高度。 */
 export function RefPicker({
@@ -12,6 +13,7 @@ export function RefPicker({
   bookChapters,
   libraryAll,
   suggestions,
+  selectedSources,
   onAdd,
   onClose,
 }: {
@@ -22,12 +24,15 @@ export function RefPicker({
   bookChapters: AnyRow[];
   libraryAll: AnyRow[];
   suggestions: MaterialSuggestion[];
+  selectedSources: Array<{ kind: string; sourceId?: string }>;
   onAdd: (item: { label: string; kind: string; content: string; sourceId: string }) => void;
   onClose: () => void;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const panelRef = useRef<HTMLDivElement>(null);
   const [loadingChapter, setLoadingChapter] = useState<string | null>(null);
+  const isAdded = (kind: string, sourceId?: string) =>
+    selectedSources.some((source) => source.kind === kind && source.sourceId === sourceId);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -71,34 +76,45 @@ export function RefPicker({
           )}
         </p>
         <div className="zchat-picker-body">
-          {suggestions.length > 0 && (
-            <section>
-              <h4>
-                <IconSparkle /> {tr("智能推荐 · 与本章相关", "Suggested · related to this chapter")}
-              </h4>
-              <div className="zchat-picker-grid">
-                {suggestions.map((s) => (
-                  <button
-                    type="button"
-                    key={`${s.kind}:${s.id}`}
-                    title={tr(`正文提及「${s.matched}」${s.count} 次`, `Mentioned "${s.matched}" ${s.count}×`)}
-                    data-fd-id="ai-picker-suggestion"
-                    onClick={() =>
-                      onAdd({
-                        label: s.title,
-                        kind: s.kind,
-                        content: s.content || s.title,
-                        sourceId: s.id,
-                      })
-                    }
-                  >
-                    <span className="zchat-ellipsis">{s.title}</span>
-                    <small>{s.count}×</small>
-                  </button>
-                ))}
+          <section>
+            <h4>
+              <IconSparkle /> {tr("本地匹配 · 相关资料", "Local matches · related materials")}
+              <small className="zchat-picker-local-only">{tr("不调用 AI", "No AI call")}</small>
+            </h4>
+            <p className="zchat-picker-match-note">{tr("按正文、选区、人物别名、资料标签和所属章节给出候选；你点选后才会加入请求。", "Candidates use text, selection, aliases, tags, and chapter links. Nothing is sent until you add it.")}</p>
+            {suggestions.length ? (
+              <div className="zchat-suggestion-list">
+                {suggestions.map((suggestion) => {
+                  const added = isAdded(suggestion.kind, suggestion.id);
+                  return (
+                    <button
+                      type="button"
+                      key={`${suggestion.kind}:${suggestion.id}`}
+                      className={`zchat-suggestion-card ${added ? "added" : ""}`}
+                      title={suggestion.reasons.join(" · ")}
+                      aria-pressed={added}
+                      disabled={added}
+                      data-fd-id="ai-picker-suggestion"
+                      onClick={() => onAdd({
+                        label: suggestion.title,
+                        kind: suggestion.kind,
+                        content: suggestion.content || suggestion.title,
+                        sourceId: suggestion.id,
+                      })}
+                    >
+                      <span className="zchat-suggestion-copy">
+                        <b className="zchat-ellipsis">{suggestion.title}</b>
+                        <small>{suggestion.reasons.join(" · ") || tr(`正文提及「${suggestion.matched}」`, `Matched "${suggestion.matched}"`)}</small>
+                      </span>
+                      <span className="zchat-suggestion-action">{added ? <><IconCheck />{tr("已添加", "Added")}</> : tr("＋ 添加", "+ Add")}</span>
+                    </button>
+                  );
+                })}
               </div>
-            </section>
-          )}
+            ) : (
+              <div className="zchat-picker-empty">{tr("暂未匹配到资料；你仍可从下方手动选择。", "No matches yet. You can still choose materials below.")}</div>
+            )}
+          </section>
           <section>
             <h4>
               <IconQuote /> {tr("当前章节", "Current chapter")}
@@ -107,24 +123,27 @@ export function RefPicker({
               <button
                 type="button"
                 data-fd-id="ai-picker-selection"
+                aria-pressed={isAdded("selection", chapterId || "")}
                 onClick={() => onAdd({ label: "", kind: "__selection__", content: "", sourceId: "" })}
               >
-                {tr("选中文字", "Selection")}
+                {isAdded("selection", chapterId || "") ? tr("已添加 · 选中文字", "Added · selection") : tr("选中文字", "Selection")}
               </button>
               <button
                 type="button"
                 data-fd-id="ai-picker-chapter"
+                aria-pressed={isAdded("chapter", chapterId || "")}
                 onClick={() => onAdd({ label: "", kind: "__chapter__", content: "", sourceId: "" })}
               >
-                {tr("当前章节全文", "Whole chapter")}
+                {isAdded("chapter", chapterId || "") ? tr("已添加 · 当前章节全文", "Added · whole chapter") : tr("当前章节全文", "Whole chapter")}
               </button>
               {summary ? (
                 <button
                   type="button"
                   data-fd-id="ai-picker-summary"
+                  aria-pressed={isAdded("summary", chapterId || "")}
                   onClick={() => onAdd({ label: "", kind: "__summary__", content: "", sourceId: "" })}
                 >
-                  {tr("本章摘要", "Chapter summary")}
+                  {isAdded("summary", chapterId || "") ? tr("已添加 · 本章摘要", "Added · chapter summary") : tr("本章摘要", "Chapter summary")}
                 </button>
               ) : null}
             </div>
@@ -140,7 +159,8 @@ export function RefPicker({
                     <button
                       type="button"
                       data-fd-id="ai-picker-other-chapter"
-                      disabled={loadingChapter === c.id}
+                      disabled={loadingChapter === c.id || isAdded("chapter", c.id)}
+                      aria-pressed={isAdded("chapter", c.id)}
                       title={tr("引用该章正文（点击后读取）", "Reference this chapter (loaded on click)")}
                       onClick={async () => {
                         setLoadingChapter(c.id);
@@ -159,12 +179,14 @@ export function RefPicker({
                       }}
                     >
                       <span className="zchat-ellipsis">{c.title}</span>
-                      <small>{fmt(c.word_count)} {tr("字", "chars")}</small>
+                      <small>{isAdded("chapter", c.id) ? tr("已添加", "Added") : `${fmt(c.word_count)} ${tr("字", "chars")}`}</small>
                     </button>
                     {c.summary ? (
                       <button
                         type="button"
                         data-fd-id="ai-picker-other-summary"
+                        aria-pressed={isAdded("summary", c.id)}
+                        disabled={isAdded("summary", c.id)}
                         title={tr("引用该章摘要", "Reference its summary")}
                         onClick={() =>
                           onAdd({
@@ -198,24 +220,22 @@ export function RefPicker({
                     <button
                       type="button"
                       key={x.id}
+                      className={isAdded(k, x.id) ? "zchat-picker-item-added" : ""}
+                      disabled={isAdded(k, x.id)}
+                      aria-pressed={isAdded(k, x.id)}
                       data-fd-id="ai-picker-library"
                       title={x.title}
                       onClick={() => {
-                        let body = "";
-                        try {
-                          body = String(JSON.parse(x.content_json || "{}").body || "");
-                        } catch {
-                          body = "";
-                        }
                         onAdd({
                           label: x.title,
                           kind: k,
-                          content: body,
+                          content: materialReferenceContent(x),
                           sourceId: x.id,
                         });
                       }}
                     >
                       <span className="zchat-ellipsis">{x.title}</span>
+                      {isAdded(k, x.id) && <small>{tr("已添加", "Added")}</small>}
                     </button>
                   ))}
                 </div>

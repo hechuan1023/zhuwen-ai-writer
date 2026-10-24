@@ -24,7 +24,7 @@ export const BUILTIN_STYLE_CARDS: AiStyleCard[] = [
     name: "自然叙事",
     description: "通用选择：让场景围绕人物正在做的事自然推进。",
     tasks: ["continue", "polish", "chat"],
-    version: 2,
+    version: 3,
     builtin: 1,
     rules: BASE_STYLE_RULES,
   },
@@ -33,7 +33,7 @@ export const BUILTIN_STYLE_CARDS: AiStyleCard[] = [
     name: "成长推进",
     description: "适合修炼、资源争取和阶段性目标清晰的情节。",
     tasks: ["continue", "outline", "polish"],
-    version: 2,
+    version: 3,
     builtin: 1,
     rules: `${BASE_STYLE_RULES}
 
@@ -50,7 +50,7 @@ export const BUILTIN_STYLE_CARDS: AiStyleCard[] = [
     name: "贴身求生",
     description: "适合旅行、险情、调查和受限制的战斗场景。",
     tasks: ["continue", "polish"],
-    version: 2,
+    version: 3,
     builtin: 1,
     rules: `${BASE_STYLE_RULES}
 
@@ -67,7 +67,7 @@ export const BUILTIN_STYLE_CARDS: AiStyleCard[] = [
     name: "群像烟火",
     description: "适合城镇、势力、亲友和人物关系交错的场景。",
     tasks: ["continue", "outline", "polish"],
-    version: 2,
+    version: 3,
     builtin: 1,
     rules: `${BASE_STYLE_RULES}
 
@@ -78,6 +78,61 @@ export const BUILTIN_STYLE_CARDS: AiStyleCard[] = [
 对话的重点与表达习惯因人而异。
 幽默来自关系与处境，不按配额插入。
 不让人人都深藏不露、句句机锋或承担相同的解释功能。`,
+  },
+  {
+    id: "style-serial-hook-payoff",
+    name: "追更钩子与兑现",
+    description: "把章节回报、未完成动作和下一章欲望串成连续节奏。",
+    tasks: ["continue", "outline", "polish"],
+    version: 1,
+    builtin: 1,
+    rules: `按章节承诺组织推进：本章先兑现一个读者看得见的变化，再留下一个具体、迫近、尚未完成的动作。
+章末钩子落在人物必须回应的来信、决定、发现、期限或现场变化上，不用抽象预告代替。
+设置悬念时同步给短期回报，避免连续扣住答案却不给进展。
+主角的行动、阻力、代价和所得都要能被读者复述；阶段收益要改变下一步行动条件。
+连续使用同一种打脸、围观、系统提示或章末问句前，先更换冲突来源与收益形态。
+大纲任务需标出本章承诺、主要变化、回报和章末未完成动作；正文任务自然融入场景，不输出公式化节奏标签。`,
+  },
+  {
+    id: "style-suspense-information-control",
+    name: "悬疑线索与信息差",
+    description: "让线索有来源、误判有理由、揭示能改变局面。",
+    tasks: ["continue", "outline", "polish"],
+    version: 1,
+    builtin: 1,
+    rules: `每次揭示都改变人物可以采取的行动、彼此信任或风险判断；只增加名词而不改变选择的信息应延后。
+线索必须有可追溯的载体、目击者或推理过程。关键推断允许错，但要让错误来自有限信息、利益偏见或现场干扰。
+给读者公平的观察机会，不让决定性证据在揭晓时才凭空出现；也不必让读者总比人物早一步猜中。
+控制信息差：明确谁知道、谁误解、谁隐瞒，以及每个人为什么此刻愿意说或不说。
+反转前埋下可回看的细节，反转后结算它对目标、关系或资源的影响。
+不要为制造神秘而遮住视角人物本来能观察到的事实，也不要用旁白故意撒谎。`,
+  },
+  {
+    id: "style-character-voice-tension",
+    name: "人物声线与关系张力",
+    description: "让对白带着各自的目的、关系和没说出口的话。",
+    tasks: ["continue", "outline", "polish"],
+    version: 1,
+    builtin: 1,
+    rules: `重要角色说话前先确定当下要争取、回避、试探或掩饰什么；台词不必把真实目的完整说出。
+人物差异主要来自关注点、句子长度、称呼、打断方式、回避习惯和愿意承担的风险，不靠口头禅硬区分。
+让关系通过小动作、让步、旧账、称呼变化和话说一半发生位移。
+对话可以被误听、岔开或暂时没有回应。必要事实要讲清，但由有动机的人在合适的压力下讲。
+避免所有人物同时理解、齐声震惊、轮流替读者总结；保留不合时宜、慢半拍或装作没听懂的真实反应。
+润色时优先保护原稿已有的人物毛边和作者习惯，不把鲜活对白统一改成漂亮金句。`,
+  },
+  {
+    id: "style-light-comedy-mismatch",
+    name: "轻喜剧与处境错位",
+    description: "从人物关系和现实麻烦里长出笑点，不打断剧情。",
+    tasks: ["continue", "outline", "polish"],
+    version: 1,
+    builtin: 1,
+    rules: `笑点来自人物目标、身份落差、信息误差、认真过头或具体处境之间的错位。
+每个幽默动作都要服务关系、人物性格、机制或局势变化，不能只为凑笑点插入段子。
+让人物用各自方式接住笑点：有人装没听见，有人补刀，有人真的当真；避免全员共享同一套吐槽腔。
+笑点之后继续推进正在处理的问题，必要时保留尴尬、误会或后果，不用旁白解释“这里很搞笑”。
+重大创伤、危险或情绪转折处，先判断轻松表达是否符合人物防御方式和场景压力；不合适时不强行搞笑。`,
   },
 ];
 

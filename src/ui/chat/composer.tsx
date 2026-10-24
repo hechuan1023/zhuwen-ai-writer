@@ -11,9 +11,10 @@ import {
   IconStop,
 } from "./icons";
 
-export type TaskKind = "chat" | "continue";
+export type TaskKind = "chat" | "continue" | "naturalize" | "polish" | "outline" | "check";
 
 export type ComposerTask = {
+  id?: string;
   kind: string;
   label: string;
   /** 选择任务时准备的草稿内容（可选） */
@@ -100,10 +101,11 @@ export type ComposerProps = {
   onPreviewRef: (i: number) => void;
   /** ＋ 引用选择器 */
   onOpenRefPicker: () => void;
-  /** 任务（对话 / 续写 / 后续扩展） */
+  /** 可选的对话与写作任务 */
   tasks: ComposerTask[];
   activeTaskKind: string;
-  onSelectTask: (kind: string) => void;
+  activeTaskId?: string;
+  onSelectTask: (taskId: string) => void;
   /** 草稿 */
   draft: string;
   onDraftChange: (v: string) => void;
@@ -123,7 +125,7 @@ export type ComposerProps = {
 };
 
 /**
- * 统一输入组件：顶部引用标签、中间多行输入、底部工具行（＋ / 任务 / 模型 / 发送）。
+ * 统一输入组件：顶部引用标签、中间多行输入、底部工具行（＋ / 任务 / 上下文 / 发送）。
  * 不再有独立的任务横栏与常驻 Token 说明。
  */
 export function Composer({
@@ -135,6 +137,7 @@ export function Composer({
   onOpenRefPicker,
   tasks,
   activeTaskKind,
+  activeTaskId,
   onSelectTask,
   draft,
   onDraftChange,
@@ -151,7 +154,10 @@ export function Composer({
 }: ComposerProps) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const activeTask = tasks.find((t) => t.kind === activeTaskKind) || tasks[0];
+  const activeTask =
+    tasks.find((t) => t.id === activeTaskId) ||
+    tasks.find((t) => t.kind === activeTaskKind) ||
+    tasks[0];
 
   // 自增高：两行起，到上限后内部滚动
   useEffect(() => {
@@ -166,14 +172,15 @@ export function Composer({
 
   const taskItems: MenuItem[] = useMemo(
     () =>
-      tasks.map((t) => ({
-        id: `ai-task-${t.kind}`,
+      tasks.map((t, index) => ({
+        id: t.id || `ai-task-${t.kind}-${index + 1}`,
         label: t.label,
         hint: t.hint,
+        selected: t.id ? t.id === activeTask?.id : t.kind === activeTaskKind,
         icon: t.kind === "continue" ? <IconSparkle /> : <IconQuote />,
-        onSelect: () => onSelectTask(t.kind),
+        onSelect: () => onSelectTask(t.id || `ai-task-${t.kind}-${index + 1}`),
       })),
-    [tasks, onSelectTask],
+    [tasks, onSelectTask, activeTask?.id, activeTaskKind],
   );
 
   return (
@@ -280,7 +287,7 @@ export function Composer({
                 ? activeTaskKind === "continue"
                   ? tr("生成续写（Enter）", "Generate continuation (Enter)")
                   : tr("发送（Enter）", "Send (Enter)")
-                : tr("请先输入内容或配置模型连接", "Type something or configure a connection first")
+                : tr("请先输入内容", "Type a request first")
             }
             onClick={onSend}
           >

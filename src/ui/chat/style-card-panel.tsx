@@ -12,6 +12,10 @@ function styleLabel(card: StyleCard, language: string) {
     "style-growth-progression": ["Growth progression", "For training, resources, and clear short-term goals."],
     "style-close-survival": ["Close survival", "For travel, danger, investigation, and constrained combat."],
     "style-human-ensemble": ["Lived-in ensemble", "For towns, factions, friends, and intersecting relationships."],
+    "style-serial-hook-payoff": ["Serial hooks & payoff", "Connect chapter rewards, unresolved actions, and the next reading impulse."],
+    "style-suspense-information-control": ["Clues & information control", "Keep clues traceable and reveals consequential."],
+    "style-character-voice-tension": ["Character voice & tension", "Give dialogue a character-specific agenda and subtext."],
+    "style-light-comedy-mismatch": ["Situational comedy", "Build humor from character relationships and mismatched situations."],
   };
   const [name, description] = labels[card.id] || [card.name, card.description];
   return { name, description };

@@ -5,18 +5,42 @@ export type MaterialSuggestion = {
   content: string;
   matched: string;
   count: number;
+  score: number;
+  reasons: string[];
 };
 
-function parseAliases(contentJson: string): string[] {
+type Material = Record<string, any>;
+export type MaterialMatchContext = {
+  chapterId?: string | null;
+  selectionText?: string;
+};
+
+function parseObject(value: unknown): Record<string, any> {
   try {
-    const alias = String(JSON.parse(contentJson || "{}").alias || "");
-    return alias
-      .split(/[,，、;；]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const parsed = typeof value === "string" ? JSON.parse(value || "{}") : value;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   } catch {
-    return [];
+    return {};
   }
+}
+
+function parseAliases(contentJson: string): string[] {
+  const alias = String(parseObject(contentJson).alias || "");
+  return alias.split(/[,，、;；]+/).map((s) => s.trim()).filter(Boolean);
+}
+
+function parseTags(tagsJson: unknown): string[] {
+  try {
+    const parsed = typeof tagsJson === "string" ? JSON.parse(tagsJson || "[]") : tagsJson;
+    if (Array.isArray(parsed)) return parsed.map((x) => String(x).trim()).filter(Boolean);
+  } catch {
+    // Old/hand-edited rows may contain comma-separated tags rather than JSON.
+  }
+  return String(tagsJson || "").split(/[,，、;；]+/).map((s) => s.trim()).filter(Boolean);
+}
+
+function normalize(value: string) {
+  return value.normalize("NFKC").toLocaleLowerCase();
 }
 
 function escapeRegExp(s: string) {
@@ -28,65 +52,125 @@ function countOccurrences(corpus: string, term: string) {
   return (corpus.match(new RegExp(escapeRegExp(term), "g")) || []).length;
 }
 
+function contextContent(item: Material, maxChars = 6000) {
+  const c = parseObject(item.content_json);
+  const fields: Record<string, string[]> = {
+    character: ["body", "goal", "motive", "conflict", "personality", "speech", "knowledge", "taboo", "checklist"],
+    world: ["category", "body"],
+    scene: ["when", "plotRole", "cast", "coolPoint", "hook", "body"],
+    foreshadow: ["body", "plantAt", "planAt", "prereq", "payoff", "effect", "importance"],
+    timeline: ["when", "body"],
+    relation: ["label", "body"],
+    outline: ["body"],
+    inspiration: ["body"],
+  };
+  const labels: Record<string, string> = {
+    body: "说明", goal: "目标", motive: "动机", conflict: "矛盾", personality: "性格",
+    speech: "语言习惯", knowledge: "知识边界", taboo: "底线", checklist: "核对项",
+    category: "分类", when: "位置/时间", plotRole: "剧情作用", cast: "出场人物",
+    coolPoint: "回报", hook: "钩子", plantAt: "埋设位置", planAt: "计划回收",
+    prereq: "回收前提", payoff: "回收方式", effect: "回收影响", importance: "重要度",
+    label: "关系",
+  };
+  const parts = (fields[item.kind] || ["body"])
+    .map((key) => [labels[key] || key, String(c[key] || "").trim()] as const)
+    .filter(([, value]) => value);
+  const tags = parseTags(item.tags_json);
+  if (tags.length) parts.push(["标签", tags.join("、")]);
+  if (item.kind === "relation") {
+    const from = String(item.from || "?").trim();
+    const to = String(item.to || "?").trim();
+    parts.unshift(["人物", `${from} — ${to}`]);
+  }
+  const status = item.status === "confirmed" ? "已确认" : "待确认";
+  const text = [`【${String(item.title || "未命名资料").trim()} · ${status}】`, ...parts.map(([label, value]) => `${label}：${value}`)].join("\n");
+  return text.length > maxChars ? `${text.slice(0, maxChars)}\n[资料片段已截断]` : text;
+}
+
 /**
- * 从资料库条目中找出与正文关键词相关的推荐引用。
- * 匹配依据：条目标题（人物卡名、设定名等）或人物关系的两端姓名在正文中出现的次数。
- * 关系条目的展示内容为「A — 关系 → B」；其余为 content_json 中的 body。
+ * 在本地从正文与选区的实体提及、资料标签、人物别名和章节关联中，给出可解释的引用候选。
+ * 这里只排序建议，不会自动把候选写入 AI 上下文。
  */
 export function relevantMaterials(
-  items: Record<string, any>[],
+  items: Material[],
   corpus: string,
   limit = 12,
+  context: MaterialMatchContext = {},
 ): MaterialSuggestion[] {
-  const text = corpus || "";
+  const text = normalize(corpus || "");
+  const selection = normalize(context.selectionText || "");
   const out: MaterialSuggestion[] = [];
   const seen = new Set<string>();
-  for (const x of items) {
-    if (!x || x.deleted_at) continue;
-    let terms: string[];
-    if (x.kind === "relation") {
-      terms = [String(x.from || "").trim(), String(x.to || "").trim()];
-    } else if (x.kind === "character") {
-      terms = [String(x.title || "").trim(), ...parseAliases(x.content_json)];
-    } else {
-      terms = [String(x.title || "").trim()];
-    }
-    let best = 0;
+  for (const item of items) {
+    if (!item || item.deleted_at || !item.id) continue;
+    const content = parseObject(item.content_json);
+    const title = String(item.title || "").trim();
+    const participantTerms = item.kind === "relation"
+      ? [String(item.from || "").trim(), String(item.to || "").trim()]
+      : item.kind === "scene"
+        ? String(content.cast || "").split(/[,，、;；]+/).map((s) => s.trim())
+        : [];
+    const aliases = item.kind === "character" ? parseAliases(item.content_json) : [];
+    const tags = parseTags(item.tags_json);
+    const terms = new Map<string, "title" | "alias" | "tag" | "person">();
+    if (title) terms.set(title, "title");
+    for (const term of aliases) if (!terms.has(term)) terms.set(term, "alias");
+    for (const term of participantTerms) if (term && !terms.has(term)) terms.set(term, "person");
+    for (const term of tags) if (term && !terms.has(term)) terms.set(term, "tag");
+
+    let score = 0;
+    let count = 0;
     let matched = "";
-    for (const t of new Set(terms)) {
-      const n = countOccurrences(text, t);
-      if (n > best) {
-        best = n;
-        matched = t;
+    let bestWeighted = 0;
+    const reasons: string[] = [];
+    let participantsHit = 0;
+    for (const [rawTerm, type] of terms) {
+      const term = normalize(rawTerm);
+      const fullCount = countOccurrences(text, term);
+      const selectionCount = countOccurrences(selection, term);
+      const weight = type === "title" ? 3 : type === "tag" ? 1 : 2;
+      const weighted = fullCount * weight + selectionCount * 3;
+      if (!fullCount && !selectionCount) continue;
+      score += weighted;
+      if (type === "person") participantsHit += 1;
+      if (fullCount > count || (fullCount === count && selectionCount && !matched)) {
+        count = fullCount;
+        matched = rawTerm;
       }
+      bestWeighted = Math.max(bestWeighted, weighted);
+      if (selectionCount) reasons.push(`选区提及「${rawTerm}」${selectionCount} 次`);
+      else if (type === "title") reasons.push(`正文提及「${rawTerm}」${fullCount} 次`);
+      else if (type === "alias") reasons.push(`命中别名「${rawTerm}」${fullCount} 次`);
+      else if (type === "person") reasons.push(`提及人物「${rawTerm}」${fullCount} 次`);
+      else reasons.push(`命中标签「${rawTerm}」${fullCount} 次`);
     }
-    if (!best) continue;
-    const key = `${x.kind}:${x.id}`;
+    if (item.kind === "relation" && participantsHit >= 2) {
+      score += 4;
+      reasons.unshift("关系双方均在正文出现");
+    }
+    if (item.kind === "scene" && context.chapterId && item.chapter_id === context.chapterId) {
+      score += 8;
+      reasons.unshift("已关联当前章节");
+    }
+    if (score <= 0) continue;
+    const key = `${item.kind}:${item.id}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    let content = "";
-    if (x.kind === "relation") {
-      try {
-        const c = JSON.parse(x.content_json || "{}");
-        content = `${x.from || "?"} — ${c.label || "关系"} → ${x.to || "?"}${c.body ? `\n${c.body}` : ""}`;
-      } catch {
-        content = "";
-      }
-    } else {
-      try {
-        content = String(JSON.parse(x.content_json || "{}").body || "");
-      } catch {
-        content = "";
-      }
-    }
     out.push({
-      id: x.id,
-      kind: x.kind,
-      title: x.kind === "relation" ? `${x.from} 与 ${x.to}` : x.title,
-      content,
-      matched,
-      count: best,
+      id: item.id,
+      kind: item.kind,
+      title: item.kind === "relation" ? `${item.from || "?"} 与 ${item.to || "?"}` : title || "未命名资料",
+      content: contextContent(item),
+      matched: matched || String(item.title || "").trim(),
+      count,
+      score: score + bestWeighted * 0.01,
+      reasons: [...new Set(reasons)].slice(0, 3),
     });
   }
-  return out.sort((a, b) => b.count - a.count).slice(0, limit);
+  return out.sort((a, b) => b.score - a.score || b.count - a.count).slice(0, Math.max(0, limit));
+}
+
+/** 统一构造手动引用与推荐引用的资料内容，避免只发送人物卡的一句简介。 */
+export function materialReferenceContent(item: Material, maxChars = 6000) {
+  return contextContent(item, maxChars);
 }

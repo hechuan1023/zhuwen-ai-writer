@@ -1979,8 +1979,11 @@ function registerIpc(userDir: string) {
       return ok({ id: p.id });
     }
     const id = newId();
+    const sceneOrder = p.kind === "scene"
+      ? Number((get("SELECT COALESCE(MAX(sort_order),-1)+1 n FROM library_items WHERE novel_id=? AND kind='scene' AND deleted_at IS NULL", p.novelId) as any)?.n || 0)
+      : 0;
     db.prepare(
-      "INSERT INTO library_items(id,novel_id,kind,title,content_json,tags_json,status,chapter_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO library_items(id,novel_id,kind,title,content_json,tags_json,status,chapter_id,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
     ).run(
       id,
       p.novelId,
@@ -1990,10 +1993,33 @@ function registerIpc(userDir: string) {
       JSON.stringify(p.tags || []),
       p.status || "idea",
       p.chapterId || null,
+      sceneOrder,
       t,
       t,
     );
     return ok({ id });
+  });
+  ipcMain.handle("library:reorderScenes", (_, p) => {
+    const novelId = String(p?.novelId || "");
+    const items: Array<{ id: string; chapterId: string | null; sortOrder: number }> = Array.isArray(p?.items) ? p.items : [];
+    if (!novelId || !items.length) return fail("没有可保存的场景顺序");
+    const ids = new Set<string>();
+    for (const item of items) {
+      if (!item?.id || ids.has(item.id)) return fail("场景列表包含无效或重复项目");
+      ids.add(item.id);
+      const scene = get("SELECT id FROM library_items WHERE id=? AND novel_id=? AND kind='scene' AND deleted_at IS NULL", item.id, novelId);
+      if (!scene) return fail("场景已被删除或不属于当前作品，请刷新后重试");
+      if (item.chapterId) {
+        const chapter = get("SELECT id FROM chapters WHERE id=? AND novel_id=? AND deleted_at IS NULL", item.chapterId, novelId);
+        if (!chapter) return fail("目标章节不存在或不属于当前作品");
+      }
+    }
+    return db.transaction(() => {
+      const update = db.prepare("UPDATE library_items SET chapter_id=?,sort_order=?,updated_at=?,data_version=data_version+1 WHERE id=? AND novel_id=? AND kind='scene'");
+      const t = timestamp();
+      items.forEach((item, index) => update.run(item.chapterId || null, Number.isFinite(item.sortOrder) ? item.sortOrder : index, t, item.id, novelId));
+      return ok(true);
+    })();
   });
   ipcMain.handle("library:trash", (_, id) => {
     db.prepare(

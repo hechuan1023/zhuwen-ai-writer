@@ -88,15 +88,20 @@
   position: absolute;
   top: calc(100% + 4px);
   z-index: 140;
-  min-width: 190px;
+  min-width: 210px;
   max-width: min(280px, 76vw);
+  max-height: min(420px, calc(100vh - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   padding: 4px;
   background: var(--paper, #fff);
   border: 1px solid var(--line, #e2ddd2);
-  border-radius: 9px;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  border-radius: var(--r-md, 10px);
+  box-shadow: var(--shadow, 0 14px 40px rgba(0, 0, 0, 0.18));
+  backdrop-filter: blur(var(--glass-blur, 12px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 12px));
 }
 .zchat-menu.align-end {
   right: 0;
@@ -119,6 +124,15 @@
 }
 .zchat-menu-item:hover:not(.disabled) {
   background: var(--accent2, #dfe9e3);
+}
+.zchat-menu-item.selected:not(.disabled) {
+  color: var(--accent, #4d7a68);
+  background: var(--accent-soft, var(--accent2, #dfe9e3));
+}
+.zchat-menu-item:focus-visible {
+  outline: none;
+  background: var(--accent-soft, var(--accent2, #dfe9e3));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .zchat-menu-item.danger {
   color: var(--danger, #a33);
@@ -402,9 +416,9 @@
   flex: none;
   margin: 0 10px 10px;
   border: 1px solid var(--line, #e2ddd2);
-  border-radius: 12px;
+  border-radius: var(--r-lg, 14px);
   background: var(--paper, #fff);
-  padding: 8px 8px 6px;
+  padding: 10px 10px 8px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -412,6 +426,7 @@
 }
 .zchat-composer:focus-within {
   border-color: var(--accent, #4d7a68);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 11%, transparent), var(--shadow-sm, 0 4px 16px rgba(0,0,0,.06));
 }
 .zchat-refs {
   display: flex;
@@ -511,11 +526,11 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 28px;
+  height: 30px;
   padding: 0 9px;
   border: 1px solid var(--line, #e2ddd2);
-  border-radius: 999px;
-  background: transparent;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--panel) 38%, transparent);
   color: inherit;
   font-size: 12px;
   line-height: 1;
@@ -530,7 +545,8 @@
   text-overflow: ellipsis;
 }
 .zchat-pill:hover {
-  background: rgba(0, 0, 0, 0.04);
+  border-color: var(--line-strong, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 8%, var(--paper)));
 }
 /* 任务与模型药丸允许收缩省略，但绝不换行成竖排 */
 .zchat-pill.wide {
@@ -576,7 +592,11 @@
   background: var(--accent, #4d7a68);
   color: #fff;
   cursor: pointer;
+  transition: transform var(--dur, 180ms) var(--ease, ease), filter var(--dur, 180ms) var(--ease, ease), box-shadow var(--dur, 180ms) var(--ease, ease);
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--accent) 24%, transparent);
 }
+.zchat-send:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
+.zchat-send:active:not(:disabled) { transform: translateY(0) scale(.97); }
 .zchat-send:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -779,6 +799,102 @@
   font-size: 11px;
   color: var(--muted, #8a8577);
 }
+.zchat-picker-local-only {
+  margin-left: auto;
+  padding: 2px 6px;
+  border: 1px solid var(--line, #e2ddd2);
+  border-radius: 999px;
+  color: var(--muted, #8a8577);
+  font-size: 9px;
+  font-weight: 400;
+}
+.zchat-picker-match-note {
+  margin: 0 0 7px;
+  color: var(--muted, #8a8577);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.zchat-picker-empty {
+  padding: 9px 10px;
+  border: 1px dashed var(--line-strong, var(--line));
+  border-radius: var(--r-md, 10px);
+  color: var(--muted, #8a8577);
+  font-size: 11px;
+}
+.zchat-suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.zchat-suggestion-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #e2ddd2);
+  border-radius: var(--r-md, 10px);
+  background: color-mix(in srgb, var(--panel) 28%, var(--paper));
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur, 180ms) var(--ease, ease), background var(--dur, 180ms) var(--ease, ease), transform var(--dur, 180ms) var(--ease, ease);
+}
+.zchat-suggestion-card:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: var(--accent-soft, var(--accent2, #dfe9e3));
+  transform: translateY(-1px);
+}
+.zchat-suggestion-card:focus-visible {
+  outline: 2px solid var(--accent, #4d7a68);
+  outline-offset: 1px;
+}
+.zchat-suggestion-card.added {
+  border-color: color-mix(in srgb, var(--success, #3d7a58) 34%, var(--line));
+  background: color-mix(in srgb, var(--success, #3d7a58) 7%, var(--paper));
+  cursor: default;
+}
+.zchat-suggestion-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.zchat-suggestion-copy b {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zchat-suggestion-copy small {
+  overflow: hidden;
+  color: var(--muted, #8a8577);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zchat-suggestion-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex: none;
+  min-width: 52px;
+  color: var(--accent, #4d7a68);
+  font-size: 10px;
+  font-weight: 600;
+}
+.zchat-picker-item-added {
+  border-color: color-mix(in srgb, var(--success, #3d7a58) 32%, var(--line)) !important;
+  color: var(--success, #3d7a58) !important;
+}
+.zchat-picker-grid button:disabled,
+.zchat-picker-row button:disabled[aria-pressed="true"] {
+  opacity: .78;
+  cursor: default;
+}
 .zchat-picker-grid {
   display: flex;
   flex-wrap: wrap;
@@ -799,6 +915,15 @@
 }
 .zchat-picker-grid button:hover {
   background: var(--accent2, #dfe9e3);
+}
+.zchat-picker-grid button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--success, #3d7a58) 38%, var(--line));
+  background: color-mix(in srgb, var(--success, #3d7a58) 8%, var(--paper));
+  color: var(--success, #3d7a58);
+}
+.zchat-picker-grid button small {
+  color: inherit;
+  font-size: 9px;
 }
 .zchat-picker-list {
   display: flex;
@@ -922,6 +1047,7 @@
   background: var(--paper, #fff);
   backdrop-filter: none;
 }
+.reduce-transparency .zchat-menu { background: var(--paper, #fff); }
 
 /* ── 深色主题适配（用令牌，避免硬编码浅色） ────────────────── */
 .theme-dark .zchat-icon-btn:hover,
@@ -957,6 +1083,8 @@
   margin-left: 18px;
   margin-right: 18px;
 }
+@media (prefers-reduced-motion: reduce) { .zchat-send { transition: none; } }
+.reduce-motion .zchat-send { transition: none; }
 .zchat-style-entry { flex: none; padding: 0 10px 6px; min-width: 0; }
 .zchat-style-list { display: grid; gap: 6px; margin: 12px 0; max-height: 48vh; overflow: auto; }
 .zchat-style-list > button, .zchat-style-row { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); text-align: left; }

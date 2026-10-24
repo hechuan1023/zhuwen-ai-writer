@@ -1533,6 +1533,9 @@ export function Workspace({
                   <LibraryPanel
                     novel={novel}
                     chapter={chapter}
+                    chapters={chapters}
+                    volumes={volumes}
+                    onSelectChapter={(targetChapter) => void switchChapter(targetChapter)}
                     notify={notify}
                     language={language}
                     onDirtyChange={(d) => {

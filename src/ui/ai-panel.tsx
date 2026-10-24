@@ -71,7 +71,8 @@ export function AiPanel({
     ),
     [segments, setSegments] = useState<{ msg: AnyRow } | null>(null);
   const autoSelected = useRef("");
-  const [mode, setMode] = useState<"chat" | "continue" | "naturalize">("chat");
+  const [mode, setMode] = useState<"chat" | "continue" | "naturalize" | "polish" | "outline" | "check">("chat");
+  const [activeTaskId, setActiveTaskId] = useState("discuss-plot");
   const [styleId, setStyleId] = useState("");
   const [styleRuleChars, setStyleRuleChars] = useState(0);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -273,10 +274,12 @@ export function AiPanel({
     () =>
       relevantMaterials(
         libraryAll,
-        `${chapterText()}${selectionText ? `\n${selectionText}` : ""}`,
+        chapterText(),
+        12,
+        { chapterId, selectionText },
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [libraryAll, pickerOpen, selectionText, session?.chapter?.plain_text],
+    [libraryAll, pickerOpen, selectionText, chapterId, chapter?.plain_text, session?.chapter?.plain_text],
   );
   function continuationContext() {
     const tail = chapterText().trim().slice(-4000);
@@ -680,6 +683,7 @@ export function AiPanel({
     : undefined;
   const tasks: ComposerTask[] = [
     {
+      id: "discuss-plot",
       kind: "chat",
       label: tr("讨论剧情", "Discuss plot"),
       draft: tr(
@@ -692,7 +696,8 @@ export function AiPanel({
       ),
     },
     {
-      kind: "chat",
+      id: "polish-passage",
+      kind: "polish",
       label: tr("润色段落", "Polish passage"),
       draft: tr(
         "请润色选中段落：保留事实、视角与人物关系，不扩写新情节。输出修改稿并说明改动理由。",
@@ -701,7 +706,8 @@ export function AiPanel({
       hint: tr("建议先在正文中选中段落并加入引用。", "Select text in the manuscript and add it as a reference first."),
     },
     {
-      kind: "chat",
+      id: "character-writing",
+      kind: "polish",
       label: tr("人物描写", "Character writing"),
       draft: tr(
         "请基于人物卡与场景引用，写一段贴合该人物语言习惯的行动/对话描写，保持视角一致。",
@@ -710,7 +716,8 @@ export function AiPanel({
       hint: tr("可引用人物卡与相关章节。", "Reference character cards and related chapters."),
     },
     {
-      kind: "chat",
+      id: "plot-next",
+      kind: "outline",
       label: tr("推演后续", "Plot next"),
       draft: tr(
         "请推演接下来 2–3 个场景的可能走向：列出前提、风险与最自然的一条路径，不要直接替我写完整章。",
@@ -718,7 +725,8 @@ export function AiPanel({
       ),
     },
     {
-      kind: "chat",
+      id: "proofread",
+      kind: "check",
       label: tr("检查错别字", "Proofread"),
       draft: tr(
         "请检查引用文本中的错别字、标点与语病，逐条列出原句与建议，不要改写风格。",
@@ -726,7 +734,8 @@ export function AiPanel({
       ),
     },
     {
-      kind: "chat",
+      id: "ground-setting",
+      kind: "check",
       label: tr("设定奠基", "Ground setting"),
       draft: tr(
         "请根据当前引用的世界设定与人物，列出本章必须遵守的 5–8 条事实约束（时间、空间、能力边界、已发生事件），供后续写作对照。",
@@ -734,7 +743,8 @@ export function AiPanel({
       ),
     },
     {
-      kind: "chat",
+      id: "outline-chapter",
+      kind: "outline",
       label: tr("大纲规划", "Outline chapter"),
       draft: tr(
         "请为下一章拟细纲：剧情作用、出场人物、场景目标与冲突、爽点、章末钩子。用条目列出，不写正文。",
@@ -742,7 +752,8 @@ export function AiPanel({
       ),
     },
     {
-      kind: "chat",
+      id: "expand-selection",
+      kind: "polish",
       label: tr("扩写选区", "Expand selection"),
       draft: tr(
         "请在保持事实与视角不变的前提下扩写选区：补充感官与动作细节，不超过原文两倍长度。",
@@ -750,7 +761,8 @@ export function AiPanel({
       ),
     },
     {
-      kind: "chat",
+      id: "rewrite-selection",
+      kind: "polish",
       label: tr("改写选区", "Rewrite selection"),
       draft: tr(
         "请改写选区，使节奏更紧、语言更贴合人物语气；保留全部事实信息，并列出主要改动点。",
@@ -758,6 +770,7 @@ export function AiPanel({
       ),
     },
     {
+      id: "continue-chapter",
       kind: "continue",
       label: tr("续写", "Continue"),
       hint: tr(
@@ -766,6 +779,7 @@ export function AiPanel({
       ),
     },
     {
+      id: "naturalize-selection",
       kind: "naturalize",
       label: tr("自然化润色", "Naturalize"),
       hint: tr("先添加正文选区；结果会进入 AI 面板，确认后才修改正文。", "Add a manuscript selection first; nothing changes until you adopt the result."),
@@ -913,9 +927,12 @@ export function AiPanel({
         onOpenRefPicker={() => setPickerOpen(true)}
         tasks={tasks}
         activeTaskKind={mode}
-        onSelectTask={(kind) => {
-          setMode(kind === "continue" ? "continue" : "chat");
-          const task = tasks.find((t) => t.kind === kind);
+        activeTaskId={activeTaskId}
+        onSelectTask={(id) => {
+          const task = tasks.find((t) => t.id === id);
+          if (!task) return;
+          setActiveTaskId(id);
+          setMode(task.kind as typeof mode);
           if (task?.draft) {
             updateDraft(task.draft, true);
           }
@@ -989,6 +1006,7 @@ export function AiPanel({
           bookChapters={bookChapters}
           libraryAll={libraryAll}
           suggestions={suggestions}
+          selectedSources={contexts.map(({ kind, sourceId }) => ({ kind, sourceId }))}
           onAdd={handleAddFromPicker}
           onClose={() => setPickerOpen(false)}
         />

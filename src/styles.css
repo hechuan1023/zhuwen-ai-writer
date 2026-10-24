@@ -37,13 +37,18 @@ button {
   padding: 7px 12px;
   min-height: 32px;
   cursor: pointer;
-  transition: background var(--dur, 180ms) var(--ease, ease),
+  font-weight: 500;
+  transition: transform var(--dur, 180ms) var(--ease, ease),
+    background var(--dur, 180ms) var(--ease, ease),
     border-color var(--dur, 180ms) var(--ease, ease),
     box-shadow var(--dur, 180ms) var(--ease, ease);
 }
 button:hover {
   background: color-mix(in srgb, var(--accent) 8%, var(--paper));
   border-color: var(--line-strong, var(--line));
+}
+button:active:not(:disabled) {
+  transform: translateY(1px) scale(0.99);
 }
 button:focus-visible,
 input:focus-visible,
@@ -56,6 +61,10 @@ button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
+@media (prefers-reduced-motion: reduce) {
+  button { transition: none; }
+}
+.reduce-motion button { transition: none; }
 .primary {
   background: var(--accent);
   border-color: var(--accent);

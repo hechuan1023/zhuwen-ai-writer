@@ -9,6 +9,7 @@ import {
   scanLibraryHealth,
 } from "./library-model";
 import { Select } from "./select";
+import { ScenePlanner } from "./scene-planner";
 
 export type LibraryLeaveControls = {
   isDirty: () => boolean;
@@ -21,6 +22,9 @@ export type LibraryLeaveControls = {
 export function LibraryPanel({
   novel,
   chapter,
+  chapters = [],
+  volumes = [],
+  onSelectChapter,
   notify,
   language = "zh-CN",
   onDirtyChange,
@@ -28,6 +32,9 @@ export function LibraryPanel({
 }: {
   novel: AnyRow;
   chapter: AnyRow | null;
+  chapters?: AnyRow[];
+  volumes?: AnyRow[];
+  onSelectChapter?: (chapter: AnyRow) => void;
   notify: (s: string) => void;
   language?: UiLanguage;
   onDirtyChange?: (dirty: boolean) => void;
@@ -48,6 +55,7 @@ export function LibraryPanel({
     [baseline, setBaseline] = useState<AnyRow | null>(null),
     [saveBusy, setSaveBusy] = useState(false),
     [graphOpen, setGraphOpen] = useState(false),
+    [plannerOpen, setPlannerOpen] = useState(false),
     [listError, setListError] = useState(""),
     [healthOpen, setHealthOpen] = useState(false),
     [healthIssues, setHealthIssues] = useState<ReturnType<typeof scanLibraryHealth>>([]),
@@ -107,7 +115,7 @@ export function LibraryPanel({
     setEditing((prev: AnyRow | null) => ({ ...(prev || {}), ...patch }));
   }
 
-  function openEditor(row: AnyRow | null) {
+  function openEditor(row: AnyRow | null, seed: AnyRow = {}) {
     const apply = () => {
       draftVersion.current += 1;
       if (row) {
@@ -115,7 +123,7 @@ export function LibraryPanel({
         setEditing(model);
         setBaseline(model);
       } else {
-        const blank = { title: "", body: "", status: "idea", kind };
+        const blank = { title: "", body: "", status: "idea", kind, ...seed };
         setEditing(blank);
         setBaseline(blank);
       }
@@ -153,6 +161,7 @@ export function LibraryPanel({
     const go = () => {
       draftVersion.current += 1;
       setKind(nextKind);
+      setPlannerOpen(false);
       setEditing(null);
       setBaseline(null);
     };
@@ -185,7 +194,7 @@ export function LibraryPanel({
       tags: String(snapshot.tagsText ?? parseTags(snapshot.tags_json) ?? "")
         .split(/[,，]/)
         .filter(Boolean),
-      chapterId: snapshot.chapter_id || chapter?.id,
+      chapterId: kind === "scene" ? snapshot.chapter_id || null : snapshot.chapter_id || chapter?.id,
     });
     setSaveBusy(false);
     if (!result.ok) {
@@ -314,6 +323,40 @@ export function LibraryPanel({
           ),
         )
       : items;
+  async function moveScene(sceneId: string, chapterId: string | null, beforeId?: string) {
+    if (search.trim()) return;
+    if (sceneId === beforeId) return;
+    const scenes = [...items].filter((item) => item.kind === "scene").sort(
+      (a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0),
+    );
+    const moved = scenes.find((item) => item.id === sceneId);
+    if (!moved) return;
+    const withoutMoved = scenes.filter((item) => item.id !== sceneId);
+    const destination = withoutMoved.filter((item) => (item.chapter_id || null) === chapterId);
+    const insertAt = beforeId ? destination.findIndex((item) => item.id === beforeId) : -1;
+    if (insertAt < 0) destination.push({ ...moved, chapter_id: chapterId });
+    else destination.splice(insertAt, 0, { ...moved, chapter_id: chapterId });
+    const laneFor = (id: string | null) => id === chapterId
+      ? destination
+      : withoutMoved.filter((item) => (item.chapter_id || null) === id);
+    const knownChapterIds = new Set(chapters.map((item) => item.id));
+    const lanes = [laneFor(null), ...chapters.map((item) => laneFor(item.id))];
+    const orphaned = withoutMoved.filter((item) => item.chapter_id && !knownChapterIds.has(item.chapter_id));
+    const ordered: AnyRow[] = [...lanes.flat(), ...orphaned]
+      .map((item, index) => ({ ...item, sort_order: index }));
+    const result = await api("library:reorderScenes", {
+      novelId: novel.id,
+      items: ordered.map((item) => ({ id: item.id, chapterId: item.chapter_id || null, sortOrder: item.sort_order })),
+    });
+    if (!result.ok) {
+      notify(result.error || tr("场景顺序保存失败", "Could not save scene order"));
+      return;
+    }
+    setItems((current) => current.map((item) => {
+      const updated = ordered.find((entry) => entry.id === item.id);
+      return updated ? { ...item, chapter_id: updated.chapter_id, sort_order: updated.sort_order } : item;
+    }).sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)));
+  }
   const detailTarget = document.querySelector(".editor-area");
   return (
     <>
@@ -335,6 +378,7 @@ export function LibraryPanel({
         >
           {tr("命名", "Names")}
         </button>
+        {kind === "scene" && <button className={plannerOpen ? "active" : ""} aria-pressed={plannerOpen} onClick={() => setPlannerOpen(true)}>{tr("规划板", "Planner")}</button>}
         <button
           onClick={() => openEditor(null)}
         >
@@ -483,9 +527,21 @@ export function LibraryPanel({
           {kind === "scene" && (
             <>
               <input
-                placeholder={tr("关联章节/位置（如：第 3 章）", "Chapter / location")}
+                placeholder={tr("场景位置或补充定位（如：祠堂后门）", "Scene location or note (e.g. back entrance)")}
                 value={editing.when || ""}
                 onChange={(e) => updateEditing({ when: e.target.value })}
+              />
+              <Select
+                value={editing.chapter_id || ""}
+                aria-label={tr("关联所属章节", "Linked chapter")}
+                onValueChange={(v) => updateEditing({ chapter_id: v || null })}
+                options={[
+                  { value: "", label: tr("未安排到具体章节", "Unassigned") },
+                  ...chapters.map((item) => ({
+                    value: item.id,
+                    label: `${volumes.find((volume) => volume.id === item.volume_id)?.title ? `${volumes.find((volume) => volume.id === item.volume_id)?.title} · ` : ""}${item.title}`,
+                  })),
+                ]}
               />
               <input
                 placeholder={tr("剧情作用", "Plot role")}
@@ -712,6 +768,22 @@ export function LibraryPanel({
           </div>
           </div>
         </section>,
+        detailTarget,
+      )}
+      {plannerOpen && detailTarget && createPortal(
+        <ScenePlanner
+          scenes={items.filter((item) => item.kind === "scene")}
+          chapters={chapters}
+          volumes={volumes}
+          currentChapter={chapter}
+          language={language}
+          onClose={() => setPlannerOpen(false)}
+          onOpenScene={(scene) => openEditor(scene)}
+          onCreateScene={(targetChapter) => openEditor(null, targetChapter ? { chapter_id: targetChapter.id } : {})}
+          onOpenChapter={(targetChapter) => onSelectChapter?.(targetChapter)}
+          onMoveScene={(sceneId, chapterId, beforeId) => void moveScene(sceneId, chapterId, beforeId)}
+          canReorder={!search.trim()}
+        />,
         detailTarget,
       )}
       <div className="library-list">
