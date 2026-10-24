@@ -13,6 +13,8 @@ type Material = Record<string, any>;
 export type MaterialMatchContext = {
   chapterId?: string | null;
   selectionText?: string;
+  chapterTitles?: Record<string, string>;
+  chapterOrder?: Record<string, number>;
 };
 
 function parseObject(value: unknown): Record<string, any> {
@@ -52,7 +54,7 @@ function countOccurrences(corpus: string, term: string) {
   return (corpus.match(new RegExp(escapeRegExp(term), "g")) || []).length;
 }
 
-function contextContent(item: Material, maxChars = 6000) {
+function contextContent(item: Material, maxChars = 6000, chapterTitles: Record<string, string> = {}, chapterOrder: Record<string, number> = {}) {
   const c = parseObject(item.content_json);
   const fields: Record<string, string[]> = {
     character: ["body", "goal", "motive", "conflict", "personality", "speech", "knowledge", "taboo", "checklist"],
@@ -75,6 +77,23 @@ function contextContent(item: Material, maxChars = 6000) {
   const parts = (fields[item.kind] || ["body"])
     .map((key) => [labels[key] || key, String(c[key] || "").trim()] as const)
     .filter(([, value]) => value);
+  if (item.kind === "character" && Array.isArray(c.progressions) && c.progressions.length) {
+    const progressions = c.progressions
+      .slice()
+      .filter((entry: any) => entry && (String(entry.change || "").trim() || String(entry.evidence || "").trim()))
+      .sort((left: any, right: any) => {
+        const leftOrder = chapterOrder[String(left.chapterId || "")] ?? Number.MAX_SAFE_INTEGER;
+        const rightOrder = chapterOrder[String(right.chapterId || "")] ?? Number.MAX_SAFE_INTEGER;
+        return leftOrder - rightOrder;
+      })
+      .map((entry: any) => {
+        const chapterTitle = chapterTitles[String(entry.chapterId || "")] || String(entry.chapterTitle || "").trim() || "未关联章节";
+        const change = String(entry.change || "").trim();
+        const evidence = String(entry.evidence || "").trim();
+        return `- ${chapterTitle}：${change || "阶段记录"}${evidence ? `（依据：${evidence}）` : ""}`;
+      });
+    if (progressions.length) parts.push(["作者确认的阶段变化", progressions.join("\n")]);
+  }
   const tags = parseTags(item.tags_json);
   if (tags.length) parts.push(["标签", tags.join("、")]);
   if (item.kind === "relation") {
@@ -160,7 +179,7 @@ export function relevantMaterials(
       id: item.id,
       kind: item.kind,
       title: item.kind === "relation" ? `${item.from || "?"} 与 ${item.to || "?"}` : title || "未命名资料",
-      content: contextContent(item),
+      content: contextContent(item, 6000, context.chapterTitles, context.chapterOrder),
       matched: matched || String(item.title || "").trim(),
       count,
       score: score + bestWeighted * 0.01,
@@ -171,6 +190,11 @@ export function relevantMaterials(
 }
 
 /** 统一构造手动引用与推荐引用的资料内容，避免只发送人物卡的一句简介。 */
-export function materialReferenceContent(item: Material, maxChars = 6000) {
-  return contextContent(item, maxChars);
+export function materialReferenceContent(
+  item: Material,
+  maxChars = 6000,
+  chapterTitles: Record<string, string> = {},
+  chapterOrder: Record<string, number> = {},
+) {
+  return contextContent(item, maxChars, chapterTitles, chapterOrder);
 }

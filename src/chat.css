@@ -1097,6 +1097,9 @@
 @media (prefers-reduced-motion: reduce) { .zchat-send { transition: none; } }
 .reduce-motion .zchat-send { transition: none; }
 .zchat-style-entry { flex: none; padding: 0 10px 6px; min-width: 0; }
+.zchat-style-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.zchat-style-toolbar > span { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.zchat-style-toolbar button { flex: none; display: inline-flex; align-items: center; gap: 6px; }
 .zchat-style-list { display: grid; gap: 6px; margin: 12px 0; max-height: 48vh; overflow: auto; }
 .zchat-style-list > button, .zchat-style-row { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); text-align: left; }
 .zchat-style-list > button.active, .zchat-style-row.active { border-color: var(--accent); background: var(--accent-2); }

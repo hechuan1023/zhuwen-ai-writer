@@ -1320,39 +1320,131 @@ function registerIpc(userDir: string) {
   );
 
   ipcMain.handle("characters:presence", (_, p) => {
-    const entries: string[][] = Array.isArray(p?.entries)
-      ? p.entries
-      : [];
-    const rows: any[] = all(
-      `SELECT plain_text FROM chapters WHERE novel_id=? AND deleted_at IS NULL
-       ORDER BY CASE WHEN volume_id IS NULL THEN 0 ELSE 1 END, sort_order`,
-      p?.novelId,
+    const novelId = String(p?.novelId || "");
+    const includeMatches = Boolean(p?.includeMatches);
+    const characters: any[] = all(
+      "SELECT id,title,content_json FROM library_items WHERE novel_id=? AND kind='character' AND deleted_at IS NULL ORDER BY sort_order,title,id",
+      novelId,
+    ).map((row: any) => {
+      let data: any = {};
+      try { data = JSON.parse(row.content_json || "{}"); } catch {}
+      const aliases = Array.isArray(data.alias)
+        ? data.alias
+        : String(data.alias || "").split(/[,，、;；]+/);
+      const terms = [...new Map([row.title, ...aliases]
+        .map((term: unknown) => String(term || "").trim())
+        .filter((term: string) => term.length >= 2)
+        .map((term: string) => [term.toLocaleLowerCase(), term])).values()];
+      return { id: row.id, title: row.title, terms };
+    });
+    const fingerprint = createHash("sha256")
+      .update(JSON.stringify(characters.map(({ id, terms }) => [id, terms])))
+      .digest("hex");
+    const chapters: any[] = all(
+      `SELECT c.id,c.title,c.data_version,c.sort_order,v.sort_order volume_sort_order FROM chapters c
+       LEFT JOIN volumes v ON v.id=c.volume_id
+       WHERE c.novel_id=? AND c.deleted_at IS NULL
+       ORDER BY COALESCE(v.sort_order,-1),c.sort_order,c.id`,
+      novelId,
     );
-    const texts = rows.map((r) => String(r.plain_text || ""));
+    const indexedRows: any[] = all(
+      "SELECT chapter_id,chapter_data_version,entity_fingerprint FROM chapter_mention_index WHERE novel_id=?",
+      novelId,
+    );
+    const indexed = new Map(indexedRows.map((row) => [row.chapter_id, row]));
+    const staleChapters = chapters.filter((chapter) => {
+      const state: any = indexed.get(chapter.id);
+      return !state || Number(state.chapter_data_version) !== Number(chapter.data_version) || state.entity_fingerprint !== fingerprint;
+    });
+    if (staleChapters.length) {
+      const clearChapter = db.prepare("DELETE FROM character_chapter_mentions WHERE chapter_id=?");
+      const addMention = db.prepare("INSERT INTO character_chapter_mentions(novel_id,character_id,chapter_id,mention_count,first_offset,matched_terms_json) VALUES(?,?,?,?,?,?)");
+      const saveState = db.prepare("INSERT INTO chapter_mention_index(chapter_id,novel_id,chapter_data_version,entity_fingerprint,indexed_at) VALUES(?,?,?,?,?) ON CONFLICT(chapter_id) DO UPDATE SET novel_id=excluded.novel_id,chapter_data_version=excluded.chapter_data_version,entity_fingerprint=excluded.entity_fingerprint,indexed_at=excluded.indexed_at");
+      db.transaction(() => {
+        for (const chapter of staleChapters) {
+          const body: any = get("SELECT plain_text FROM chapters WHERE id=? AND deleted_at IS NULL", chapter.id);
+          const text = String(body?.plain_text || "");
+          clearChapter.run(chapter.id);
+          for (const character of characters) {
+            let count = 0;
+            let firstOffset = -1;
+            const matchedTerms = new Set<string>();
+            const termByLower = new Map<string, string>(character.terms.map((term: string) => [term.toLocaleLowerCase(), term]));
+            const alternatives = character.terms
+              .slice()
+              .sort((left: string, right: string) => right.length - left.length)
+              .map((term: string) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+            const matcher = alternatives.length ? new RegExp(`(?:${alternatives.join("|")})`, "gi") : null;
+            let match: RegExpExecArray | null;
+            while (matcher && (match = matcher.exec(text)) !== null) {
+              if (firstOffset < 0) firstOffset = match.index;
+              count++;
+              const matchedTerm = termByLower.get(match[0].toLocaleLowerCase());
+              if (matchedTerm) matchedTerms.add(matchedTerm);
+              if (match[0].length === 0) matcher.lastIndex++;
+            }
+            if (count) addMention.run(novelId, character.id, chapter.id, count, firstOffset, JSON.stringify([...matchedTerms]));
+          }
+          saveState.run(chapter.id, novelId, Number(chapter.data_version), fingerprint, timestamp());
+        }
+      })();
+    }
     const presence: Record<
       string,
-      { appearances: number; sinceLast: number }
+      { appearances: number; sinceLast: number; mentions: number; matches?: any[] }
     > = {};
-    for (const entry of entries) {
-      const terms = (entry || [])
-        .map((t) => String(t || "").trim())
-        .filter((t) => t.length >= 2);
-      if (!terms.length) continue;
-      let appearances = 0;
-      let lastIndex = -1;
-      texts.forEach((t, i) => {
-        if (terms.some((n) => t.includes(n))) {
-          appearances++;
-          lastIndex = i;
-        }
-      });
-      presence[terms[0]] = {
+    const summaryRows: any[] = all(
+      `WITH chapter_order AS (
+         SELECT c.id,ROW_NUMBER() OVER (ORDER BY COALESCE(v.sort_order,-1),c.sort_order,c.id)-1 AS chapter_index
+         FROM chapters c LEFT JOIN volumes v ON v.id=c.volume_id
+         WHERE c.novel_id=? AND c.deleted_at IS NULL
+       )
+       SELECT m.character_id,COUNT(*) appearances,SUM(m.mention_count) mentions,MAX(o.chapter_index) last_index
+       FROM character_chapter_mentions m JOIN chapter_order o ON o.id=m.chapter_id
+       WHERE m.novel_id=? GROUP BY m.character_id`,
+      novelId,
+      novelId,
+    );
+    const summaryByCharacter = new Map(summaryRows.map((row) => [row.character_id, row]));
+    const selectedCharacterId = includeMatches ? String(p?.characterId || "") : "";
+    for (const character of characters) {
+      if (includeMatches && character.id !== selectedCharacterId) continue;
+      const summary: any = summaryByCharacter.get(character.id);
+      const appearances = Number(summary?.appearances || 0);
+      const value = {
         appearances,
-        sinceLast:
-          lastIndex === -1 ? texts.length : texts.length - 1 - lastIndex,
+        mentions: Number(summary?.mentions || 0),
+        sinceLast: summary ? chapters.length - 1 - Number(summary.last_index) : chapters.length,
       };
+      if (includeMatches) {
+        const rows: any[] = all(
+          `SELECT m.chapter_id,m.mention_count,m.first_offset,m.matched_terms_json,c.title chapter_title,c.plain_text
+           FROM character_chapter_mentions m JOIN chapters c ON c.id=m.chapter_id
+           LEFT JOIN volumes v ON v.id=c.volume_id
+           WHERE m.novel_id=? AND m.character_id=? AND c.deleted_at IS NULL
+           ORDER BY COALESCE(v.sort_order,-1) DESC,c.sort_order DESC,c.id DESC LIMIT 200`,
+          novelId,
+          character.id,
+        ).reverse();
+        (value as any).matches = rows.map((row) => {
+          let matchedTerms: string[] = [];
+          try { matchedTerms = JSON.parse(row.matched_terms_json || "[]"); } catch {}
+          const text = String(row.plain_text || "");
+          const offset = Math.max(0, Number(row.first_offset) || 0);
+          const start = Math.max(0, offset - 42);
+          const end = Math.min(text.length, offset + 82);
+          return {
+            chapterId: row.chapter_id,
+            chapterTitle: row.chapter_title,
+            mentions: Number(row.mention_count || 0),
+            matchedTerms,
+            snippet: `${start > 0 ? "…" : ""}${text.slice(start, end).replace(/\s+/g, " ").trim()}${end < text.length ? "…" : ""}`,
+          };
+        });
+      }
+      presence[character.id] = value;
     }
-    return ok({ presence, total: texts.length });
+    return ok({ presence, total: chapters.length });
   });
 
   ipcMain.handle("volumes:create", (_, p) => {
@@ -2285,6 +2377,65 @@ function registerIpc(userDir: string) {
       "INSERT INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,0,1,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,tasks_json=excluded.tasks_json,rules=excluded.rules,updated_at=excluded.updated_at,data_version=data_version+1",
     ).run(id, name, String(p?.description || "").slice(0, 240), JSON.stringify(tasks), rules, t, t);
     return ok({ id });
+  });
+  ipcMain.handle("ai:style:export", async (_, styleId) => {
+    try {
+      const card: any = get("SELECT * FROM ai_style_cards WHERE id=?", String(styleId || ""));
+      if (!card) return fail("写作技法卡不存在");
+      if (card.builtin) return fail("请先复制内置卡，再导出自定义卡");
+      const tasks = JSON.parse(card.tasks_json || "[]");
+      const safeName = String(card.name || "写作技法卡").replace(/[<>:"/\\|?*]/g, "_").slice(0, 70);
+      const target = await dialog.showSaveDialog({
+        title: "导出写作技法卡",
+        defaultPath: `${safeName}.zhuwen-style.json`,
+        filters: [{ name: "铸文写作技法卡", extensions: ["json"] }],
+      });
+      if (target.canceled || !target.filePath) return ok(null);
+      const bundle = {
+        format: "zhuwen-ai-style-card",
+        version: 1,
+        card: { name: card.name, description: card.description || "", tasks, rules: card.rules },
+      };
+      await fs.promises.writeFile(target.filePath, `${JSON.stringify(bundle, null, 2)}\n`, "utf8");
+      return ok({ file: target.filePath });
+    } catch (e) {
+      return fail(e);
+    }
+  });
+  ipcMain.handle("ai:style:import", async () => {
+    try {
+      const target = await dialog.showOpenDialog({
+        title: "导入写作技法卡",
+        filters: [{ name: "铸文写作技法卡", extensions: ["json"] }],
+        properties: ["openFile"],
+      });
+      if (target.canceled || !target.filePaths[0]) return ok(null);
+      const file = target.filePaths[0];
+      if ((await fs.promises.stat(file)).size > 128 * 1024) throw new Error("技法卡文件过大，无法导入");
+      const bundle = JSON.parse(await fs.promises.readFile(file, "utf8"));
+      const card = bundle?.card;
+      if (bundle?.format !== "zhuwen-ai-style-card" || bundle?.version !== 1 || !card || typeof card !== "object")
+        throw new Error("文件格式不受支持或版本不兼容");
+      const name = String(card.name || "").trim();
+      const description = String(card.description || "").trim();
+      const rules = String(card.rules || "").trim();
+      const allowedTasks = new Set(["continue", "polish", "naturalize", "outline"]);
+      const tasks = [...new Set((Array.isArray(card.tasks) ? card.tasks : [])
+        .map((task: unknown) => String(task || ""))
+        .filter((task: string) => allowedTasks.has(task)))];
+      if (!name || name.length > 80) throw new Error("技法卡名称需为 1 到 80 个字符");
+      if (description.length > 240) throw new Error("技法卡说明不能超过 240 个字符");
+      if (!rules || rules.length > 20000) throw new Error("技法卡规则需为 1 到 20000 个字符");
+      if (!tasks.length) throw new Error("文件中没有有效的适用任务");
+      const id = newId();
+      const now = timestamp();
+      db.prepare(
+        "INSERT INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,0,1,?,?)",
+      ).run(id, name, description, JSON.stringify(tasks), rules, now, now);
+      return ok({ id, name });
+    } catch (e) {
+      return fail(e);
+    }
   });
   ipcMain.handle("ai:style:delete", (_, id) => {
     const row: any = get("SELECT builtin FROM ai_style_cards WHERE id=?", String(id || ""));

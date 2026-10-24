@@ -328,10 +328,15 @@ export function AiPanel({
         libraryAll,
         chapterText(),
         12,
-        { chapterId, selectionText },
+        {
+          chapterId,
+          selectionText,
+          chapterTitles: Object.fromEntries(bookChapters.map((item) => [item.id, item.title])),
+          chapterOrder: Object.fromEntries(bookChapters.map((item, index) => [item.id, index])),
+        },
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [libraryAll, pickerOpen, selectionText, chapterId, chapter?.plain_text, session?.chapter?.plain_text],
+    [libraryAll, bookChapters, pickerOpen, selectionText, chapterId, chapter?.plain_text, session?.chapter?.plain_text],
   );
   function continuationContext() {
     const tail = chapterText().trim().slice(-4000);

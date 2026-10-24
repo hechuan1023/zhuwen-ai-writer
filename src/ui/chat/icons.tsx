@@ -206,6 +206,24 @@ export function IconDoc({ size = 16, className }: IconProps) {
   );
 }
 
+export function IconDownload({ size = 16, className }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <path d="M12 4v11M12 15l-4-4M12 15l4-4" />
+      <path d="M5 16.5v2A1.5 1.5 0 006.5 20h11a1.5 1.5 0 001.5-1.5v-2" />
+    </svg>
+  );
+}
+
+export function IconUpload({ size = 16, className }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <path d="M12 20V9M12 9l-4 4M12 9l4 4" />
+      <path d="M5 7.5v-2A1.5 1.5 0 016.5 4h11A1.5 1.5 0 0119 5.5v2" />
+    </svg>
+  );
+}
+
 export function IconUser({ size = 16, className }: IconProps) {
   return (
     <svg {...base(size)} className={className}>

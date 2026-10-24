@@ -229,7 +229,12 @@ export function RefPicker({
                         onAdd({
                           label: x.title,
                           kind: k,
-                          content: materialReferenceContent(x),
+                          content: materialReferenceContent(
+                            x,
+                            6000,
+                            Object.fromEntries(bookChapters.map((chapter) => [chapter.id, chapter.title])),
+                            Object.fromEntries(bookChapters.map((chapter, index) => [chapter.id, index])),
+                          ),
                           sourceId: x.id,
                         });
                       }}

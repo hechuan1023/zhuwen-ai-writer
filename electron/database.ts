@@ -184,6 +184,30 @@ function migrate(db: Db) {
     for (const selection of selections) updateSelection.run(JSON.stringify([selection.style_id]), selection.novel_id)
     db.prepare('INSERT INTO schema_migrations VALUES(12,?)').run(now())
   })()
+  if (version < 13) db.transaction(() => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS chapter_mention_index(
+        chapter_id TEXT PRIMARY KEY REFERENCES chapters(id) ON DELETE CASCADE,
+        novel_id TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+        chapter_data_version INTEGER NOT NULL,
+        entity_fingerprint TEXT NOT NULL,
+        indexed_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS character_chapter_mentions(
+        novel_id TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+        character_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE,
+        chapter_id TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+        mention_count INTEGER NOT NULL,
+        first_offset INTEGER NOT NULL,
+        matched_terms_json TEXT NOT NULL DEFAULT '[]',
+        PRIMARY KEY(character_id,chapter_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_character_mentions_novel_character ON character_chapter_mentions(novel_id,character_id,chapter_id);
+      CREATE INDEX IF NOT EXISTS idx_character_mentions_chapter ON character_chapter_mentions(chapter_id);
+      CREATE INDEX IF NOT EXISTS idx_mention_index_novel_chapter ON chapter_mention_index(novel_id,chapter_id);
+    `)
+    db.prepare('INSERT INTO schema_migrations VALUES(13,?)').run(now())
+  })()
   // 已完成迁移的数据库也要能补齐或升级内置卡；不覆盖用户自定义记录。
   {
     const insert = db.prepare('INSERT OR IGNORE INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')

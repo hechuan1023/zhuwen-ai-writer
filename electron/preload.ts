@@ -19,6 +19,8 @@ const allowedChannels = new Set([
   'ai:style-selection:set',
   'ai:style:save',
   'ai:style:delete',
+  'ai:style:export',
+  'ai:style:import',
   'ai:style:estimate',
   'app:close-ready',
   'appearance:chooseBackground',

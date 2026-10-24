@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AnyRow, Modal, ConfirmDialog, api } from "../shared";
 import { ChatMenu, type MenuItem } from "./menu";
-import { IconChevronDown, IconCopy, IconSparkle } from "./icons";
+import { IconChevronDown, IconCopy, IconDownload, IconSparkle, IconUpload } from "./icons";
 
 export type StyleCard = AnyRow & { tasks: string[]; version: number };
 
@@ -56,6 +56,7 @@ export function StyleCardPanel({
   const [edit, setEdit] = useState<StyleCard | null>(null);
   const [deleteCard, setDeleteCard] = useState<StyleCard | null>(null);
   const [error, setError] = useState("");
+  const [importing, setImporting] = useState(false);
   const items: MenuItem[] = cards.map((card) => ({
     id: `style-${card.id}`,
     label: styleLabel(card, language).name,
@@ -91,6 +92,16 @@ export function StyleCardPanel({
             <header><b>{tr("本任务实际注入规则", "Rules applied to this task")}</b><small>{taskLabel(taskKind, language)}</small></header>
             <pre>{previewRules || tr("当前任务不注入写作风格规则。", "No style rules are added for this task.")}</pre>
           </section>
+          <div className="zchat-style-toolbar">
+            <span>{tr("技法卡可导出为文件，在不同作品或设备间复用。", "Export a technique card to reuse it across projects or devices.")}</span>
+            <button type="button" className="secondary" disabled={importing} onClick={async () => {
+              setImporting(true); setError("");
+              const result = await api<any>("ai:style:import");
+              setImporting(false);
+              if (!result.ok) setError(result.error || tr("导入失败", "Import failed"));
+              else if (result.data) { await onReload(); }
+            }} data-fd-id="ai-style-import"><IconUpload />{importing ? tr("导入中…", "Importing…") : tr("导入技法卡", "Import card")}</button>
+          </div>
           <div className="zchat-style-list">
             <button type="button" className={!selectedIds.length ? "active" : ""} onClick={() => onSelectionChange([])}>
               <b>{tr("不使用风格卡", "No style card")}</b><small>{tr("恢复现有行为，不向普通聊天添加正文规则。", "Keep existing behavior; no writing rules are added to normal chat.")}</small>
@@ -104,7 +115,10 @@ export function StyleCardPanel({
                 <div className="zchat-style-row-actions">
                   <button type="button" title={tr("查看规则", "View rules")} onClick={() => setDetail(card)}>⌄</button>
                   <button type="button" title={tr("复制为自定义", "Copy as custom")} onClick={() => setEdit({ ...card, id: "", name: `${card.name}（自定义）`, builtin: 0 })}><IconCopy /></button>
-                  {!card.builtin && <button type="button" title={tr("编辑", "Edit")} onClick={() => setEdit(card)}>✎</button>}
+                  {!card.builtin && <>
+                    <button type="button" title={tr("导出技法卡", "Export technique card")} aria-label={tr("导出技法卡", "Export technique card")} data-fd-id="ai-style-export" onClick={async () => { const result = await api<any>("ai:style:export", card.id); if (!result.ok) setError(result.error || tr("导出失败", "Export failed")); }}><IconDownload /></button>
+                    <button type="button" title={tr("编辑", "Edit")} onClick={() => setEdit(card)}>✎</button>
+                  </>}
                   {!card.builtin && <button type="button" className="danger-text" title={tr("删除", "Delete")} onClick={() => setDeleteCard(card)}>×</button>}
                 </div>
               </div>
@@ -116,7 +130,7 @@ export function StyleCardPanel({
       )}
       {detail && <Modal title={styleLabel(detail, language).name} close={() => setDetail(null)}><p className="hint">{styleLabel(detail, language).description}</p><p className="hint">{tr("适用任务：", "Tasks: ")}{detail.tasks.map((x) => taskLabel(x, language)).join(language === "en" ? ", " : "、")}</p><pre className="zchat-style-rules">{detail.rules}</pre></Modal>}
       {edit && <StyleEditor card={edit} language={language} onCancel={() => setEdit(null)} onSaved={() => { setEdit(null); onReload(); }} onError={setError} />}
-      {deleteCard && <ConfirmDialog title={tr("删除自定义风格", "Delete custom style")} message={tr(`删除「${deleteCard.name}」？正在使用的作品会自动回到不使用风格卡。`, `Delete “${deleteCard.name}”? Novels using it will fall back to no style card.`)} confirmLabel={tr("删除", "Delete")} cancelLabel={tr("取消", "Cancel")} danger onCancel={() => setDeleteCard(null)} onConfirm={async () => { const r = await api("ai:style:delete", deleteCard.id); setDeleteCard(null); if (!r.ok) setError(r.error || "Delete failed"); else { onReload(); } }} />}
+      {deleteCard && <ConfirmDialog title={tr("删除自定义风格", "Delete custom style")} message={tr(`删除「${deleteCard.name}」？使用它的作品只会移除此卡，其他已选技法会保留。`, `Delete “${deleteCard.name}”? Novels using it will remove only this card; other selected techniques will remain.`)} confirmLabel={tr("删除", "Delete")} cancelLabel={tr("取消", "Cancel")} danger onCancel={() => setDeleteCard(null)} onConfirm={async () => { const r = await api("ai:style:delete", deleteCard.id); setDeleteCard(null); if (!r.ok) setError(r.error || "Delete failed"); else { onReload(); } }} />}
     </div>
   );
 }

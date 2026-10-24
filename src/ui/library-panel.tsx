@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { api, time, parseJson, parseTags, Empty, ConfirmDialog, kinds, AnyRow, UiLanguage } from "./shared";
+import { api, time, parseJson, parseTags, Empty, ConfirmDialog, Modal, kinds, AnyRow, UiLanguage } from "./shared";
 import {
   editorToLibraryContent,
   libraryContentToEditor,
@@ -57,6 +57,7 @@ export function LibraryPanel({
     [allItems, setAllItems] = useState<AnyRow[]>([]),
     [presence, setPresence] = useState<Record<string, AnyRow>>({}),
     [presenceTotal, setPresenceTotal] = useState(0),
+    [presenceDetail, setPresenceDetail] = useState<{ title: string; data: AnyRow; loading?: boolean; error?: string } | null>(null),
     [search, setSearch] = useState(""),
     [editing, setEditing] = useState<AnyRow | null>(null),
     [baseline, setBaseline] = useState<AnyRow | null>(null),
@@ -75,6 +76,7 @@ export function LibraryPanel({
     >(null);
   const draftVersion = useRef(0);
   const listSeq = useRef(0);
+  const presenceDetailSeq = useRef(0);
   const openedSourceRequest = useRef("");
   const leaveResolver = useRef<((ok: boolean) => void) | null>(null);
 
@@ -324,23 +326,13 @@ export function LibraryPanel({
   // 出场统计在主进程完成，避免把全书正文拉进渲染进程
   useEffect(() => {
     let live = true;
-    const entries = allItems
-      .filter((x) => x.kind === "character")
-      .map((x) => {
-        let alias: string[] = [];
-        try {
-          alias = String(JSON.parse(x.content_json || "{}").alias || "")
-            .split(/[,，、;；]+/)
-            .filter(Boolean);
-        } catch {}
-        return [x.title, ...alias];
-      });
-    if (!entries.length) {
+    const hasCharacters = allItems.some((item) => item.kind === "character");
+    if (!hasCharacters) {
       setPresence({});
       setPresenceTotal(0);
       return;
     }
-    api("characters:presence", { novelId: novel.id, entries }).then((r) => {
+    api("characters:presence", { novelId: novel.id }).then((r) => {
       if (r.ok && live) {
         setPresence(r.data.presence || {});
         setPresenceTotal(r.data.total || 0);
@@ -704,6 +696,65 @@ export function LibraryPanel({
                   updateEditing({ note: e.target.value })
                 }
               />
+              <fieldset className="character-progressions" data-fd-id="character-progressions">
+                <legend>{tr("阶段变化", "Character progression")}</legend>
+                <p className="hint">{tr("记录作者确认的变化及发生章节。引用人物卡时，AI 会看到这些记录；不会根据名字命中自动推断。", "Record author-confirmed changes and their chapters. These notes enter AI context with the character card; name matches never infer a change.")}</p>
+                {(Array.isArray(editing.progressions) ? editing.progressions : []).map((progression: AnyRow, index: number) => {
+                  const progressions = Array.isArray(editing.progressions) ? editing.progressions : [];
+                  const patchProgression = (patch: AnyRow) => updateEditing({
+                    progressions: progressions.map((entry: AnyRow, entryIndex: number) => entryIndex === index ? { ...entry, ...patch } : entry),
+                  });
+                  return (
+                    <div className="character-progression-row" key={index} data-fd-id={`character-progression-row-${index + 1}`}>
+                      <div className="character-progression-heading" data-fd-id={`character-progression-chapter-${index + 1}`}>
+                        <Select
+                          value={String(progression.chapterId || "")}
+                          aria-label={tr("阶段变化所属章节", "Progression chapter")}
+                          onValueChange={(value) => {
+                            const linked = chapters.find((candidate) => candidate.id === value);
+                            patchProgression({ chapterId: value, chapterTitle: linked?.title || "" });
+                          }}
+                          options={[
+                            { value: "", label: tr("选择发生章节", "Choose a chapter") },
+                            ...chapters.map((item) => ({
+                              value: item.id,
+                              label: `${volumes.find((volume) => volume.id === item.volume_id)?.title ? `${volumes.find((volume) => volume.id === item.volume_id)?.title} · ` : ""}${item.title}`,
+                            })),
+                          ]}
+                        />
+                        <button type="button" className="icon" title={tr("移除阶段变化", "Remove progression")} aria-label={tr("移除阶段变化", "Remove progression")} onClick={() => updateEditing({ progressions: progressions.filter((_: AnyRow, entryIndex: number) => entryIndex !== index) })}>×</button>
+                      </div>
+                      <input
+                        placeholder={tr("变化摘要（如：由戒备转为暂时合作）", "Change (e.g. guarded → temporary alliance)")}
+                        maxLength={160}
+                        value={progression.change || ""}
+                        onChange={(event) => patchProgression({ change: event.target.value })}
+                        data-fd-id={`character-progression-change-${index + 1}`}
+                      />
+                      <textarea
+                        rows={2}
+                        placeholder={tr("依据 / 触发事件（可选）", "Evidence or triggering event (optional)")}
+                        maxLength={1200}
+                        value={progression.evidence || ""}
+                        onChange={(event) => patchProgression({ evidence: event.target.value })}
+                        data-fd-id={`character-progression-evidence-${index + 1}`}
+                      />
+                    </div>
+                  );
+                })}
+                <button
+                  type="button"
+                  className="secondary character-progression-add"
+                  disabled={(Array.isArray(editing.progressions) ? editing.progressions.length : 0) >= 100}
+                  onClick={() => updateEditing({
+                    progressions: [
+                      ...(Array.isArray(editing.progressions) ? editing.progressions : []),
+                      { chapterId: chapter?.id || "", chapterTitle: chapter?.title || "", change: "", evidence: "" },
+                    ],
+                  })}
+                  data-fd-id="character-progression-add"
+                >＋ {tr("添加阶段变化", "Add progression")}</button>
+              </fieldset>
             </>
           )}
           {kind === "foreshadow" && (
@@ -839,7 +890,7 @@ export function LibraryPanel({
           {sortedItems.map((x) => {
             const c = parseJson(x.content_json);
             const pres =
-              kind === "character" ? presence[x.title] : undefined;
+              kind === "character" ? presence[x.id] : undefined;
             return (
               <article
                 onClick={() => openEditor(x)}
@@ -885,9 +936,24 @@ export function LibraryPanel({
                     </span>
                   )}
                   {pres && (
-                    <span
-                      className={`badge ${pres.appearances ? "confirmed" : "idea"}`}
-                      title={tr(`按全书 ${presenceTotal} 章顺序统计`, `Calculated across ${presenceTotal} chapters`)}
+                    <button
+                      type="button"
+                      className={`badge character-presence-trigger ${pres.appearances ? "confirmed" : "idea"}`}
+                      title={tr(`按全书 ${presenceTotal} 章统计；点击查看命中片段`, `Calculated across ${presenceTotal} chapters; click to inspect matches`)}
+                      aria-label={tr(`${x.title}出场 ${pres.appearances} 章，${pres.mentions || 0} 次提及；查看详情`, `${x.title} appears in ${pres.appearances} chapters, ${pres.mentions || 0} mentions; view details`)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        const sequence = ++presenceDetailSeq.current;
+                        setPresenceDetail({ title: x.title, data: pres, loading: true });
+                        api<any>("characters:presence", { novelId: novel.id, characterId: x.id, includeMatches: true }).then((result) => {
+                          if (sequence !== presenceDetailSeq.current) return;
+                          if (!result.ok) {
+                            setPresenceDetail({ title: x.title, data: pres, error: result.error || tr("读取提及详情失败", "Could not load mention details") });
+                            return;
+                          }
+                          setPresenceDetail({ title: x.title, data: result.data.presence?.[x.id] || pres });
+                        });
+                      }}
                     >
                       {pres.appearances
                         ? tr(`出场 ${pres.appearances} 章${
@@ -896,7 +962,7 @@ export function LibraryPanel({
                               : ""
                           }`, `Appears in ${pres.appearances} chapters${pres.sinceLast >= 3 ? ` · absent for ${pres.sinceLast} chapters` : ""}`)
                         : tr("未出场", "Not present")}
-                    </span>
+                    </button>
                   )}
                 </div>
                 <p>
@@ -926,6 +992,35 @@ export function LibraryPanel({
             />
           )}
       </div>
+      {presenceDetail && (
+        <Modal title={tr(`${presenceDetail.title} · 全书提及`, `${presenceDetail.title} · Manuscript mentions`)} close={() => { presenceDetailSeq.current++; setPresenceDetail(null); }}>
+          <p className="hint">{tr(
+            `扫描 ${presenceTotal} 章，命中 ${presenceDetail.data.appearances} 章、${presenceDetail.data.mentions || 0} 次。匹配人物名及别名；请结合片段核对同名词。`,
+            `Scanned ${presenceTotal} chapters; matched ${presenceDetail.data.appearances} chapters and ${presenceDetail.data.mentions || 0} occurrences. Names and aliases are substring matches, so review snippets for false positives.`,
+          )}</p>
+          {presenceDetail.loading && <p className="hint">{tr("正在扫描相关章节…", "Scanning matching chapters…")}</p>}
+          {presenceDetail.error && <p className="hint error" role="alert">{presenceDetail.error}</p>}
+          {!presenceDetail.loading && !presenceDetail.error && <div className="character-presence-list">
+            {(presenceDetail.data.matches || []).map((match: AnyRow) => {
+              const targetChapter = chapters.find((candidate) => candidate.id === match.chapterId);
+              return (
+                <article key={match.chapterId}>
+                  <button type="button" disabled={!targetChapter || !onSelectChapter} onClick={() => {
+                    if (targetChapter) onSelectChapter?.(targetChapter);
+                    setPresenceDetail(null);
+                  }}>{match.chapterTitle}</button>
+                  <small>{tr(`${match.mentions} 次 · 匹配：${match.matchedTerms.join("、")}`, `${match.mentions} hit(s) · matched: ${match.matchedTerms.join(", ")}`)}</small>
+                  <p>{match.snippet}</p>
+                </article>
+              );
+            })}
+            {presenceDetail.data.appearances > (presenceDetail.data.matches || []).length && (
+              <p className="hint">{tr("列表仅展示最近 200 个命中章节。", "Showing the latest 200 matching chapters only.")}</p>
+            )}
+            {!presenceDetail.data.appearances && <p className="hint">{tr("目前没有找到名称或别名命中。", "No name or alias matches found.")}</p>}
+          </div>}
+        </Modal>
+      )}
       {graphOpen && detailTarget && createPortal(
         <section className="library-detail-surface relation-detail" aria-label={tr("人物关系图", "Relationship graph")}>
           <header>

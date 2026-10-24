@@ -10,6 +10,10 @@ export function libraryContentToEditor(row: {
   const c = parseJson(row.content_json || "{}");
   const next: any = { ...row, ...c };
   const kind = row.kind || next.kind;
+  if (kind === "character")
+    next.progressions = Array.isArray(next.progressions)
+      ? next.progressions.filter((entry: any) => entry && typeof entry === "object" && !Array.isArray(entry))
+      : [];
   if (kind === "relation") {
     next.body = c.label ?? c.body ?? "";
     next.from = c.from ?? "";
@@ -72,6 +76,15 @@ export function editorToLibraryContent(kind: string, editing: any): any {
       taboo: editing.taboo || "",
       knowledge: editing.knowledge || "",
       checklist: editing.checklist || "",
+      progressions: (Array.isArray(editing.progressions) ? editing.progressions : [])
+        .slice(0, 100)
+        .map((entry: any) => ({
+          chapterId: String(entry?.chapterId || ""),
+          chapterTitle: String(entry?.chapterTitle || "").trim().slice(0, 120),
+          change: String(entry?.change || "").trim().slice(0, 160),
+          evidence: String(entry?.evidence || "").trim().slice(0, 1200),
+        }))
+        .filter((entry: any) => entry.change || entry.evidence),
     };
   if (kind === "world")
     return { body: editing.body || "", category: editing.category || "" };
@@ -112,6 +125,12 @@ export function normalizeLibraryDraft(kind: string, d: any) {
     taboo: String(d.taboo || ""),
     knowledge: String(d.knowledge || ""),
     checklist: String(d.checklist || ""),
+    progressions: (Array.isArray(d.progressions) ? d.progressions : []).map((entry: any) => ({
+      chapterId: String(entry?.chapterId || ""),
+      chapterTitle: String(entry?.chapterTitle || ""),
+      change: String(entry?.change || ""),
+      evidence: String(entry?.evidence || ""),
+    })),
     category: String(d.category || ""),
     tagsText: String(d.tagsText || ""),
     chapterId: d.chapter_id || d.chapterId || "",

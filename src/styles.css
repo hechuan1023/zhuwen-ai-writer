@@ -831,6 +831,29 @@ button:disabled {
 .badge.confirmed {
   background: #d5e5db;
 }
+.character-presence-trigger {
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  line-height: inherit;
+}
+.character-presence-trigger:hover { box-shadow: inset 0 0 0 1px var(--accent); }
+.character-presence-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.character-presence-list { display: grid; gap: 8px; max-height: 55vh; overflow: auto; overscroll-behavior: contain; }
+.character-presence-list article { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); }
+.character-presence-list article > button { justify-self: start; border: 0; padding: 0; background: transparent; color: var(--accent); font-weight: 650; cursor: pointer; }
+.character-presence-list article > button:disabled { color: var(--muted); cursor: default; }
+.character-presence-list article > small { color: var(--muted); font-size: 10px; }
+.character-presence-list article > p { margin: 2px 0 0; color: var(--ink); font-size: 12px; line-height: 1.55; white-space: normal; }
+.character-progressions { display: grid; gap: var(--sp-2); min-width: 0; margin: 4px 0; padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: color-mix(in srgb, var(--panel) 42%, var(--paper)); }
+.character-progressions legend { padding: 0 5px; color: var(--ink); font-size: 12px; font-weight: 650; }
+.character-progressions > .hint { margin: 0; font-size: 10px; line-height: 1.5; }
+.character-progression-row { display: grid; gap: 7px; min-width: 0; padding: var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper); }
+.character-progression-heading { display: grid; grid-template-columns: minmax(0, 1fr) 30px; gap: 6px; align-items: center; }
+.character-progression-heading .zw-select-trigger { min-width: 0; width: 100%; }
+.character-progression-row textarea { min-height: 54px; resize: vertical; }
+.character-progression-add { justify-self: start; display: inline-flex; align-items: center; gap: 5px; }
 .library-edit {
   display: flex;
   flex-direction: column;
