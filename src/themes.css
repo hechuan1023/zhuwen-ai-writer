@@ -21,19 +21,22 @@
 }
 .theme-dark .topbar,
 .theme-dark .status,
-.theme-dark button,
-.theme-dark input,
-.theme-dark textarea,
-.theme-dark select,
+.theme-dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(.zchat input),
+.theme-dark textarea:not(.zchat textarea),
+.theme-dark select:not(.zchat select),
 .theme-dark .library-list article {
-  background: #2b2f2d;
-  color: #e3e5e1;
+  background: var(--panel);
+  color: var(--ink);
+  border-color: var(--line);
 }
 .theme-dark .chapter-row:hover {
-  background: #373c39;
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
 }
 .theme-dark .chapter-row.active {
-  background: #3d5048;
+  background: color-mix(in srgb, var(--accent) 22%, var(--panel));
+}
+.theme-dark .library-list article:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
 }
 .chapter-row .more {
   display: none;
@@ -60,5 +63,5 @@
   left: -3px;
 }
 .resizer:hover {
-  background: #72998a66;
+  background: color-mix(in srgb, var(--accent) 42%, transparent);
 }

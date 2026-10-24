@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, time, PromptDialog, Modal, AnyRow, UiLanguage } from "./shared";
 import { Select } from "./select";
 
@@ -43,6 +43,7 @@ export function IoPanel({
   language?: UiLanguage;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
+  const epubPreviewReaderRef = useRef<HTMLDivElement>(null);
   const [imported, setImported] = useState<any>(null),
     [importBusy, setImportBusy] = useState(false),
     [operationBusy, setOperationBusy] = useState(""),
@@ -51,6 +52,8 @@ export function IoPanel({
     [bookChapters, setBookChapters] = useState<AnyRow[]>([]),
     [bookVolumes, setBookVolumes] = useState<AnyRow[]>([]),
     [epubPreviewOpen, setEpubPreviewOpen] = useState(false),
+    [epubPreviewPage, setEpubPreviewPage] = useState<"cover" | "toc" | "chapter">("cover"),
+    [epubTocPage, setEpubTocPage] = useState(0),
     [epubPreviewChapterId, setEpubPreviewChapterId] = useState(""),
     [epubPreviewChapter, setEpubPreviewChapter] = useState<AnyRow | null>(null),
     [epubPreviewBusy, setEpubPreviewBusy] = useState(false),
@@ -91,6 +94,11 @@ export function IoPanel({
     : exportScope === "volume"
       ? orderedChapters.filter((item) => item.volume_id === chapter?.volume_id)
       : orderedChapters;
+  const epubPreviewChapterIndex = scopedChapters.findIndex((item) => item.id === epubPreviewChapterId);
+  const epubTocPageSize = 100;
+  const epubTocPageCount = Math.max(1, Math.ceil(scopedChapters.length / epubTocPageSize));
+  const epubTocStart = epubTocPage * epubTocPageSize;
+  const epubTocChapters = scopedChapters.slice(epubTocStart, epubTocStart + epubTocPageSize);
   const load = () =>
     api("backup:list", novel.id).then((r) => r.ok && setBackups(r.data));
   useEffect(() => {
@@ -128,6 +136,9 @@ export function IoPanel({
     });
     return () => { active = false; };
   }, [epubPreviewOpen, epubPreviewChapterId, notify, language]);
+  useEffect(() => {
+    epubPreviewReaderRef.current?.scrollTo({ top: 0 });
+  }, [epubPreviewOpen, epubPreviewPage, epubPreviewChapterId]);
   async function saveAuto(next: any) {
     const previous = autoCfg;
     setAutoCfg(next);
@@ -299,6 +310,8 @@ export function IoPanel({
             onClick={() => {
               if (!scopedChapters.length) return notify(tr("当前范围没有可预览的章节", "No chapters are available in this export scope"));
               setEpubPreviewChapterId(scopedChapters[0].id);
+              setEpubPreviewPage("cover");
+              setEpubTocPage(0);
               setEpubPreviewOpen(true);
             }}
           >
@@ -614,30 +627,107 @@ export function IoPanel({
         >
           <div className="epub-preview-dialog">
             <div className="epub-preview-toolbar">
+              <div className="epub-preview-tabs" role="group" aria-label={tr("预览页面", "Preview page")}>
+                {([
+                  ["cover", tr("封面", "Cover")],
+                  ["toc", tr("目录", "Contents")],
+                  ["chapter", tr("正文", "Chapter")],
+                ] as const).map(([page, label]) => (
+                  <button
+                    type="button"
+                    key={page}
+                    className={epubPreviewPage === page ? "active" : ""}
+                    aria-pressed={epubPreviewPage === page}
+                    onClick={() => setEpubPreviewPage(page)}
+                  >{label}</button>
+                ))}
+              </div>
               <label>
                 {tr("预览章节", "Preview chapter")}
                 <Select
                   value={epubPreviewChapterId}
                   aria-label={tr("选择预览章节", "Choose preview chapter")}
-                  onValueChange={setEpubPreviewChapterId}
+                  onValueChange={(id) => {
+                    setEpubPreviewChapterId(id);
+                    setEpubPreviewPage("chapter");
+                  }}
                   options={scopedChapters.map((item) => ({
                     value: item.id,
                     label: `${bookVolumes.find((volume) => volume.id === item.volume_id)?.title ? `${bookVolumes.find((volume) => volume.id === item.volume_id)?.title} · ` : ""}${item.title}`,
                   }))}
                 />
               </label>
-              <span>{tr(`${scopedChapters.length} 章在导出范围内`, `${scopedChapters.length} chapters in export scope`)}</span>
+              <div className="epub-preview-nav">
+                <button
+                  type="button"
+                  aria-label={tr("上一章", "Previous chapter")}
+                  title={tr("上一章", "Previous chapter")}
+                  disabled={epubPreviewChapterIndex <= 0}
+                  onClick={() => {
+                    setEpubPreviewChapterId(scopedChapters[epubPreviewChapterIndex - 1]?.id || "");
+                    setEpubPreviewPage("chapter");
+                  }}
+                >‹</button>
+                <span>{epubPreviewChapterIndex >= 0 ? `${epubPreviewChapterIndex + 1} / ` : ""}{scopedChapters.length} {tr("章", "chapters")}</span>
+                <button
+                  type="button"
+                  aria-label={tr("下一章", "Next chapter")}
+                  title={tr("下一章", "Next chapter")}
+                  disabled={epubPreviewChapterIndex < 0 || epubPreviewChapterIndex >= scopedChapters.length - 1}
+                  onClick={() => {
+                    setEpubPreviewChapterId(scopedChapters[epubPreviewChapterIndex + 1]?.id || "");
+                    setEpubPreviewPage("chapter");
+                  }}
+                >›</button>
+              </div>
             </div>
-            <div className="epub-preview-reader">
-              {novel.cover_path && String(novel.cover_path).startsWith("data:image/") ? (
-                <div className="epub-preview-cover"><img src={novel.cover_path} alt={tr(`${novel.title || "作品"}封面`, `${novel.title || "Novel"} cover`)} /></div>
-              ) : (
-                <div className="epub-preview-cover epub-preview-cover-empty">{tr("无封面", "No cover")}</div>
+            <div className="epub-preview-reader" ref={epubPreviewReaderRef}>
+              {epubPreviewPage === "cover" && <>
+                {novel.cover_path && String(novel.cover_path).startsWith("data:image/") ? (
+                  <div className="epub-preview-cover"><img src={novel.cover_path} alt={tr(`${novel.title || "作品"}封面`, `${novel.title || "Novel"} cover`)} /></div>
+                ) : (
+                  <div className="epub-preview-cover epub-preview-cover-empty">{tr("无封面", "No cover")}</div>
+                )}
+                <header className="epub-preview-titlepage">
+                  <h2>{novel.title || tr("未命名作品", "Untitled novel")}</h2>
+                  {novel.author && <p>{novel.author}</p>}
+                </header>
+              </>}
+              {epubPreviewPage === "toc" && (
+                <nav className="epub-preview-toc" aria-label={tr("EPUB 目录预览", "EPUB table of contents preview")}>
+                  <h2>{tr("目录", "Contents")}</h2>
+                  <div className="epub-preview-toc-pages">
+                    <button type="button" disabled={epubTocPage <= 0} onClick={() => setEpubTocPage((page) => Math.max(0, page - 1))}>{tr("上一页", "Previous")}</button>
+                    <span>{scopedChapters.length ? `${epubTocStart + 1}–${Math.min(epubTocStart + epubTocPageSize, scopedChapters.length)}` : "0"} / {scopedChapters.length} · {epubTocPage + 1}/{epubTocPageCount}</span>
+                    <button type="button" disabled={epubTocPage >= epubTocPageCount - 1} onClick={() => setEpubTocPage((page) => Math.min(epubTocPageCount - 1, page + 1))}>{tr("下一页", "Next")}</button>
+                  </div>
+                  <ol>
+                    {epubTocChapters.map((item, pageIndex) => {
+                      const index = epubTocStart + pageIndex;
+                      return (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          className={item.id === epubPreviewChapterId ? "active" : ""}
+                          aria-current={item.id === epubPreviewChapterId ? "location" : undefined}
+                          onClick={() => {
+                            setEpubPreviewChapterId(item.id);
+                            setEpubPreviewPage("chapter");
+                          }}
+                        >
+                          <span className="epub-preview-toc-number">{String(index + 1).padStart(2, "0")}</span>
+                          <span>{item.title || tr(`第 ${index + 1} 章`, `Chapter ${index + 1}`)}</span>
+                          {item.volume_id && bookVolumes.find((volume) => volume.id === item.volume_id)?.title && (
+                            <small>{bookVolumes.find((volume) => volume.id === item.volume_id)?.title}</small>
+                          )}
+                        </button>
+                      </li>
+                      );
+                    })}
+                  </ol>
+                </nav>
               )}
-              <header className="epub-preview-titlepage">
-                <h2>{novel.title || tr("未命名作品", "Untitled novel")}</h2>
-                {novel.author && <p>{novel.author}</p>}
-              </header>
+              {epubPreviewPage === "chapter" && <>
               {epubPreviewBusy ? (
                 <p className="hint" role="status">{tr("正在读取章节…", "Loading chapter…")}</p>
               ) : epubPreviewChapter ? (
@@ -668,6 +758,7 @@ export function IoPanel({
               ) : (
                 <p className="hint" role="alert">{tr("无法加载预览章节。", "Could not load the preview chapter.")}</p>
               )}
+              </>}
             </div>
             <div className="row end epub-preview-actions">
               <button type="button" onClick={() => setEpubPreviewOpen(false)}>{tr("返回修改设置", "Back to settings")}</button>

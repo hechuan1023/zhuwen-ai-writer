@@ -21,6 +21,9 @@ function styleLabel(card: StyleCard, language: string) {
     "style-cultural-modernization": ["Cultural translation", "Put traditional culture into character action and modern emotional stakes."],
     "style-urban-workplace-agency": ["Urban work & lived detail", "Ground urban stories in concrete work processes, interests, and life choices."],
     "style-fantasy-social-fusion": ["Fantasy & social systems", "Make institutions, resources, and social pressures part of a coherent fantasy world."],
+    "style-resource-management-loop": ["Resource & settlement loop", "Connect investment, work, visible gains, costs, and the next bottleneck."],
+    "style-relationship-progression": ["Relationship progression", "Use goals, boundaries, choices, and concrete actions to move relationships."],
+    "style-rule-instance-progression": ["Rule-based instances", "Use verifiable rules, active testing, staged payoffs, and a persistent arc."],
   };
   const [name, description] = labels[card.id] || [card.name, card.description];
   return { name, description };
@@ -60,6 +63,24 @@ const TECHNIQUE_PRESETS = [
     name: ["现实机制幻想连载", "Social-systems fantasy serial"],
     description: ["世界规则 + 成长代价 + 求生行动 + 阶段回报", "World rules + growth costs + survival actions + staged payoff"],
     cardIds: ["style-fantasy-social-fusion", "style-growth-progression", "style-close-survival", "style-serial-hook-payoff"],
+  },
+  {
+    id: "genre-resource-management",
+    name: ["经营建设连载", "Settlement & management serial"],
+    description: ["资源循环 + 群像协作 + 阶段回报", "Resource loops + ensemble cooperation + staged payoff"],
+    cardIds: ["style-resource-management-loop", "style-human-ensemble", "style-serial-hook-payoff"],
+  },
+  {
+    id: "genre-relationship-serial",
+    name: ["关系推进连载", "Relationship-driven serial"],
+    description: ["人物声线 + 关系位移 + 章节兑现", "Character voice + relationship shifts + serial payoff"],
+    cardIds: ["style-relationship-progression", "style-character-voice-tension", "style-serial-hook-payoff"],
+  },
+  {
+    id: "genre-rule-instance",
+    name: ["规则副本生存连载", "Rule-based survival serial"],
+    description: ["规则验证 + 求生行动 + 悬念兑现", "Rule testing + survival choices + mystery payoff"],
+    cardIds: ["style-rule-instance-progression", "style-close-survival", "style-suspense-information-control", "style-serial-hook-payoff"],
   },
 ];
 

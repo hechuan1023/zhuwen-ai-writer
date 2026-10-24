@@ -11,6 +11,8 @@ export function ContextDialog({
   historyCount,
   estimateTokens,
   ruleChars = 0,
+  payloadChars,
+  contextLimitChars = 300000,
   previewMessages,
   previewError,
   onClose,
@@ -22,6 +24,8 @@ export function ContextDialog({
   historyCount: number;
   estimateTokens: number;
   ruleChars?: number;
+  payloadChars?: number | null;
+  contextLimitChars?: number;
   previewMessages: AnyRow[] | null;
   previewError?: string | null;
   onClose: () => void;
@@ -54,16 +58,24 @@ export function ContextDialog({
     },
   ];
   const total = rows.reduce((n, r) => n + r.chars, 0) || 1;
+  const payloadPercent = payloadChars == null
+    ? null
+    : Math.round((payloadChars / contextLimitChars) * 100);
 
   return (
     <Modal title={tr("上下文与发送内容", "Context and payload")} close={onClose}>
       <div className="zchat-context">
         <p className="hint">
           {tr(
-            `本次合计约 ${estimateTokens.toLocaleString()} tokens（按字符数 ÷2 估算，非服务商精确计费）。`,
-            `About ${estimateTokens.toLocaleString()} tokens total (chars ÷ 2 estimate, not provider billing).`,
+            payloadChars == null
+              ? `最终发送内容暂无法核对；下方为约 ${estimateTokens.toLocaleString()} tokens 的组成估算。`
+              : `最终发送内容 ${payloadChars.toLocaleString()} / ${contextLimitChars.toLocaleString()} 字（${payloadPercent}%）；约 ${estimateTokens.toLocaleString()} tokens，按字符数 ÷2 估算，非服务商精确计费。`,
+            payloadChars == null
+              ? `The final payload could not be verified; the breakdown below is an estimate of about ${estimateTokens.toLocaleString()} tokens.`
+              : `Final payload: ${payloadChars.toLocaleString()} / ${contextLimitChars.toLocaleString()} chars (${payloadPercent}%); about ${estimateTokens.toLocaleString()} tokens by chars ÷ 2, not provider billing.`,
           )}
         </p>
+        <p className="hint">{tr("下方分类用于定位内容来源；最终发送长度以上方实际消息预览为准。", "The categories below help locate content; use the actual message preview for the final payload length.")}</p>
         <div className="zchat-context-rows" data-fd-id="ai-context-breakdown">
           {rows.map((r) => (
             <div className="zchat-context-row" key={r.label}>

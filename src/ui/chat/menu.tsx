@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -16,6 +17,8 @@ export type MenuItem = {
   selected?: boolean;
   /** 次要说明，如快捷键或作用范围 */
   hint?: string;
+  /** 可选分组标题；分组标题不是可聚焦菜单项 */
+  group?: string;
   onSelect: () => void;
 };
 
@@ -142,30 +145,40 @@ export function ChatMenu({
           }}
         >
           {items.map((it, i) => (
-            <button
-              key={it.id}
-              ref={(el) => {
-                itemRefs.current[i] = el;
-              }}
-              type="button"
-              role="menuitem"
-              tabIndex={i === active ? 0 : -1}
-              className={`zchat-menu-item ${it.danger ? "danger" : ""} ${it.disabled ? "disabled" : ""} ${it.selected ? "selected" : ""}`}
-              aria-current={it.selected ? "true" : undefined}
-              aria-disabled={it.disabled || undefined}
-              disabled={it.disabled}
-              data-fd-id={it.id}
-              onMouseEnter={() => !it.disabled && setActive(i)}
-              onClick={() => {
-                if (it.disabled) return;
-                close();
-                it.onSelect();
-              }}
-            >
-              {it.icon ? <span className="zchat-menu-icon">{it.icon}</span> : null}
-              <span className="zchat-menu-label">{it.label}</span>
-              {it.hint ? <small className="zchat-menu-hint">{it.hint}</small> : null}
-            </button>
+            <Fragment key={it.id}>
+              {it.group && (i === 0 || it.group !== items[i - 1]?.group) ? (
+                <div
+                  className={`zchat-menu-group ${i > 0 ? "separated" : ""}`}
+                  role="presentation"
+                  aria-hidden="true"
+                >
+                  {it.group}
+                </div>
+              ) : null}
+              <button
+                ref={(el) => {
+                  itemRefs.current[i] = el;
+                }}
+                type="button"
+                role="menuitem"
+                tabIndex={i === active ? 0 : -1}
+                className={`zchat-menu-item ${it.danger ? "danger" : ""} ${it.disabled ? "disabled" : ""} ${it.selected ? "selected" : ""}`}
+                aria-current={it.selected ? "true" : undefined}
+                aria-disabled={it.disabled || undefined}
+                disabled={it.disabled}
+                data-fd-id={it.id}
+                onMouseEnter={() => !it.disabled && setActive(i)}
+                onClick={() => {
+                  if (it.disabled) return;
+                  close();
+                  it.onSelect();
+                }}
+              >
+                {it.icon ? <span className="zchat-menu-icon">{it.icon}</span> : null}
+                <span className="zchat-menu-label">{it.label}</span>
+                {it.hint ? <small className="zchat-menu-hint">{it.hint}</small> : null}
+              </button>
+            </Fragment>
           ))}
         </div>
       )}

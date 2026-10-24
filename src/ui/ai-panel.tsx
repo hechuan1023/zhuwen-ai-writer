@@ -96,6 +96,8 @@ export function AiPanel({
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [previewMessages, setPreviewMessages] = useState<AnyRow[]>([]);
+  const [payloadChars, setPayloadChars] = useState<number | null>(null);
+  const payloadSeq = useRef(0);
   const [continuationId, setContinuationId] = useState<string | null>(null);
   const prevGenerating = useRef(false);
   const pendingContinue = useRef(false);
@@ -106,6 +108,7 @@ export function AiPanel({
   const conversation: string = session?.conversationId || "";
   const text: string = session?.text || "";
   const [draft, setDraft] = useState(text);
+  const [editorContextRevision, setEditorContextRevision] = useState(0);
   const draftRef = useRef(text);
   const lastSyncedText = useRef(text);
   const draftTimer = useRef<number | undefined>(undefined);
@@ -128,6 +131,12 @@ export function AiPanel({
     setDraft(text);
   }, [text]);
   useEffect(() => () => window.clearTimeout(draftTimer.current), []);
+  useEffect(() => {
+    if (!editor?.on || !editor?.off) return;
+    const onEditorUpdate = () => setEditorContextRevision((revision) => revision + 1);
+    editor.on("update", onEditorUpdate);
+    return () => editor.off("update", onEditorUpdate);
+  }, [editor]);
   // 退出前由 App 调用：立即提交 400ms 防抖中未发送的草稿
   const flushDraftRef = useRef<() => void>(() => {});
   flushDraftRef.current = flushDraft;
@@ -595,6 +604,58 @@ export function AiPanel({
     const resolved = resolveTemplateVars(contexts, ask);
     return { contexts: resolved.contexts, prompt: resolved.prompt, ask };
   }
+  function requestPayloadPreview(plan: { contexts: AnyRow[]; prompt: string }) {
+    return api<AnyRow[]>("ai:previewRequest", {
+      conversationId: conversation,
+      contexts: plan.contexts,
+      prompt: plan.prompt,
+      styleIds: activeStyleIds,
+      taskKind: mode,
+    });
+  }
+  function payloadCharCount(messages: AnyRow[]) {
+    return messages.reduce((total, message) => total + Array.from(String(message?.content || "")).length, 0);
+  }
+
+  useEffect(() => {
+    const seq = ++payloadSeq.current;
+    setPayloadChars(null);
+    const plan = buildSendPlan();
+    if (!plan) {
+      setPayloadChars(0);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void requestPayloadPreview(plan).then((result) => {
+        if (seq !== payloadSeq.current) return;
+        setPayloadChars(result.ok ? payloadCharCount(result.data || []) : null);
+      }).catch(() => {
+        if (seq === payloadSeq.current) setPayloadChars(null);
+      });
+    }, 320);
+    return () => {
+      window.clearTimeout(timer);
+      payloadSeq.current += 1;
+    };
+  }, [
+    draft,
+    contexts,
+    mode,
+    activeStyleIds,
+    conversation,
+    chapterId,
+    chapterTitle,
+    language,
+    editorContextRevision,
+    chapter?.revision,
+    chapter?.plain_text,
+    session?.chapter?.revision,
+    session?.chapter?.plain_text,
+    selectionText,
+    messages.length,
+    styleRuleChars,
+  ]);
+
   async function send() {
     if (!connection || !chapterId || generating) return;
     flushDraft();
@@ -602,8 +663,11 @@ export function AiPanel({
     const plan = buildSendPlan();
     if (!plan) return notify(mode === "naturalize" ? tr("请先添加正文选区，再执行自然化润色", "Select a manuscript excerpt before naturalizing") : tr("当前章节还没有正文，无法续写", "The current chapter is empty and cannot be continued"));
     if (!continuing && mode !== "naturalize" && !plan.ask) return;
-    const plannedChars = plan.contexts.reduce((n, x) => n + String(x.content || "").length, 0)
-      + historyChars + draftRef.current.length + styleRuleChars;
+    const payloadPreview = await requestPayloadPreview(plan);
+    if (!payloadPreview.ok)
+      return notify(payloadPreview.error || tr("无法核对本次上下文，未发送。", "Could not verify this request's context; nothing was sent."));
+    const plannedChars = payloadCharCount(payloadPreview.data || []);
+    setPayloadChars(plannedChars);
     if (plannedChars > contextLimitChars) {
       return notify(tr(
         `上下文已超过 30 万字上限（当前约 ${fmt(plannedChars)} 字），请减少引用或历史消息。`,
@@ -833,9 +897,9 @@ export function AiPanel({
     draftChars,
     styleRuleChars,
   );
-  const estimate = breakdown.estimateTokens;
   const contextLimitChars = 300000;
-  const contextPercent = Math.round((breakdown.totalChars / contextLimitChars) * 100);
+  const displayedPayloadChars = payloadChars ?? breakdown.totalChars;
+  const contextPercent = Math.round((displayedPayloadChars / contextLimitChars) * 100);
   const [contextOpen, setContextOpen] = useState(false);
   const [refPreview, setRefPreview] = useState<AnyRow | null>(null);
   const previewMessageSource = useCallback(async (messageId: string, source: AnyRow) => {
@@ -858,15 +922,11 @@ export function AiPanel({
       setPreviewMessages([]);
       return;
     }
-    const result = await api<AnyRow[]>("ai:previewRequest", {
-      conversationId: conversation,
-      contexts: plan.contexts,
-      prompt: plan.prompt,
-      styleIds: activeStyleIds,
-      taskKind: mode,
-    });
+    const result = await requestPayloadPreview(plan);
     if (seq !== previewSeq.current) return;
-    setPreviewMessages(result.ok ? result.data || [] : []);
+    const payload = result.ok ? result.data || [] : [];
+    setPreviewMessages(payload);
+    setPayloadChars(result.ok ? payloadCharCount(payload) : null);
   }
   function handleAddFromPicker(item: {
     label: string;
@@ -1263,8 +1323,8 @@ export function AiPanel({
           (mode === "continue" || mode === "naturalize" ? (mode === "naturalize" ? contexts.some((x) => x.kind === "selection") : true) : Boolean(draft.trim()))
         }
         contextSummary={tr(
-          `${fmt(breakdown.totalChars)} 字`,
-          `${fmt(breakdown.totalChars)} chars`,
+          `${fmt(displayedPayloadChars)} 字`,
+          `${fmt(displayedPayloadChars)} chars`,
         )}
         contextPercent={contextPercent}
         contextLimitLabel={tr("/30万", "/300k")}
@@ -1378,7 +1438,9 @@ export function AiPanel({
           draftChars={draftChars}
           historyCount={historyCount}
           ruleChars={styleRuleChars}
-          estimateTokens={estimate}
+          estimateTokens={Math.ceil(displayedPayloadChars / 2)}
+          payloadChars={payloadChars}
+          contextLimitChars={contextLimitChars}
           previewMessages={previewMessages.length ? previewMessages : null}
           onClose={() => setContextOpen(false)}
         />

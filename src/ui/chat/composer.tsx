@@ -174,16 +174,29 @@ export function Composer({
   }, [draft]);
 
   const taskItems: MenuItem[] = useMemo(
-    () =>
-      tasks.map((t, index) => ({
-        id: t.id || `ai-task-${t.kind}-${index + 1}`,
-        label: t.label,
-        hint: t.hint,
-        selected: t.id ? t.id === activeTask?.id : t.kind === activeTaskKind,
-        icon: t.kind === "continue" ? <IconSparkle /> : <IconQuote />,
-        onSelect: () => onSelectTask(t.id || `ai-task-${t.kind}-${index + 1}`),
-      })),
-    [tasks, onSelectTask, activeTask?.id, activeTaskKind],
+    () => {
+      const groupFor = (kind: string) => {
+        if (kind === "chat") return tr("对话", "Conversation");
+        if (kind === "outline") return tr("构思与起草", "Plan & draft");
+        if (kind === "check") return tr("检查", "Review");
+        return tr("写作与改稿", "Write & revise");
+      };
+      const groupOrder = (kind: string) =>
+        kind === "chat" ? 0 : kind === "outline" ? 1 : kind === "check" ? 3 : 2;
+      return tasks
+        .map((task, index) => ({ task, index }))
+        .sort((a, b) => groupOrder(a.task.kind) - groupOrder(b.task.kind) || a.index - b.index)
+        .map(({ task: t, index }) => ({
+          id: t.id || `ai-task-${t.kind}-${index + 1}`,
+          label: t.label,
+          hint: t.hint,
+          group: groupFor(t.kind),
+          selected: t.id ? t.id === activeTask?.id : t.kind === activeTaskKind,
+          icon: t.kind === "continue" ? <IconSparkle /> : <IconQuote />,
+          onSelect: () => onSelectTask(t.id || `ai-task-${t.kind}-${index + 1}`),
+        }));
+    },
+    [tasks, onSelectTask, activeTask?.id, activeTaskKind, language],
   );
 
   return (
@@ -222,85 +235,91 @@ export function Composer({
         }}
       />
       <div className="zchat-composer-bar">
-        <button
-          type="button"
-          className="zchat-pill"
-          data-fd-id="ai-add-ref"
-          aria-label={tr("添加引用", "Add reference")}
-          title={tr("添加引用资料", "Add reference material")}
-          onClick={onOpenRefPicker}
-        >
-          <IconPlus />
-        </button>
-        {styleControl}
-        <ChatMenu
-          ariaLabel={tr("任务类型", "Task type")}
-          dataFdId="ai-task-menu"
-          trigger={
-            <>
-              <IconSparkle />
-              <span>{activeTask?.label || tr("对话", "Chat")}</span>
-              <IconChevronDown size={13} />
-            </>
-          }
-          triggerClassName="zchat-pill wide"
-          items={taskItems}
-        />
-        <button
-          type="button"
-          className="zchat-pill context"
-          data-fd-id="ai-context-entry"
-          aria-label={tr(
-            `查看上下文占用：${contextSummary}${contextLimitLabel ? ` ${contextLimitLabel}` : ""}，${Math.round(contextPercent)}%`,
-            `Context usage: ${contextSummary}${contextLimitLabel ? ` ${contextLimitLabel}` : ""}, ${Math.round(contextPercent)}%`,
+        <div className="zchat-composer-tools" data-fd-id="ai-composer-tools">
+          <button
+            type="button"
+            className="zchat-pill"
+            data-fd-id="ai-add-ref"
+            aria-label={tr("添加引用", "Add reference")}
+            title={tr("添加引用资料", "Add reference material")}
+            onClick={onOpenRefPicker}
+          >
+            <IconPlus />
+          </button>
+          {styleControl}
+          <ChatMenu
+            ariaLabel={tr("任务类型", "Task type")}
+            dataFdId="ai-task-menu"
+            trigger={
+              <>
+                <IconSparkle />
+                <span>{activeTask?.label || tr("对话", "Chat")}</span>
+                <IconChevronDown size={13} />
+              </>
+            }
+            triggerClassName="zchat-pill wide"
+            items={taskItems}
+          />
+        </div>
+        <div className="zchat-composer-actions" data-fd-id="ai-composer-actions">
+          <button
+            type="button"
+            className="zchat-pill context"
+            data-fd-id="ai-context-entry"
+            aria-label={tr(
+              `查看上下文占用：${contextSummary}${contextLimitLabel ? ` ${contextLimitLabel}` : ""}，${Math.round(contextPercent)}%`,
+              `Context usage: ${contextSummary}${contextLimitLabel ? ` ${contextLimitLabel}` : ""}, ${Math.round(contextPercent)}%`,
+            )}
+            title={tr("查看上下文占用与将要发送的内容", "View context usage and what will be sent")}
+            onClick={onOpenContext}
+          >
+            <span
+              className={`zchat-context-ring ${contextPercent >= 100 ? "over" : contextPercent >= 80 ? "warn" : ""}`}
+              style={{ "--context-progress": `${Math.min(100, Math.max(0, contextPercent))}%` } as React.CSSProperties}
+              aria-hidden="true"
+            >
+              <i />
+            </span>
+            <span className="zchat-context-summary" data-fd-id="ai-context-summary">{contextSummary}</span>
+            {contextLimitLabel ? <small className="zchat-context-limit">{contextLimitLabel}</small> : null}
+          </button>
+          <small className="zchat-enter-hint" aria-hidden="true">{tr("Enter 发送 · Shift+Enter 换行", "Enter to send · Shift+Enter for newline")}</small>
+          {generating ? (
+            <button
+              type="button"
+              className="zchat-send stop"
+              data-fd-id="ai-stop"
+              aria-label={tr("停止生成", "Stop generating")}
+              title={tr("停止生成", "Stop generating")}
+              onClick={onStop}
+            >
+              <IconStop />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="zchat-send"
+              data-fd-id="ai-send"
+              aria-keyshortcuts="Enter"
+              disabled={!canSend}
+              aria-label={
+                activeTaskKind === "continue"
+                  ? tr("生成续写", "Generate continuation")
+                  : tr("发送", "Send")
+              }
+              title={
+                canSend
+                  ? activeTaskKind === "continue"
+                    ? tr("生成续写（Enter）", "Generate continuation (Enter)")
+                    : tr("发送（Enter）", "Send (Enter)")
+                  : tr("请先输入内容", "Type a request first")
+              }
+              onClick={onSend}
+            >
+              <IconSend />
+            </button>
           )}
-          title={tr("查看上下文占用与将要发送的内容", "View context usage and what will be sent")}
-          onClick={onOpenContext}
-        >
-          <span
-            className={`zchat-context-ring ${contextPercent >= 100 ? "over" : contextPercent >= 80 ? "warn" : ""}`}
-            style={{ "--context-progress": `${Math.min(100, Math.max(0, contextPercent))}%` } as React.CSSProperties}
-            aria-hidden="true"
-          >
-            <i />
-          </span>
-          <span className="zchat-context-summary" data-fd-id="ai-context-summary">{contextSummary}</span>
-          {contextLimitLabel ? <small className="zchat-context-limit">{contextLimitLabel}</small> : null}
-        </button>
-        {generating ? (
-          <button
-            type="button"
-            className="zchat-send stop"
-            data-fd-id="ai-stop"
-            aria-label={tr("停止生成", "Stop generating")}
-            title={tr("停止生成", "Stop generating")}
-            onClick={onStop}
-          >
-            <IconStop />
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="zchat-send"
-            data-fd-id="ai-send"
-            disabled={!canSend}
-            aria-label={
-              activeTaskKind === "continue"
-                ? tr("生成续写", "Generate continuation")
-                : tr("发送", "Send")
-            }
-            title={
-              canSend
-                ? activeTaskKind === "continue"
-                  ? tr("生成续写（Enter）", "Generate continuation (Enter)")
-                  : tr("发送（Enter）", "Send (Enter)")
-                : tr("请先输入内容", "Type a request first")
-            }
-            onClick={onSend}
-          >
-            <IconSend />
-          </button>
-        )}
+        </div>
       </div>
       {(statusLine || activeTask?.hint) && (
         <div className="zchat-composer-status">
