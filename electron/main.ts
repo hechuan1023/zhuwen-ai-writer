@@ -13,7 +13,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { extractDocxTextBuffer } from "./docx";
 import { decodeImportBuffer } from "./text-import";
 import { writeVerifiedJson } from "./atomic-json";
-import { Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
+import { Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } from "docx";
 import { buildEpub } from "./epub";
 import {
   Db,
@@ -1290,6 +1290,37 @@ function registerIpc(userDir: string) {
           : `image/${ext || "png"}`;
     const dataUrl = `data:${mime};base64,${(await fs.promises.readFile(file)).toString("base64")}`;
     return ok({ dataUrl });
+  });
+  ipcMain.handle("chapters:chooseImage", async () => {
+    try {
+      const picked = await dialog.showOpenDialog({
+        title: "选择插入正文的图片",
+        filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] }],
+        properties: ["openFile"],
+      });
+      if (picked.canceled || !picked.filePaths[0]) return ok(null);
+      const stat = await fs.promises.stat(picked.filePaths[0]);
+      if (stat.size <= 0 || stat.size > 3 * 1024 * 1024)
+        return fail("图片为空或超过 3 MB，请选择较小的图片");
+      const bytes = await fs.promises.readFile(picked.filePaths[0]);
+      if (!bytes.length || bytes.length > 3 * 1024 * 1024)
+        return fail("图片为空或超过 3 MB，请选择较小的图片");
+      const mime = bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+        ? "image/png"
+        : bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+          ? "image/jpeg"
+          : bytes.subarray(0, 6).toString("ascii").match(/^GIF8[79]a$/)
+            ? "image/gif"
+            : bytes.subarray(0, 2).toString("ascii") === "BM"
+              ? "image/bmp"
+              : bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP"
+                ? "image/webp"
+                : "";
+      if (!mime) return fail("无法识别该图片格式，请选择有效的 PNG、JPEG、WebP、GIF 或 BMP 图片");
+      return ok({ dataUrl: `data:${mime};base64,${bytes.toString("base64")}` });
+    } catch (error) {
+      return fail(error);
+    }
   });
   ipcMain.handle("appearance:chooseBackground", async () => {
     const r = await dialog.showOpenDialog({
@@ -4118,6 +4149,84 @@ function renderText(n: any, rows: any[], p: any, md: boolean) {
   }
   return out.join("\n\n");
 }
+function docxImageDimensions(data: Buffer, mime: string): { width: number; height: number } | null {
+  if (mime === "image/png" && data.length >= 24)
+    return { width: data.readUInt32BE(16), height: data.readUInt32BE(20) };
+  if (mime === "image/gif" && data.length >= 10)
+    return { width: data.readUInt16LE(6), height: data.readUInt16LE(8) };
+  if (mime === "image/bmp" && data.length >= 26)
+    return { width: Math.abs(data.readInt32LE(18)), height: Math.abs(data.readInt32LE(22)) };
+  if (mime === "image/jpeg") {
+    let offset = 2;
+    while (offset + 4 < data.length) {
+      if (data[offset] !== 0xff) { offset += 1; continue; }
+      const marker = data[offset + 1];
+      const length = data.readUInt16BE(offset + 2);
+      if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker) && offset + 9 < data.length)
+        return { height: data.readUInt16BE(offset + 5), width: data.readUInt16BE(offset + 7) };
+      if (length < 2) break;
+      offset += 2 + length;
+    }
+  }
+  return null;
+}
+function makeDocxImage(node: any): ImageRun {
+  const src = String(node?.attrs?.src || "");
+  const match = /^data:(image\/(?:png|jpeg|webp|gif|bmp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(src);
+  if (!match || match[2].length % 4 !== 0) throw new Error("正文图片格式无效，无法导出 DOCX");
+  const mime = match[1];
+  if (mime === "image/webp") throw new Error("DOCX 暂不支持 WebP 正文图片，请将图片转换为 PNG、JPEG、GIF 或 BMP 后重试");
+  const data = Buffer.from(match[2], "base64");
+  if (!data.length || data.length > 3 * 1024 * 1024 || data.toString("base64") !== match[2])
+    throw new Error("正文图片为空或超过 3 MB，无法导出 DOCX");
+  const valid = mime === "image/png"
+    ? data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    : mime === "image/jpeg"
+      ? data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff
+      : mime === "image/gif"
+        ? /^GIF8[79]a$/.test(data.subarray(0, 6).toString("ascii"))
+        : data.subarray(0, 2).toString("ascii") === "BM";
+  if (!valid) throw new Error("正文图片内容与格式不匹配，无法导出 DOCX");
+  const natural = docxImageDimensions(data, mime);
+  const width = Number(node.attrs?.width) || natural?.width || 0;
+  const height = Number(node.attrs?.height) || natural?.height || 0;
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0)
+    throw new Error("无法读取正文图片尺寸，无法导出 DOCX");
+  const scale = Math.min(1, 560 / width, 760 / height);
+  return new ImageRun({
+    type: mime === "image/jpeg" ? "jpg" : mime.slice("image/".length) as "png" | "gif" | "bmp",
+    data,
+    transformation: { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) },
+  });
+}
+function docxInlineRuns(nodes: any[]): (TextRun | ImageRun)[] {
+  const runs: (TextRun | ImageRun)[] = [];
+  for (const node of nodes) {
+    if (node?.type === "image") {
+      runs.push(makeDocxImage(node));
+    } else if (node?.type === "hardBreak") {
+      runs.push(new TextRun({ break: 1 }));
+    } else if (node?.type === "text" && typeof node.text === "string") {
+      const marks = new Set((node.marks || []).map((mark: any) => mark.type));
+      runs.push(new TextRun({
+        text: node.text,
+        font: marks.has("code") ? "Consolas" : "宋体",
+        size: 24,
+        bold: marks.has("bold"),
+        italics: marks.has("italic"),
+        strike: marks.has("strike"),
+      }));
+    } else if (Array.isArray(node?.content)) {
+      runs.push(...docxInlineRuns(node.content));
+    }
+  }
+  return runs;
+}
+function docxText(node: any): string {
+  if (node?.type === "text") return String(node.text || "");
+  if (node?.type === "hardBreak") return "\n";
+  return Array.isArray(node?.content) ? node.content.map(docxText).join("") : "";
+}
 async function writeDocx(file: string, n: any, rows: any[], p: any) {
   const children: Paragraph[] = [];
   if (p.includeTitle !== false)
@@ -4146,14 +4255,32 @@ async function writeDocx(file: string, n: any, rows: any[], p: any) {
           pageBreakBefore: true,
         }),
       );
-    for (const line of c.plain_text.split(/\n+/).filter(Boolean))
-      children.push(
-        new Paragraph({
+    let document: any = null;
+    try { document = JSON.parse(c.content_json || ""); } catch {}
+    if (document?.type === "doc" && Array.isArray(document.content)) {
+      for (const block of document.content) {
+        if (block?.type === "image") {
+          children.push(new Paragraph({ children: [makeDocxImage(block)] }));
+          continue;
+        }
+        const runs = block?.type === "paragraph" && Array.isArray(block.content)
+          ? docxInlineRuns(block.content)
+          : [new TextRun({ text: docxText(block), font: "宋体", size: 24 })];
+        if (runs.length)
+          children.push(new Paragraph({
+            indent: block?.type === "paragraph" ? { firstLine: 480 } : undefined,
+            spacing: { line: 360, after: 120 },
+            children: runs,
+          }));
+      }
+    } else {
+      for (const line of String(c.plain_text || "").split(/\n+/).filter(Boolean))
+        children.push(new Paragraph({
           indent: { firstLine: 480 },
           spacing: { line: 360, after: 120 },
           children: [new TextRun({ text: line, font: "宋体", size: 24 })],
-        }),
-      );
+        }));
+    }
   }
   const doc = new Document({
     styles: { default: { document: { run: { font: "宋体", size: 24 } } } },

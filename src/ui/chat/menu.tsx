@@ -116,7 +116,7 @@ export function ChatMenu({
         data-fd-id={dataFdId}
         onClick={() => (open ? close() : setOpen(true))}
         onKeyDown={(e) => {
-          if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+          if (e.key === "ArrowDown") {
             if (!open) {
               e.preventDefault();
               setOpen(true);

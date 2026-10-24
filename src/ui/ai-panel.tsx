@@ -97,6 +97,7 @@ export function AiPanel({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [previewMessages, setPreviewMessages] = useState<AnyRow[]>([]);
   const [payloadChars, setPayloadChars] = useState<number | null>(null);
+  const [payloadPreviewStatus, setPayloadPreviewStatus] = useState<"idle" | "pending" | "checking" | "ready" | "error">("pending");
   const payloadSeq = useRef(0);
   const [continuationId, setContinuationId] = useState<string | null>(null);
   const prevGenerating = useRef(false);
@@ -620,17 +621,29 @@ export function AiPanel({
   useEffect(() => {
     const seq = ++payloadSeq.current;
     setPayloadChars(null);
+    setPayloadPreviewStatus("pending");
     const plan = buildSendPlan();
     if (!plan) {
       setPayloadChars(0);
+      setPayloadPreviewStatus("idle");
       return;
     }
     const timer = window.setTimeout(() => {
+      if (seq === payloadSeq.current) setPayloadPreviewStatus("checking");
       void requestPayloadPreview(plan).then((result) => {
         if (seq !== payloadSeq.current) return;
-        setPayloadChars(result.ok ? payloadCharCount(result.data || []) : null);
+        if (result.ok) {
+          setPayloadChars(payloadCharCount(result.data || []));
+          setPayloadPreviewStatus("ready");
+        } else {
+          setPayloadChars(null);
+          setPayloadPreviewStatus("error");
+        }
       }).catch(() => {
-        if (seq === payloadSeq.current) setPayloadChars(null);
+        if (seq === payloadSeq.current) {
+          setPayloadChars(null);
+          setPayloadPreviewStatus("error");
+        }
       });
     }, 320);
     return () => {
@@ -664,10 +677,13 @@ export function AiPanel({
     if (!plan) return notify(mode === "naturalize" ? tr("请先添加正文选区，再执行自然化润色", "Select a manuscript excerpt before naturalizing") : tr("当前章节还没有正文，无法续写", "The current chapter is empty and cannot be continued"));
     if (!continuing && mode !== "naturalize" && !plan.ask) return;
     const payloadPreview = await requestPayloadPreview(plan);
-    if (!payloadPreview.ok)
+    if (!payloadPreview.ok) {
+      setPayloadPreviewStatus("error");
       return notify(payloadPreview.error || tr("无法核对本次上下文，未发送。", "Could not verify this request's context; nothing was sent."));
+    }
     const plannedChars = payloadCharCount(payloadPreview.data || []);
     setPayloadChars(plannedChars);
+    setPayloadPreviewStatus("ready");
     if (plannedChars > contextLimitChars) {
       return notify(tr(
         `上下文已超过 30 万字上限（当前约 ${fmt(plannedChars)} 字），请减少引用或历史消息。`,
@@ -900,6 +916,43 @@ export function AiPanel({
   const contextLimitChars = 300000;
   const displayedPayloadChars = payloadChars ?? breakdown.totalChars;
   const contextPercent = Math.round((displayedPayloadChars / contextLimitChars) * 100);
+  const contextExceeded = payloadChars != null && payloadChars > contextLimitChars;
+  const hasSelectionReference = contexts.some((item) => item.kind === "selection");
+  const hasChapterText = Boolean(chapterText().trim());
+  const taskCanSend = mode === "continue"
+    ? hasChapterText
+    : mode === "naturalize"
+      ? hasSelectionReference
+      : Boolean(draft.trim());
+  const requestCanSend = Boolean(connection && chapterId && !generating && taskCanSend);
+  const contextCanSend = payloadPreviewStatus === "ready"
+    ? !contextExceeded
+    : payloadPreviewStatus === "error" && !contextExceeded;
+  const canSend = requestCanSend && contextCanSend;
+  const sendHint = !connection
+    ? tr("请先配置 AI 连接", "Configure an AI connection first")
+    : !chapterId
+      ? tr("请先选择章节", "Select a chapter first")
+      : mode === "naturalize" && !hasSelectionReference
+        ? tr("请先选择并引用正文片段", "Select and reference a manuscript excerpt first")
+        : mode === "continue" && !hasChapterText
+          ? tr("当前章节没有正文，暂时无法续写", "This chapter has no text to continue")
+          : !taskCanSend
+            ? tr("请先输入请求内容", "Enter a request first")
+            : payloadPreviewStatus === "pending"
+              ? tr("正在等待输入稳定后核对上下文…", "Waiting to verify the updated context…")
+              : payloadPreviewStatus === "checking"
+                ? tr("正在核对本次实际发送内容…", "Verifying the exact request payload…")
+                : contextExceeded
+                  ? tr("超过 30 万字上限，请减少引用或历史消息", "Over the 300k-character limit; remove references or older messages")
+                  : payloadPreviewStatus === "error"
+                    ? tr("上下文核对失败；点发送可重试，未核对前不会发送", "Context verification failed. Send to retry; nothing is sent until verified")
+                    : "";
+  const sendStatusLine = contextExceeded
+    ? sendHint
+    : payloadPreviewStatus === "pending" || payloadPreviewStatus === "checking" || payloadPreviewStatus === "error"
+      ? sendHint
+      : "";
   const [contextOpen, setContextOpen] = useState(false);
   const [refPreview, setRefPreview] = useState<AnyRow | null>(null);
   const previewMessageSource = useCallback(async (messageId: string, source: AnyRow) => {
@@ -1317,17 +1370,16 @@ export function AiPanel({
         onSend={() => void send()}
         generating={generating}
         onStop={() => api("ai:cancel", requestId)}
-        canSend={
-          Boolean(connection) &&
-          !generating &&
-          (mode === "continue" || mode === "naturalize" ? (mode === "naturalize" ? contexts.some((x) => x.kind === "selection") : true) : Boolean(draft.trim()))
-        }
+        canSend={canSend}
         contextSummary={tr(
           `${fmt(displayedPayloadChars)} 字`,
           `${fmt(displayedPayloadChars)} chars`,
         )}
         contextPercent={contextPercent}
+        contextExceeded={contextExceeded}
         contextLimitLabel={tr("/30万", "/300k")}
+        sendHint={sendHint}
+        sendStatusLine={sendStatusLine}
         onOpenContext={() => void openContext()}
         styleControl={
           <StyleCardPanel

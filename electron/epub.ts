@@ -1,10 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import JSZip from "jszip";
 
 type EpubChapter = {
   title: string;
   volume_title?: string | null;
   plain_text?: string | null;
+  content_json?: string | null;
 };
 
 type EpubOptions = {
@@ -34,6 +35,9 @@ const COVER_MIME_EXTENSIONS: Record<string, string> = {
   "image/bmp": "bmp",
 };
 
+type EmbeddedImage = { id: string; href: string; mime: string; data: Buffer };
+type EpubRenderState = { zip: JSZip; images: Map<string, EmbeddedImage>; imageBytes: number };
+
 function readCover(
   dataUrl: unknown,
 ): { mime: string; extension: string; data: Buffer } | null {
@@ -42,12 +46,83 @@ function readCover(
     /^data:(image\/(?:png|jpeg|webp|gif|bmp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(
       dataUrl,
     );
-  if (!match || match[2].length % 4 !== 0) throw new Error("作品封面格式无效，无法嵌入 EPUB");
+  if (!match || match[2].length % 4 !== 0) throw new Error("图片格式无效，无法嵌入 EPUB");
   const mime = match[1];
   const data = Buffer.from(match[2], "base64");
-  if (!data.length || data.length > 3 * 1024 * 1024)
-    throw new Error("作品封面为空或超过 3 MB，无法嵌入 EPUB");
+  if (!data.length || data.length > 3 * 1024 * 1024 || data.toString("base64") !== match[2])
+    throw new Error("图片为空或超过 3 MB，无法嵌入 EPUB");
+  const signatureValid = mime === "image/png"
+    ? data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    : mime === "image/jpeg"
+      ? data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff
+      : mime === "image/gif"
+        ? /^GIF8[79]a$/.test(data.subarray(0, 6).toString("ascii"))
+        : mime === "image/bmp"
+          ? data.subarray(0, 2).toString("ascii") === "BM"
+          : data.subarray(0, 4).toString("ascii") === "RIFF" && data.subarray(8, 12).toString("ascii") === "WEBP";
+  if (!signatureValid) throw new Error("图片内容与声明格式不匹配，无法嵌入 EPUB");
   return { mime, extension: COVER_MIME_EXTENSIONS[mime], data };
+}
+
+function renderImage(src: unknown, alt: unknown, state: EpubRenderState): string {
+  const image = readCover(src);
+  if (!image) throw new Error("正文图片数据无效，无法导出 EPUB");
+  const digest = createHash("sha256").update(image.data).digest("hex");
+  let asset = state.images.get(digest);
+  if (!asset) {
+    if (state.imageBytes + image.data.length > 20 * 1024 * 1024)
+      throw new Error("正文图片总大小超过 20 MB，无法导出 EPUB");
+    const extension = COVER_MIME_EXTENSIONS[image.mime];
+    asset = { id: `body-image-${state.images.size + 1}`, href: `images/body-${digest}.${extension}`, mime: image.mime, data: image.data };
+    state.images.set(digest, asset);
+    state.imageBytes += image.data.length;
+    state.zip.file(`EPUB/${asset.href}`, image.data);
+  }
+  return `<img src="../${asset.href}" alt="${xml(alt)}"/>`;
+}
+
+function renderContentNode(node: any, state: EpubRenderState): string {
+  if (!node || typeof node !== "object") return "";
+  if (node.type === "text") {
+    let content = xml(node.text || "");
+    for (const mark of node.marks || []) {
+      const tag = mark.type === "bold" ? "strong" : mark.type === "italic" ? "em" : mark.type === "strike" ? "s" : mark.type === "code" ? "code" : null;
+      if (tag) content = `<${tag}>${content}</${tag}>`;
+    }
+    return content;
+  }
+  if (node.type === "image") return renderImage(node.attrs?.src, node.attrs?.alt, state);
+  const children = Array.isArray(node.content)
+    ? node.content.map((child: any) => renderContentNode(child, state)).join("")
+    : "";
+  switch (node.type) {
+    case "doc": return children;
+    case "paragraph": return children ? `<p>${children}</p>` : "";
+    case "heading": return children ? `<h2>${children}</h2>` : "";
+    case "hardBreak": return "<br/>";
+    case "bulletList": return `<ul>${children}</ul>`;
+    case "orderedList": return `<ol>${children}</ol>`;
+    case "listItem": return `<li>${children}</li>`;
+    case "blockquote": return `<blockquote>${children}</blockquote>`;
+    default: return children;
+  }
+}
+
+function renderChapterBody(chapter: EpubChapter, state: EpubRenderState): string {
+  if (chapter.content_json) {
+    try {
+      const document = JSON.parse(chapter.content_json);
+      if (document?.type === "doc") return renderContentNode(document, state);
+    } catch {
+      // Older or damaged JSON falls back to the plain-text snapshot below.
+    }
+  }
+  return String(chapter.plain_text || "")
+    .split(/\r\n?|\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => `<p>${xml(line)}</p>`)
+    .join("\n");
 }
 
 function xml(value: unknown): string {
@@ -82,6 +157,7 @@ export async function buildEpub(
   const modified = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   const identifier = `urn:uuid:${randomUUID()}`;
   const zip = new JSZip();
+  const renderState: EpubRenderState = { zip, images: new Map(), imageBytes: 0 };
   const cover = readCover(novel.cover_path);
   const layouts = {
     standard: { lineHeight: "1.8", margin: "5%", paragraphGap: ".65em", indent: "2em" },
@@ -118,6 +194,7 @@ body { margin: ${layout.margin}; font-family: serif; }
 h1 { margin: 0 0 1.4em; text-align: center; font-size: 1.35em; line-height: 1.5; }
 .volume-title { margin: 0 0 1em; text-align: center; color: #666; font-size: .95em; }
 p { margin: 0 0 ${layout.paragraphGap}; text-indent: ${layout.indent}; }
+img { display: block; max-width: 100%; max-height: 80vh; object-fit: contain; margin: 1em auto; }
 .title-page { display: flex; min-height: 80vh; flex-direction: column; justify-content: center; text-align: center; }
 .title-page h1 { font-size: 2em; }
 .title-page p { text-indent: 0; }
@@ -146,12 +223,9 @@ p { margin: 0 0 ${layout.paragraphGap}; text-indent: ${layout.indent}; }
     if (options.includeVolume !== false && volume && volume !== previousVolume)
       body.push(`<p class="volume-title">${xml(volume)}</p>`);
     if (options.includeChapter !== false) body.push(`<h1>${xml(chapterTitle)}</h1>`);
-    const paragraphs = String(chapter.plain_text || "")
-      .split(/\r\n?|\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    body.push(...paragraphs.map((line) => `<p>${xml(line)}</p>`));
-    if (!paragraphs.length) body.push("<p></p>");
+    const chapterBody = renderChapterBody(chapter, renderState);
+    if (chapterBody) body.push(chapterBody);
+    if (!chapterBody) body.push("<p></p>");
     zip.file(`EPUB/text/${filename}`, xhtml(chapterTitle, body.join("\n")));
     return { id, filename, title: chapterTitle };
   });
@@ -189,6 +263,9 @@ p { margin: 0 0 ${layout.paragraphGap}; text-indent: ${layout.indent}; }
           '<item id="cover-page" href="text/cover.xhtml" media-type="application/xhtml+xml"/>',
         ]
       : []),
+    ...[...renderState.images.values()].map((image) =>
+      `<item id="${image.id}" href="${image.href}" media-type="${image.mime}"/>`,
+    ),
     ...(hasTitlePage
       ? ['<item id="title-page" href="text/title.xhtml" media-type="application/xhtml+xml"/>']
       : []),

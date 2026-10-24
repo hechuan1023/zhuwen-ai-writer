@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import { api, fmt, time, tx, UiLanguage, Empty, Modal, ConfirmDialog, AnyRow, readerFonts, emptyDoc } from "./shared";
 import { NovelEdit } from "./novel-edit";
@@ -624,6 +625,7 @@ export function Workspace({
           blockquote: false,
           horizontalRule: false,
         }),
+        Image.configure({ allowBase64: true, inline: false }),
         Placeholder.configure({
           placeholder: () =>
             languageRef.current === "en" ? "Start writing here…" : "从这里开始写作……",
@@ -1327,6 +1329,45 @@ export function Workspace({
           >
             <button onClick={() => setSummaryOpen(true)}>
               {tx(language, "summary")}
+            </button>
+            <button
+              disabled={!chapter}
+              title={tr("插入本地图片（PNG/JPEG/WebP/GIF/BMP，最大 3 MB）", "Insert a local image (PNG/JPEG/WebP/GIF/BMP, up to 3 MB)")}
+              onClick={async () => {
+                const targetChapterId = chapter?.id;
+                try {
+                  const result = await api<{ dataUrl: string }>("chapters:chooseImage");
+                  if (!result.ok || !result.data) {
+                    if (!result.ok)
+                      notify(result.error || tr("图片读取失败", "Could not read the image"));
+                    return;
+                  }
+                  if (!editor) return;
+                  const probe = document.createElement("img");
+                  const dimensions = await new Promise<{ width: number; height: number } | null>((resolve) => {
+                    probe.onload = () => resolve({ width: probe.naturalWidth, height: probe.naturalHeight });
+                    probe.onerror = () => resolve(null);
+                    probe.src = result.data!.dataUrl;
+                  });
+                  if (!dimensions?.width || !dimensions.height) {
+                    notify(tr("图片无法解码，请选择有效的图片文件", "The image could not be decoded. Choose a valid image file."));
+                    return;
+                  }
+                  if (chapterRef.current?.id !== targetChapterId) {
+                    notify(tr("章节已切换，请重新插入图片以避免放错章节", "The chapter changed. Reinsert the image to avoid placing it in the wrong chapter."));
+                    return;
+                  }
+                  editor.chain().focus().setImage({
+                    src: result.data.dataUrl,
+                    width: dimensions.width,
+                    height: dimensions.height,
+                  }).run();
+                } catch {
+                  notify(tr("图片读取失败", "Could not read the image"));
+                }
+              }}
+            >
+              {tr("插入图片…", "Insert image…")}
             </button>
             <button onClick={() => setModal("novel")}>{tx(language, "novelInfo")}</button>
             <button onClick={openStats}>{tx(language, "statistics")}</button>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { api, time, PromptDialog, Modal, AnyRow, UiLanguage } from "./shared";
 import { Select } from "./select";
 
@@ -27,6 +27,55 @@ function normalizeEpubCustomLayout(value: any): EpubCustomLayout {
     paragraphGapEm: bounded(value?.paragraphGapEm, 0.65, 0, 1.5),
     indentEm: bounded(value?.indentEm, 2, 0, 3),
   };
+}
+
+function renderPreviewInline(node: any, key: string): any {
+  if (!node || typeof node !== "object") return null;
+  if (node.type === "text") {
+    let content: any = node.text || "";
+    for (const mark of node.marks || []) {
+      const Tag = mark.type === "bold" ? "strong" : mark.type === "italic" ? "em" : mark.type === "strike" ? "s" : mark.type === "code" ? "code" : null;
+      if (Tag) content = <Tag key={`${key}-${mark.type}`}>{content}</Tag>;
+    }
+    return <Fragment key={key}>{content}</Fragment>;
+  }
+  if (node.type === "image") {
+    const src = String(node.attrs?.src || "");
+    if (!/^data:image\/(?:png|jpeg|webp|gif|bmp);base64,[A-Za-z0-9+/]+={0,2}$/.test(src) || src.length > 4 * 1024 * 1024) return null;
+    return <img key={key} src={src} alt={String(node.attrs?.alt || "")} />;
+  }
+  if (node.type === "hardBreak") return <br key={key} />;
+  return Array.isArray(node.content)
+    ? node.content.map((child: any, index: number) => renderPreviewInline(child, `${key}-${index}`))
+    : null;
+}
+
+function renderPreviewBlocks(chapter: AnyRow, layout: EpubCustomLayout, fallback: string) {
+  const styles = {
+    marginBottom: `${layout.paragraphGapEm}em`,
+    textIndent: `${layout.indentEm}em`,
+  };
+  try {
+    const doc = JSON.parse(String(chapter.content_json || ""));
+    if (doc?.type === "doc" && Array.isArray(doc.content))
+      return doc.content.slice(0, 36).map((node: any, index: number) => {
+        const content = renderPreviewInline(node, `epub-preview-${index}`);
+        if (!content) return null;
+        if (node.type === "image") return <figure key={`epub-preview-block-${index}`} className="epub-preview-figure">{content}</figure>;
+        return <p key={`epub-preview-block-${index}`} style={styles}>{content}</p>;
+      }).filter(Boolean);
+  } catch {}
+  return fallback.split(/\r\n?|\n/).map((line) => line.trim()).filter(Boolean).slice(0, 36).map((line, index) => (
+    <p key={`epub-preview-text-${index}`} style={styles}>{line}</p>
+  ));
+}
+
+function hasMorePreviewBlocks(chapter: AnyRow): boolean {
+  try {
+    const doc = JSON.parse(String(chapter.content_json || ""));
+    if (doc?.type === "doc" && Array.isArray(doc.content)) return doc.content.length > 36;
+  } catch {}
+  return String(chapter.plain_text || "").split(/\r\n?|\n/).filter((line) => line.trim()).length > 36;
 }
 
 export function IoPanel({
@@ -199,11 +248,9 @@ export function IoPanel({
     "no-indent": { lineHeight: 2, marginPercent: 6, paragraphGapEm: 0.9, indentEm: 0 },
   } as const;
   const previewLayout = epubLayout === "custom" ? epubCustomLayout : previewPreset[epubLayout];
-  const previewParagraphs = String(epubPreviewChapter?.plain_text || "")
-    .split(/\r\n?|\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 36);
+  const previewBlocks = epubPreviewChapter
+    ? renderPreviewBlocks(epubPreviewChapter, previewLayout, String(epubPreviewChapter.plain_text || ""))
+    : [];
   return (
     <div className="io">
       <section>
@@ -742,16 +789,8 @@ export function IoPanel({
                     <p className="epub-preview-volume">{bookVolumes.find((volume) => volume.id === epubPreviewChapter.volume_id)?.title}</p>
                   )}
                   <h3>{epubPreviewChapter.title}</h3>
-                  {previewParagraphs.length ? previewParagraphs.map((text, index) => (
-                    <p
-                      key={`${epubPreviewChapter.id}-${index}`}
-                      style={{
-                        marginBottom: `${previewLayout.paragraphGapEm}em`,
-                        textIndent: `${previewLayout.indentEm}em`,
-                      }}
-                    >{text}</p>
-                  )) : <p className="hint">{tr("本章暂无正文。", "This chapter has no text yet.")}</p>}
-                  {(String(epubPreviewChapter.plain_text || "").split(/\r\n?|\n/).filter((line) => line.trim()).length > 36) && (
+                  {previewBlocks.length ? previewBlocks : <p className="hint">{tr("本章暂无正文。", "This chapter has no text yet.")}</p>}
+                  {hasMorePreviewBlocks(epubPreviewChapter) && (
                     <p className="epub-preview-truncated">{tr("仅显示前 36 段预览；导出会包含本章全文。", "Preview shows the first 36 paragraphs; export includes the full chapter.")}</p>
                   )}
                 </article>

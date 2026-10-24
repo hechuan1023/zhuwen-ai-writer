@@ -116,8 +116,11 @@ export type ComposerProps = {
   /** 上下文入口 */
   contextSummary: string;
   contextPercent?: number;
+  contextExceeded?: boolean;
   contextLimitLabel?: string;
   onOpenContext: () => void;
+  sendHint?: string;
+  sendStatusLine?: string;
   /** 保存状态或会话级错误 */
   statusLine?: React.ReactNode;
   /** 可选的写作风格选择器，嵌入输入框工具栏 */
@@ -149,8 +152,11 @@ export function Composer({
   canSend,
   contextSummary,
   contextPercent = 0,
+  contextExceeded = false,
   contextLimitLabel,
   onOpenContext,
+  sendHint,
+  sendStatusLine,
   statusLine,
   styleControl,
   autoRefNotice,
@@ -218,6 +224,7 @@ export function Composer({
         className="zchat-input"
         data-fd-id="ai-input"
         rows={2}
+        aria-label={tr("AI 对话输入框", "AI message composer")}
         placeholder={
           activeTaskKind === "continue"
             ? tr("可选：写下续写要求，留空则顺着上文推进", "Optional: describe how to continue")
@@ -230,7 +237,7 @@ export function Composer({
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
-            if (!generating) onSend();
+            if (canSend) onSend();
           }
         }}
       />
@@ -274,7 +281,7 @@ export function Composer({
             onClick={onOpenContext}
           >
             <span
-              className={`zchat-context-ring ${contextPercent >= 100 ? "over" : contextPercent >= 80 ? "warn" : ""}`}
+              className={`zchat-context-ring ${contextExceeded ? "over" : contextPercent >= 80 ? "warn" : ""}`}
               style={{ "--context-progress": `${Math.min(100, Math.max(0, contextPercent))}%` } as React.CSSProperties}
               aria-hidden="true"
             >
@@ -307,13 +314,10 @@ export function Composer({
                   ? tr("生成续写", "Generate continuation")
                   : tr("发送", "Send")
               }
-              title={
-                canSend
-                  ? activeTaskKind === "continue"
-                    ? tr("生成续写（Enter）", "Generate continuation (Enter)")
-                    : tr("发送（Enter）", "Send (Enter)")
-                  : tr("请先输入内容", "Type a request first")
-              }
+              title={sendHint || (activeTaskKind === "continue"
+                ? tr("生成续写（Enter）", "Generate continuation (Enter)")
+                : tr("发送（Enter）", "Send (Enter)"))}
+              aria-description={sendHint || undefined}
               onClick={onSend}
             >
               <IconSend />
@@ -321,9 +325,10 @@ export function Composer({
           )}
         </div>
       </div>
-      {(statusLine || activeTask?.hint) && (
+      {(statusLine || sendStatusLine || activeTask?.hint) && (
         <div className="zchat-composer-status">
           {statusLine}
+          {sendStatusLine ? <span className={`zchat-send-status ${contextExceeded ? "error" : ""}`} id="ai-send-context-status" role="status" aria-live="polite">{sendStatusLine}</span> : null}
           {activeTask?.hint && !statusLine ? <span className="hint">{activeTask.hint}</span> : null}
         </div>
       )}

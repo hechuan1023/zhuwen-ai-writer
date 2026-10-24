@@ -23,6 +23,7 @@
     "jszip": "^3.10.2"
   },
   "devDependencies": {
+    "@tiptap/extension-image": "^3.31.3",
     "@tiptap/extension-placeholder": "^3.4.1",
     "@tiptap/react": "^3.4.1",
     "@tiptap/starter-kit": "^3.4.1",

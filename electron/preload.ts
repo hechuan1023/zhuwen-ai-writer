@@ -37,6 +37,7 @@ const allowedChannels = new Set([
   'backup:runAutoNow',
   'chapters:batchMove',
   'chapters:batchTrash',
+  'chapters:chooseImage',
   'chapters:create',
   'chapters:duplicate',
   'chapters:get',

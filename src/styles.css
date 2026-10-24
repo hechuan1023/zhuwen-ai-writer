@@ -500,6 +500,14 @@ button.danger-text:not(:disabled):hover {
   margin: 0 0 var(--reader-para, 0.25em);
   text-indent: 2em;
 }
+.manuscript img {
+  display: block;
+  max-width: min(100%, 720px);
+  max-height: 72vh;
+  object-fit: contain;
+  margin: 1.2em auto;
+  border-radius: 4px;
+}
 .manuscript p.is-editor-empty:first-child:before {
   content: attr(data-placeholder);
   float: left;
@@ -1402,6 +1410,17 @@ button.danger-text:not(:disabled):hover {
 .epub-preview-content p {
   margin-top: 0;
   white-space: pre-wrap;
+}
+.epub-preview-content .epub-preview-figure {
+  margin: 1em 0;
+  text-indent: 0;
+  text-align: center;
+}
+.epub-preview-content img {
+  display: inline-block;
+  max-width: 100%;
+  max-height: 56vh;
+  object-fit: contain;
 }
 .epub-preview-content .epub-preview-truncated {
   margin-top: 16px;
