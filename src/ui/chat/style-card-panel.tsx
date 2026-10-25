@@ -7,6 +7,27 @@ export type StyleCard = AnyRow & { tasks: string[]; version: number };
 export type StyleIntensity = "light" | "balanced" | "strong";
 type StyleComposition = { id: string; name: string; description: string; styleIds: string[]; updatedAt?: string };
 type StyleCardFilter = "all" | "continue" | "outline" | "polish" | "naturalize" | "custom";
+const PERSONAL_SAMPLE_MARKER = "\n\n[ZHUWEN_PERSONAL_STYLE_SAMPLE_V1]\n";
+const PERSONAL_SAMPLE_GUIDE = "作者提供的个人样文，仅用于抽象句长、节奏、视角距离和修辞密度；不得复用原句、人物、设定或情节。";
+
+function splitPersonalSample(storedRules: string) {
+  const markerIndex = storedRules.indexOf(PERSONAL_SAMPLE_MARKER);
+  if (markerIndex < 0) return { rules: storedRules, sample: "" };
+  const tail = storedRules.slice(markerIndex + PERSONAL_SAMPLE_MARKER.length);
+  const guidePrefix = `${PERSONAL_SAMPLE_GUIDE}\n`;
+  return {
+    rules: storedRules.slice(0, markerIndex),
+    sample: tail.startsWith(guidePrefix) ? tail.slice(guidePrefix.length) : tail,
+  };
+}
+
+function joinPersonalSample(rules: string, sample: string) {
+  const cleanRules = rules.trim();
+  const cleanSample = sample.trim();
+  return cleanSample
+    ? `${cleanRules}${PERSONAL_SAMPLE_MARKER}${PERSONAL_SAMPLE_GUIDE}\n${cleanSample}`
+    : cleanRules;
+}
 
 function styleLabel(card: StyleCard, language: string) {
   if (language !== "en" || !card.builtin) return { name: card.name, description: card.description };
@@ -479,11 +500,119 @@ function StyleEditor({ card, language, onCancel, onSaved, onError }: { card: Sty
     ["naturalize", "自然化润色", "Naturalize"],
     ["outline", "构思 / 起草", "Outline / Draft"],
   ];
+  const parsedRules = splitPersonalSample(card.rules || "");
   const [name, setName] = useState(card.name);
   const [description, setDescription] = useState(card.description || "");
-  const [rules, setRules] = useState(card.rules || "");
+  const [rules, setRules] = useState(parsedRules.rules);
+  const [sample, setSample] = useState(parsedRules.sample);
   const [tasks, setTasks] = useState(card.tasks.filter((task) => taskOptions.some(([id]) => id === task)));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  return <Modal title={tr("编辑写作风格", "Edit writing style")} close={onCancel}><div className="zchat-style-editor"><label>{tr("名称", "Name")}<input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></label><label>{tr("说明", "Description")}<input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={240} /></label><fieldset className="zchat-style-task-options"><legend>{tr("适用任务", "Apply to tasks")}</legend>{taskOptions.map(([id, zh, en]) => <label key={id}><input type="checkbox" checked={tasks.includes(id)} onChange={(event) => setTasks((current) => event.target.checked ? [...current, id] : current.filter((task) => task !== id))} />{tr(zh, en)}</label>)}</fieldset><label>{tr("规则", "Rules")}<textarea aria-label={tr("技法规则", "Technique rules")} placeholder={tr("例如：先依据视角人物掌握的证据行动；规则冲突时不临时增加设定解围。", "Example: Let the viewpoint character act on available evidence; don't invent a new rule to escape a contradiction.")} value={rules} onChange={(e) => setRules(e.target.value)} maxLength={20000} rows={12} /><small className="zchat-style-rule-count">{rules.length.toLocaleString(language === "en" ? "en-US" : "zh-CN")} / 20,000</small></label><p className="hint zchat-style-editor-help">{tr("写可执行的表达偏好，并明确适用任务；规则影响写法，不会替作品新增事实或覆盖作者设定。", "Write actionable style preferences for the selected tasks. They guide expression; they do not add story facts or override your canon.")}</p></div>{error && <p className="hint error">{error}</p>}<div className="row end"><button type="button" onClick={onCancel} disabled={saving}>{tr("取消", "Cancel")}</button><button type="button" className="primary" disabled={saving || !name.trim() || !rules.trim() || !tasks.length} onClick={async () => { setSaving(true); setError(""); const r = await api("ai:style:save", { id: card.id || undefined, name: name.trim(), description: description.trim(), rules: rules.trim(), tasks }); setSaving(false); if (r.ok) onSaved(); else { const message = r.error || tr("保存失败", "Save failed"); setError(message); onError(message); } }}>{saving ? tr("保存中…", "Saving…") : tr("保存", "Save")}</button></div></Modal>;
+  const storedRules = joinPersonalSample(rules, sample);
+  const overLimit = storedRules.length > 20000;
+
+  async function save() {
+    setSaving(true);
+    setError("");
+    const result = await api("ai:style:save", {
+      id: card.id || undefined,
+      name: name.trim(),
+      description: description.trim(),
+      rules: storedRules,
+      tasks,
+    });
+    setSaving(false);
+    if (result.ok) onSaved();
+    else {
+      const message = result.error || tr("保存失败", "Save failed");
+      setError(message);
+      onError(message);
+    }
+  }
+
+  return (
+    <Modal title={tr("编辑写作风格", "Edit writing style")} close={onCancel}>
+      <div className="zchat-style-editor">
+        <label>
+          {tr("名称", "Name")}
+          <input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} />
+        </label>
+        <label>
+          {tr("说明", "Description")}
+          <input value={description} onChange={(event) => setDescription(event.target.value)} maxLength={240} />
+        </label>
+        <fieldset className="zchat-style-task-options">
+          <legend>{tr("适用任务", "Apply to tasks")}</legend>
+          {taskOptions.map(([id, zh, en]) => (
+            <label key={id}>
+              <input
+                type="checkbox"
+                checked={tasks.includes(id)}
+                onChange={(event) => setTasks((current) => event.target.checked
+                  ? [...current, id]
+                  : current.filter((task) => task !== id))}
+              />
+              {tr(zh, en)}
+            </label>
+          ))}
+        </fieldset>
+        <label>
+          {tr("规则", "Rules")}
+          <textarea
+            aria-label={tr("技法规则", "Technique rules")}
+            placeholder={tr(
+              "例如：先依据视角人物掌握的证据行动；规则冲突时不临时增加设定解围。",
+              "Example: Let the viewpoint character act on available evidence; don't invent a new rule to escape a contradiction.",
+            )}
+            value={rules}
+            onChange={(event) => setRules(event.target.value)}
+            maxLength={20000}
+            rows={8}
+          />
+        </label>
+        <label className="zchat-style-sample-field">
+          {tr("个人样文参考（可选）", "Personal writing sample (optional)")}
+          <small>
+            {tr(
+              "只放入你自己的文字。AI 会参考句长、节奏、视角距离和修辞密度，不复用样文中的句子、人物、设定或情节。",
+              "Use your own writing. AI will reference sentence length, rhythm, narrative distance, and rhetorical density without reusing its wording, characters, setting, or plot.",
+            )}
+          </small>
+          <textarea
+            aria-label={tr("个人样文参考", "Personal writing sample")}
+            placeholder={tr(
+              "粘贴一小段你希望延续语感的自有正文",
+              "Paste a short passage of your own writing whose voice you want to carry forward",
+            )}
+            value={sample}
+            onChange={(event) => setSample(event.target.value)}
+            maxLength={8000}
+            rows={5}
+          />
+        </label>
+        <small className={overLimit ? "zchat-style-rule-count error" : "zchat-style-rule-count"}>
+          {tr("总计", "Total")} {storedRules.length.toLocaleString(language === "en" ? "en-US" : "zh-CN")} / 20,000
+          {overLimit ? tr(" · 超出上限", " · over the limit") : ""}
+        </small>
+        <p className="hint zchat-style-editor-help">
+          {tr(
+            "规则和样文会在所选任务中生效；它们影响表达方式，不会替作品新增事实或覆盖作者设定。",
+            "Rules and samples apply to the selected tasks. They guide expression without adding story facts or overriding your canon.",
+          )}
+        </p>
+      </div>
+      {error && <p className="hint error">{error}</p>}
+      <div className="row end">
+        <button type="button" onClick={onCancel} disabled={saving}>{tr("取消", "Cancel")}</button>
+        <button
+          type="button"
+          className="primary"
+          disabled={saving || !name.trim() || !rules.trim() || !tasks.length || overLimit}
+          onClick={() => void save()}
+        >
+          {saving ? tr("保存中…", "Saving…") : tr("保存", "Save")}
+        </button>
+      </div>
+    </Modal>
+  );
 }
