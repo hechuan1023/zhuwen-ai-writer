@@ -12,7 +12,7 @@ import { MessageList, type ReplyActions } from "./chat/message-list";
 import { Composer, type ComposerTask, type PromptTemplate } from "./chat/composer";
 import { RefPicker } from "./chat/ref-picker";
 import { ContextDialog } from "./chat/context-dialog";
-import { StyleCardPanel, type StyleCard } from "./chat/style-card-panel";
+import { StyleCardPanel, type StyleCard, type StyleIntensity } from "./chat/style-card-panel";
 import {
   contextBreakdown,
   markInvalidRefs,
@@ -97,6 +97,7 @@ export function AiPanel({
   const [mode, setMode] = useState<"chat" | "continue" | "naturalize" | "polish" | "outline" | "check">("chat");
   const [activeTaskId, setActiveTaskId] = useState("discuss-plot");
   const [styleIds, setStyleIds] = useState<string[]>([]);
+  const [styleIntensity, setStyleIntensity] = useState<StyleIntensity>("balanced");
   const [styleRuleChars, setStyleRuleChars] = useState(0);
   const [stylePreviewRules, setStylePreviewRules] = useState("");
   const [projectInstructions, setProjectInstructions] = useState("");
@@ -305,7 +306,11 @@ export function AiPanel({
     api("connections:list").then((r) => r.ok && setConnections(r.data));
     api("prompts:list").then((r) => r.ok && setPrompts(r.data));
     api<StyleCard[]>("ai:styles:list").then((r) => r.ok && setStyleCards(r.data || []));
-    api<any>("ai:style-selection:get", novelId).then((r) => r.ok && setStyleIds(r.data?.styleIds || (r.data?.styleId ? [r.data.styleId] : [])));
+    api<any>("ai:style-selection:get", novelId).then((r) => {
+      if (!r.ok) return;
+      setStyleIds(r.data?.styleIds || (r.data?.styleId ? [r.data.styleId] : []));
+      setStyleIntensity(r.data?.styleIntensity || "balanced");
+    });
     api("novels:open", novelId).then(
       (r) => r.ok && setBookChapters(r.data.chapters),
     );
@@ -319,15 +324,27 @@ export function AiPanel({
     const r = await api<StyleCard[]>("ai:styles:list");
     if (r.ok) setStyleCards(r.data || []);
     const selected = await api<any>("ai:style-selection:get", novelId);
-    if (selected.ok) setStyleIds(selected.data?.styleIds || (selected.data?.styleId ? [selected.data.styleId] : []));
+    if (selected.ok) {
+      setStyleIds(selected.data?.styleIds || (selected.data?.styleId ? [selected.data.styleId] : []));
+      setStyleIntensity(selected.data?.styleIntensity || "balanced");
+    }
   }
   async function selectStyles(next: string[]) {
-    const r = await api<any>("ai:style-selection:set", { novelId, styleIds: next });
+    const r = await api<any>("ai:style-selection:set", { novelId, styleIds: next, styleIntensity });
     if (r.ok) {
       setStyleIds(r.data?.styleIds || next);
       return true;
     }
     notify(r.error || tr("写作风格保存失败", "Could not save writing style"));
+    return false;
+  }
+  async function selectStyleIntensity(next: StyleIntensity) {
+    const r = await api<any>("ai:style-selection:set", { novelId, styleIds, styleIntensity: next });
+    if (r.ok) {
+      setStyleIntensity(r.data?.styleIntensity || next);
+      return true;
+    }
+    notify(r.error || tr("技法强调度保存失败", "Could not save technique emphasis"));
     return false;
   }
   async function selectComposerStyles(next: string[]) {
@@ -337,14 +354,14 @@ export function AiPanel({
   }
   useEffect(() => {
     let live = true;
-    api<any>("ai:style:estimate", { styleIds: activeStyleIds, taskKind: mode }).then((r) => {
+    api<any>("ai:style:estimate", { styleIds: activeStyleIds, styleIntensity, taskKind: mode }).then((r) => {
       if (live && r.ok) {
         setStyleRuleChars(Number(r.data?.chars || 0));
         setStylePreviewRules(String(r.data?.instruction || ""));
       }
     });
     return () => { live = false; };
-  }, [activeStyleIds, mode]);
+  }, [activeStyleIds, styleIntensity, mode]);
   useEffect(() => {
     const request = sceneDraftRequest;
     if (!request || session?.novelId !== novelId || request.chapterId !== chapterId || consumedSceneDraft.current === request.nonce) return;
@@ -680,6 +697,7 @@ export function AiPanel({
       contexts: plan.contexts,
       prompt: plan.prompt,
       styleIds: activeStyleIds,
+      styleIntensity,
       taskKind: mode,
     });
   }
@@ -795,6 +813,7 @@ export function AiPanel({
       prompt: plan.prompt,
       contexts: plan.contexts,
       styleIds: activeStyleIds,
+      styleIntensity,
       taskKind: mode,
     });
     if (!r.ok) {
@@ -1596,6 +1615,8 @@ export function AiPanel({
             cards={styleCards}
             selectedIds={activeStyleIds}
             onSelectionChange={selectComposerStyles}
+            styleIntensity={styleIntensity}
+            onStyleIntensityChange={(intensity) => void selectStyleIntensity(intensity)}
             taskKind={mode}
             previewRules={stylePreviewRules}
             onReload={() => void reloadStyleCards()}

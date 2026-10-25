@@ -4,6 +4,7 @@ import { ChatMenu, type MenuItem } from "./menu";
 import { IconCheck, IconChevronDown, IconCopy, IconDoc, IconDownload, IconRename, IconSparkle, IconTrash, IconUpload } from "./icons";
 
 export type StyleCard = AnyRow & { tasks: string[]; version: number };
+export type StyleIntensity = "light" | "balanced" | "strong";
 type StyleComposition = { id: string; name: string; description: string; styleIds: string[]; updatedAt?: string };
 
 function styleLabel(card: StyleCard, language: string) {
@@ -145,6 +146,8 @@ export function StyleCardPanel({
   cards,
   selectedIds,
   onSelectionChange,
+  styleIntensity,
+  onStyleIntensityChange,
   taskKind,
   previewRules,
   onReload,
@@ -154,6 +157,8 @@ export function StyleCardPanel({
   cards: StyleCard[];
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
+  styleIntensity: StyleIntensity;
+  onStyleIntensityChange: (intensity: StyleIntensity) => void;
   taskKind: string;
   previewRules: string;
   onReload: () => void;
@@ -245,6 +250,26 @@ export function StyleCardPanel({
           <p className="hint">{tr("可组合多张技法卡。每张卡按其适用任务生效；普通聊天和逻辑检查不会注入写作风格。", "Combine techniques. Each card applies only to its enabled writing tasks; normal chat and logic checks do not receive style rules.")}</p>
           <section className="zchat-style-preview" data-fd-id="ai-style-composition-preview">
             <header><b>{tr("本任务实际注入规则", "Rules applied to this task")}</b><small>{taskLabel(taskKind, language)}</small></header>
+            <div className="zchat-style-intensity" role="group" aria-label={tr("技法强调度", "Technique emphasis")} data-fd-id="ai-style-intensity">
+              <span>{tr("技法强调度", "Technique emphasis")}</span>
+              <div>
+                {([
+                  ["light", tr("轻", "Light")],
+                  ["balanced", tr("平衡", "Balanced")],
+                  ["strong", tr("强", "Strong")],
+                ] as [StyleIntensity, string][]).map(([value, label]) => (
+                  <button
+                    type="button"
+                    key={value}
+                    className={styleIntensity === value ? "active" : ""}
+                    aria-pressed={styleIntensity === value}
+                    disabled={!selected.length}
+                    onClick={() => onStyleIntensityChange(value)}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
+            <small className="zchat-style-intensity-hint">{tr("只调节所选技法的强调程度；平衡保持原有规则强度。", "Adjusts emphasis only; Balanced keeps the existing rule strength.")}</small>
             <pre>{previewRules || tr("当前任务不注入写作风格规则。", "No style rules are added for this task.")}</pre>
           </section>
           <section className="zchat-style-presets" data-fd-id="ai-style-presets">

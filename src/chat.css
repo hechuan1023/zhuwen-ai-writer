@@ -1455,6 +1455,15 @@
 .zchat-style-preview { margin: 12px 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--panel) 55%, var(--paper)); }
 .zchat-style-preview header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; font-size: 12px; }
 .zchat-style-preview header small { color: var(--muted); font-size: 10px; }
+.zchat-style-intensity { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 4px; }
+.zchat-style-intensity > span { color: var(--muted); font-size: 10px; }
+.zchat-style-intensity > div { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-md, 10px); background: color-mix(in srgb, var(--panel) 72%, var(--paper)); }
+.zchat-style-intensity button { min-width: 46px; min-height: 26px; padding: 3px 8px; border-color: transparent; border-radius: var(--r-sm, 8px); background: transparent; color: var(--muted); font-size: 10px; }
+.zchat-style-intensity button:hover:not(:disabled) { border-color: transparent; background: color-mix(in srgb, var(--accent-soft) 70%, var(--paper)); color: var(--ink); }
+.zchat-style-intensity button.active { border-color: color-mix(in srgb, var(--accent) 24%, var(--line)); background: var(--paper); color: var(--accent); box-shadow: 0 1px 3px color-mix(in srgb, var(--ink) 9%, transparent); font-weight: 650; }
+.zchat-style-intensity button:focus-visible { outline: none; box-shadow: var(--focus); }
+.zchat-style-intensity button:disabled { opacity: .5; cursor: not-allowed; }
+.zchat-style-intensity-hint { display: block; margin: 0 0 7px; color: var(--faint, var(--muted)); font-size: 9px; }
 .zchat-style-preview pre { max-height: 22vh; overflow: auto; margin: 0; white-space: pre-wrap; font: 11px/1.55 var(--font-ui, sans-serif); }
 .zchat-style-presets { margin: 10px 0 12px; padding: 10px; border: 1px solid var(--line); border-radius: var(--r-lg, 14px); background: color-mix(in srgb, var(--panel) 52%, var(--paper)); }
 .zchat-style-presets > header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }

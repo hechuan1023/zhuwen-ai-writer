@@ -28,7 +28,7 @@ import {
 } from "./database";
 import { FocusTracker } from "./focus-tracker";
 import { DraftStorage, draftKey, DraftRecord } from "./draft-storage";
-import { buildTaskAndStyleInstructions, effectiveStyleRules } from "./ai-style-cards";
+import { buildTaskAndStyleInstructions, effectiveStyleRules, normalizeStyleIntensity } from "./ai-style-cards";
 import { parseStyleCompositionBundle } from "./ai-style-bundle";
 import { formatConversationMarkdown, safeConversationFilename } from "./ai-conversation-export";
 
@@ -1387,7 +1387,8 @@ function requestStyle(p: any) {
     : ids.map((id) => styleCardRow(id)).filter((card: any) =>
         card && (card.tasks.includes(task) || (task === "naturalize" && card.tasks.includes("polish"))),
       );
-  const instruction = buildTaskAndStyleInstructions(cards, task);
+  const styleIntensity = normalizeStyleIntensity(p?.styleIntensity);
+  const instruction = buildTaskAndStyleInstructions(cards, task, styleIntensity);
   const card = cards.length
     ? {
         id: cards[0].id,
@@ -1396,7 +1397,7 @@ function requestStyle(p: any) {
         rules: instruction,
       }
     : null;
-  return { card, cards, instruction };
+  return { card, cards, instruction, styleIntensity };
 }
 const ok = <T>(data: T) => ({ ok: true, data });
 const fail = (e: unknown) => ({
@@ -3056,14 +3057,14 @@ function registerIpc(userDir: string) {
   });
   ipcMain.handle("ai:style-selection:get", (_, novelId) => {
     const row: any = get(
-      "SELECT style_id,style_ids_json FROM novel_ai_styles WHERE novel_id=?",
+      "SELECT style_id,style_ids_json,style_intensity FROM novel_ai_styles WHERE novel_id=?",
       String(novelId || ""),
     );
     let styleIds: string[] = [];
     try { styleIds = JSON.parse(row?.style_ids_json || "[]"); } catch {}
     if (!styleIds.length && row?.style_id) styleIds = [String(row.style_id)];
     const cards = [...new Set(styleIds)].map(styleCardRow).filter(Boolean);
-    return ok({ styleIds: cards.map((card: any) => card.id), cards });
+    return ok({ styleIds: cards.map((card: any) => card.id), cards, styleIntensity: normalizeStyleIntensity(row?.style_intensity) });
   });
   ipcMain.handle("ai:project-instructions:get", (_, novelId) => {
     const id = String(novelId || "");
@@ -3096,15 +3097,16 @@ function registerIpc(userDir: string) {
     if (styleIds.length > 6) return fail("每个作品最多组合 6 张技法卡");
     const cards = styleIds.map(styleCardRow);
     if (cards.some((card) => !card)) return fail("写作风格不存在");
+    const styleIntensity = normalizeStyleIntensity(p?.styleIntensity);
     const styleId = styleIds[0] || "";
     db.prepare(
-      "INSERT INTO novel_ai_styles(novel_id,style_id,updated_at,style_ids_json) VALUES(?,?,?,?) ON CONFLICT(novel_id) DO UPDATE SET style_id=excluded.style_id,style_ids_json=excluded.style_ids_json,updated_at=excluded.updated_at,data_version=data_version+1",
-    ).run(novelId, styleId || null, timestamp(), JSON.stringify(styleIds));
-    return ok({ styleIds, cards });
+      "INSERT INTO novel_ai_styles(novel_id,style_id,updated_at,style_ids_json,style_intensity) VALUES(?,?,?,?,?) ON CONFLICT(novel_id) DO UPDATE SET style_id=excluded.style_id,style_ids_json=excluded.style_ids_json,style_intensity=excluded.style_intensity,updated_at=excluded.updated_at,data_version=data_version+1",
+    ).run(novelId, styleId || null, timestamp(), JSON.stringify(styleIds), styleIntensity);
+    return ok({ styleIds, cards, styleIntensity });
   });
   ipcMain.handle("ai:style:estimate", (_, p) => {
     const style = requestStyle(p);
-    return ok({ chars: style.instruction.length, instruction: style.instruction, styleIds: style.cards.map((card: any) => card.id), styleNames: style.cards.map((card: any) => card.name), taskKind: p?.taskKind || "chat" });
+    return ok({ chars: style.instruction.length, instruction: style.instruction, styleIds: style.cards.map((card: any) => card.id), styleNames: style.cards.map((card: any) => card.name), styleIntensity: style.styleIntensity, taskKind: p?.taskKind || "chat" });
   });
   ipcMain.handle("ai:style:save", (_, p) => {
     const name = String(p?.name || "").trim();
@@ -4682,11 +4684,12 @@ function buildBackup(novelId: string) {
         ...messageIds,
       )
     : [];
-  const selectedStyle: any = get("SELECT style_id,style_ids_json FROM novel_ai_styles WHERE novel_id=?", novelId);
+  const selectedStyle: any = get("SELECT style_id,style_ids_json,style_intensity FROM novel_ai_styles WHERE novel_id=?", novelId);
   let styleIds: string[] = [];
   try { styleIds = JSON.parse(selectedStyle?.style_ids_json || "[]"); } catch {}
   if (!styleIds.length && selectedStyle?.style_id) styleIds = [String(selectedStyle.style_id)];
   bundle.styleSelection = [...new Set(styleIds)];
+  bundle.styleIntensity = normalizeStyleIntensity(selectedStyle?.style_intensity);
   bundle.styleCards = bundle.styleSelection.flatMap((id: string) => {
     const card = get("SELECT * FROM ai_style_cards WHERE id=? AND builtin=0", id);
     return card ? [card] : [];
@@ -4952,9 +4955,9 @@ function restoreBackupAsCopy(b: any) {
     const restoredStyleIds: string[] = [...new Set<string>(sourceSelection.map((id: string) =>
       restoredStyles.get(id) || (styleCardRow(id) ? id : ""),
     ).filter((id: string): id is string => Boolean(id)))].slice(0, 6);
-    if (restoredStyleIds.length)
-      db.prepare("INSERT INTO novel_ai_styles(novel_id,style_id,updated_at,style_ids_json) VALUES(?,?,?,?)")
-        .run(novelId, restoredStyleIds[0], t, JSON.stringify(restoredStyleIds));
+    if (restoredStyleIds.length || b.styleIntensity)
+      db.prepare("INSERT INTO novel_ai_styles(novel_id,style_id,updated_at,style_ids_json,style_intensity) VALUES(?,?,?,?,?)")
+        .run(novelId, restoredStyleIds[0] || null, t, JSON.stringify(restoredStyleIds), normalizeStyleIntensity(b.styleIntensity));
     return novelId;
   })();
 }

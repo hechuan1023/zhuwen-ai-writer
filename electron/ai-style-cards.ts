@@ -20,6 +20,11 @@ export const BASE_STYLE_RULES = `围绕人物当前要做的事展开场景。
 
 export const STYLE_CARD_BOUNDARY_RULES = `规则优先级：本轮用户明确的任务要求、输出格式和作品已确认事实/引用优先于技法卡；若用户要求与已确认事实冲突，明确指出冲突，不悄悄改写作品事实。技法卡只影响表达与叙事组织倾向，不得新增或改写人物、设定、事件、视角、线索或结局，也不能把建议变成硬性配额。只在与当前任务相关处应用，不逐条套成固定模板；保留有效的人物毛边、作者独特观察和既有语气。资料不足时保留为待确认，不把推测写成事实。`;
 
+export type StyleIntensity = "light" | "balanced" | "strong";
+export function normalizeStyleIntensity(value: unknown): StyleIntensity {
+  return value === "light" || value === "strong" ? value : "balanced";
+}
+
 export const BUILTIN_STYLE_CARDS: AiStyleCard[] = [
   {
     id: "style-natural-narrative",
@@ -377,7 +382,11 @@ export function effectiveStyleRules(card: AiStyleCard | null) {
   return card.rules;
 }
 
-export function buildTaskAndStyleInstructions(card: AiStyleCard | AiStyleCard[] | null, task: string) {
+export function buildTaskAndStyleInstructions(
+  card: AiStyleCard | AiStyleCard[] | null,
+  task: string,
+  intensity: StyleIntensity = "balanced",
+) {
   const cards = (Array.isArray(card) ? card : card ? [card] : []).filter(Boolean);
   const styleCards = task === "chat" || task === "check"
     ? []
@@ -393,11 +402,16 @@ export function buildTaskAndStyleInstructions(card: AiStyleCard | AiStyleCard[] 
   const style = styleCards.length
     ? [BASE_STYLE_RULES, ...specificRules].join("\n\n")
     : "";
-  const stylePart = style ? `【组合写作方法：${styleCards.map((item) => `${item.name} v${item.version}`).join(" + ")}】\n${styleCards.map((item) => `- ${item.name}：${item.description}`).join("\n")}\n${STYLE_CARD_BOUNDARY_RULES}\n以下内容是表达偏好，不是作品事实：\n${style}` : "";
+  const intensityRule = intensity === "light"
+    ? "技法强调度：轻。只在与本轮任务自然贴合的地方采用相关技法；不适用的规则可以跳过，优先保留原稿声音，不为套用技法新增动作、转折或设定。"
+    : intensity === "strong"
+      ? "技法强调度：强。对当前任务中确实适用的技法，应落实到人物行动、场景因果或表达选择；仍需跳过不适用项，不强塞套路、不设置硬性配额，也不改变作品事实。"
+      : "";
+  const stylePart = style ? `【组合写作方法：${styleCards.map((item) => `${item.name} v${item.version}`).join(" + ")}】\n${styleCards.map((item) => `- ${item.name}：${item.description}`).join("\n")}\n${intensityRule ? `${intensityRule}\n` : ""}${STYLE_CARD_BOUNDARY_RULES}\n以下内容是表达偏好，不是作品事实：\n${style}` : "";
   const taskPart = task === "naturalize" ? NATURALIZE_RULES : "";
   return [taskPart, stylePart].filter(Boolean).join("\n\n");
 }
 
-export function styleInstruction(card: AiStyleCard | AiStyleCard[] | null, task: string) {
-  return buildTaskAndStyleInstructions(card, task);
+export function styleInstruction(card: AiStyleCard | AiStyleCard[] | null, task: string, intensity: StyleIntensity = "balanced") {
+  return buildTaskAndStyleInstructions(card, task, intensity);
 }
