@@ -20,6 +20,10 @@ export type ComposerTask = {
   label: string;
   /** 选择任务时准备的草稿内容（可选） */
   draft?: string;
+  /** 选中时将当前章节加入本次引用 */
+  attachChapter?: boolean;
+  /** 草稿非空时追加任务要求，避免覆盖作者正在编辑的内容 */
+  appendDraft?: boolean;
   hint?: string;
 };
 

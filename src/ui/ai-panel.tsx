@@ -1189,6 +1189,18 @@ export function AiPanel({
         "From the referenced world/character notes, list 5–8 facts this chapter must respect (time, space, abilities, past events).",
       ),
     },
+    ...(chapterId ? [{
+      id: "extract-story-candidates",
+      kind: "check",
+      label: tr("提取资料候选", "Extract story-bible candidates"),
+      attachChapter: true,
+      appendDraft: true,
+      draft: tr(
+        `请以引用的“当前章节”正文为主要事实来源，整理可供作者确认后录入资料库的候选。不要修改或补写正文，也不要自动把推测写成事实。\n\n按以下小节输出，仅列出有原文依据的内容；每条附一段不超过 30 字的原文证据：\n1. 新出现或身份信息明确的人物（姓名、身份/行动、证据；无法确认姓名时标“待确认”）。\n2. 新出现或本章补充的地点、势力、规则、物品等设定（候选名称、明确事实、证据）。\n3. 本章已经发生的人物或设定变化（对象、变化前后；原文未明确则不要补全）。\n4. 本章场景细纲候选（时间/地点、视角、出场人物、剧情作用、回报、章末钩子；缺少的字段标“无明确证据”）。\n\n区分“原文明确”和“待确认推断”，计划、传闻和人物猜测不得写成已经发生的事实。若引用中已有资料卡，优先指出可补充到旧条目的内容，不重复创建。某一类没有有效候选时写“无”。最后只列候选，不生成长篇章节摘要。`,
+        `Use the referenced current chapter as the primary source of truth. Extract candidates the author may review and add to the story bible. Do not edit or continue the manuscript, and never present inference as fact.\n\nReturn only items supported by the text, each with an excerpt of at most 30 Chinese characters: (1) newly introduced or clarified characters; (2) new or expanded locations, factions, rules, or objects; (3) changes that have already happened to a character or setting; (4) a scene-outline candidate with time/place, POV, cast, plot role, payoff, and chapter-end hook. Mark missing evidence explicitly. Separate explicit facts from pending inferences; plans, rumors, and guesses are not events. If a referenced story-bible entry already exists, suggest an addition to it instead of duplicating it. Use “None” for empty categories. Do not write a long chapter summary.`,
+      ),
+      hint: tr("自动引用当前章节；只生成带原文证据的候选，不会自动写入资料库。", "Automatically references the current chapter. Candidates include evidence and are never saved automatically."),
+    }] : []),
     {
       id: "outline-chapter",
       kind: "outline",
@@ -1548,10 +1560,15 @@ export function AiPanel({
         onSelectTask={(id) => {
           const task = tasks.find((t) => t.id === id);
           if (!task) return;
+          if (task.attachChapter) addChapter();
           setActiveTaskId(id);
           setMode(task.kind as typeof mode);
           if (task?.draft) {
-            updateDraft(task.draft, true);
+            const current = draftRef.current;
+            const next = task.appendDraft && current.trim()
+              ? `${current.replace(/\s+$/, "")}\n\n${task.draft}`
+              : task.draft;
+            updateDraft(next, true);
           }
         }}
         draft={draft}
