@@ -666,7 +666,7 @@ export function IoPanel({
       <section>
         <h3>{tr("导入文本", "Import manuscript")}</h3>
         <p className="hint">
-          {tr("支持 UTF-8/常见中文编码的 TXT、Markdown，以及 DOCX，自动识别“第…章/卷”等标题；导入会创建新作品，不覆盖当前稿件。", "Supports TXT and Markdown in UTF-8 or common Chinese encodings, plus DOCX. Chapter headings are detected automatically and importing creates a new novel.")}
+          {tr("支持 UTF-8/常见中文编码的 TXT、Markdown、HTML，以及 DOCX，自动识别“第…章/卷”等标题；导入会创建新作品，不覆盖当前稿件。HTML 仅提取正文文字，不载入脚本、样式或图片。", "Supports TXT, Markdown, HTML, and DOCX in UTF-8 or common Chinese encodings. Chapter headings are detected automatically and importing creates a new novel. HTML is reduced to text; scripts, styles, and images are not loaded.")}
         </p>
         <p className="hint">
           {tr("DOCX 仅提取正文段落文字：忽略字体样式、图片、表格、批注、页眉页脚和分页，复杂版式可能不被保留。", "DOCX imports paragraph text only. Fonts, images, tables, comments, headers, footers, and pagination are not preserved.")}

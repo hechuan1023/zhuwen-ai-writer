@@ -25,6 +25,7 @@
 
 ## 本轮实现
 
+- 新增 HTML 稿件导入：支持 `.html` / `.htm`，先用 sanitizer 去除活动标签、脚本、样式和媒体，再提取段落/标题换行，复用现有编码选择、章节标题识别和新作品预览流程；原 HTML 文件不会被执行或修改。对照 Novelcrafter 官方导入格式说明补齐。
 - AI 技法组合新增作品级强调度（轻 / 平衡 / 强）：默认平衡保持旧规则行为；选择值保存于作品技法设置，并同时进入发送预览与正式请求。强度规则仍受任务范围、作品事实和不套模板边界约束；完整作品备份导出/恢复兼容该设置，旧数据库和旧备份默认平衡。
 - 共享 `Select` 的触发器圆角与应用按钮统一使用 `--r-md`；下拉层使用 `--r-lg`、主题适配的表面/阴影，选中项即使键盘焦点移开仍保留轻量底色。设置、资料库和场景规划复用该控件，因此统一样式会同步覆盖这些入口。
 - AI 引用推荐卡增加命中原文短摘录：从当前章节语料中截取最高权重命中词附近的上下文，帮助作者核对推荐依据；仍由作者明确点击后才添加引用，不自动发送正文或资料。
@@ -124,6 +125,7 @@
 - Novelcrafter：[功能总览](https://www.novelcrafter.com/features)，公开列出 Smart Highlighting、Usage Frequency 与重复表达审阅能力；铸文采用离线本章复核与现有查找定位的轻量实现。
 - Novelcrafter：[功能总览](https://www.novelcrafter.com/features)，明确列出用于标记草稿/完成场景的 Scene Labels；[Plan 视图说明](https://www.novelcrafter.com/help/docs/plan/plan-views)列出 Grid、Matrix 与大纲视图。
 - Novelcrafter：[小说导出说明](https://www.novelcrafter.com/help/docs/export/novel)，官方说明支持 Word `.docx` 与 Markdown 导出。
+- Novelcrafter：[功能总览](https://www.novelcrafter.com/features)，官方导入说明列出 Word、Markdown 与 HTML；铸文新增 HTML 文字提取式导入，不保留网页排版和媒体。
 - Novelcrafter：[AI 聊天界面说明](https://www.novelcrafter.com/help/docs/chat/the-chat-interface)，列出对话置顶、分屏、复制/导出、归档与删除等会话管理入口。
 - OpenAI：[Projects in ChatGPT](https://help.openai.com/en/articles/10169521-projects-in-chatgpt)，说明项目中的聊天会继承项目指令和文件上下文，可从项目聊天、文件与自定义指令共同取用信息。
 - Plottr：[官方时间线说明](https://docs.plottr.com/article/54-timeline-overview)，列出剧情线、场景卡、人物/地点/标签/自定义属性筛选等能力。

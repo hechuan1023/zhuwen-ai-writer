@@ -13,7 +13,7 @@ import { pathToFileURL } from "node:url";
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { extractDocxTextBuffer } from "./docx";
-import { decodeImportBuffer } from "./text-import";
+import { decodeImportBuffer, htmlToPlainText } from "./text-import";
 import { writeVerifiedJson } from "./atomic-json";
 import { Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } from "docx";
 import { buildEpub, buildPrintHtml } from "./epub";
@@ -4210,9 +4210,9 @@ function registerIpc(userDir: string) {
     importTasks.set(taskId, controller);
     try {
       const f = await dialog.showOpenDialog({
-        title: "导入 TXT、Markdown 或 DOCX",
+        title: "导入 TXT、Markdown、HTML 或 DOCX",
         filters: [
-          { name: "文本或文档", extensions: ["txt", "md", "markdown", "docx"] },
+          { name: "文本或文档", extensions: ["txt", "md", "markdown", "html", "htm", "docx"] },
         ],
         properties: ["openFile"],
       });
@@ -4242,7 +4242,12 @@ function registerIpc(userDir: string) {
           parts: splitChapters(text),
         });
       }
-      const { text, encoding } = decodeImportBuffer(buf);
+      const { text: decodedText, encoding } = decodeImportBuffer(buf);
+      const ext = path.extname(file).toLowerCase();
+      const text = ext === ".html" || ext === ".htm"
+        ? htmlToPlainText(decodedText)
+        : decodedText;
+      if (!text) throw new Error("未从文件中提取到可导入的正文文字");
       const parts = splitChapters(text);
       return ok({
         path: file,
@@ -4277,7 +4282,12 @@ function registerIpc(userDir: string) {
         controller.signal,
       );
       const decoded = decodeImportBuffer(buffer, String(p?.encoding || "utf-8"));
-      return ok({ encoding: decoded.encoding, parts: splitChapters(decoded.text) });
+      const ext = path.extname(file).toLowerCase();
+      const text = ext === ".html" || ext === ".htm"
+        ? htmlToPlainText(decoded.text)
+        : decoded.text;
+      if (!text) throw new Error("未从文件中提取到可导入的正文文字");
+      return ok({ encoding: decoded.encoding, parts: splitChapters(text) });
     } catch (error) {
       if (controller.signal.aborted) return fail("IMPORT_CANCELLED");
       return fail(error);
