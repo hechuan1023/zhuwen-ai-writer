@@ -16,6 +16,14 @@ const DEFAULT_EPUB_CUSTOM_LAYOUT: EpubCustomLayout = {
   indentEm: 2,
 };
 
+const EPUB_READER_VIEWPORTS = {
+  phone: { width: 390, height: 844 },
+  eink6: { width: 600, height: 800 },
+  eink7: { width: 800, height: 1067 },
+  tablet: { width: 768, height: 1024 },
+} as const;
+type EpubReaderViewport = keyof typeof EPUB_READER_VIEWPORTS;
+
 function normalizeEpubCustomLayout(value: any): EpubCustomLayout {
   const bounded = (input: unknown, fallback: number, min: number, max: number) => {
     const parsed = Number(input);
@@ -102,6 +110,7 @@ export function IoPanel({
     [bookVolumes, setBookVolumes] = useState<AnyRow[]>([]),
     [epubPreviewOpen, setEpubPreviewOpen] = useState(false),
     [epubPreviewPage, setEpubPreviewPage] = useState<"cover" | "toc" | "chapter">("cover"),
+    [epubReaderViewport, setEpubReaderViewport] = useState<EpubReaderViewport>("eink6"),
     [epubTocPage, setEpubTocPage] = useState(0),
     [epubPreviewChapterId, setEpubPreviewChapterId] = useState(""),
     [epubPreviewChapter, setEpubPreviewChapter] = useState<AnyRow | null>(null),
@@ -259,7 +268,7 @@ export function IoPanel({
           {tr("按卷和章节顺序导出正文，不包含 AI 对话和创作资料。", "Exports manuscript text in volume and chapter order, without AI conversations or story-bible items.")}
         </p>
         <p className="hint">
-          {tr("EPUB 包含目录与章节导航；有作品封面时会嵌入封面页。正文插图暂不导出。", "EPUB includes a table of contents and chapter navigation. The novel cover is embedded when available; inline illustrations are not exported yet.")}
+          {tr("EPUB 包含目录与章节导航；有作品封面时会嵌入封面页，正文插图也会随章节导出。", "EPUB includes a table of contents and chapter navigation. The novel cover and supported inline illustrations are included when available.")}
         </p>
         <label>
           {tr("导出范围", "Export scope")}
@@ -704,6 +713,22 @@ export function IoPanel({
                   }))}
                 />
               </label>
+              <label className="epub-preview-device-control" data-fd-id="epub-reader-viewport-control">
+                {tr("阅读器画布（参考尺寸）", "Reader viewport (reference size)")}
+                <Select
+                  id="epub-reader-viewport"
+                  value={epubReaderViewport}
+                  aria-label={tr("阅读器参考尺寸", "Reader reference viewport")}
+                  onValueChange={(value) => setEpubReaderViewport(value as EpubReaderViewport)}
+                  options={[
+                    { value: "phone", label: tr("手机 · 390 × 844", "Phone · 390 × 844") },
+                    { value: "eink6", label: tr("6 寸电纸书 · 600 × 800", "6-inch e-reader · 600 × 800") },
+                    { value: "eink7", label: tr("7 寸电纸书 · 800 × 1067", "7-inch e-reader · 800 × 1067") },
+                    { value: "tablet", label: tr("平板 · 768 × 1024", "Tablet · 768 × 1024") },
+                  ]}
+                />
+                <small>{tr("只模拟可视画布尺寸；不同阅读器的字体与分页规则仍会有差异。", "Viewport size only; fonts and pagination vary by reader.")}</small>
+              </label>
               <div className="epub-preview-nav">
                 <button
                   type="button"
@@ -728,7 +753,15 @@ export function IoPanel({
                 >›</button>
               </div>
             </div>
-            <div className="epub-preview-reader" ref={epubPreviewReaderRef}>
+            <div
+              className="epub-preview-reader"
+              data-fd-id="epub-reader-viewport"
+              ref={epubPreviewReaderRef}
+              style={{
+                width: `min(100%, ${EPUB_READER_VIEWPORTS[epubReaderViewport].width}px)`,
+                height: `min(${EPUB_READER_VIEWPORTS[epubReaderViewport].height}px, 62vh)`,
+              }}
+            >
               {epubPreviewPage === "cover" && <>
                 {novel.cover_path && String(novel.cover_path).startsWith("data:image/") ? (
                   <div className="epub-preview-cover"><img src={novel.cover_path} alt={tr(`${novel.title || "作品"}封面`, `${novel.title || "Novel"} cover`)} /></div>

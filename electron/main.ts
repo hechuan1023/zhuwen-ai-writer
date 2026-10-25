@@ -636,9 +636,18 @@ function createMainWindow() {
           `([...document.querySelectorAll('.settings-nav button')].find(b=>b.textContent.trim()==='AI models'))?.click()`,
         );
         await wait(100);
+        let managedAiCardReady = false;
+        for (let i = 0; i < 12 && !managedAiCardReady; i++) {
+          managedAiCardReady = await js(`Boolean(document.querySelector('[data-fd-id="settings-managed-ai"]'))`);
+          if (!managedAiCardReady) await wait(120);
+        }
         const translatedAiSettingsOk = await js(
           `Boolean([...document.querySelectorAll('.settings h3')].find(h=>h.textContent.includes('AI API connections'))&&[...document.querySelectorAll('.settings h3')].find(h=>h.textContent.includes('Prompt templates')))`,
         );
+        const managedAiSettingsOk = managedAiCardReady && await js(
+          `(()=>{const managed=document.querySelector('[data-fd-id="settings-managed-ai"]');const generation=document.querySelector('[data-fd-id="settings-generation-options"]');const save=document.querySelector('[data-fd-id="settings-ai-save"]');return Boolean(managed&&!document.querySelector('[data-fd-id="settings-provider-fields"]')&&generation&&getComputedStyle(managed).display==='flex'&&getComputedStyle(generation).display==='grid'&&save?.textContent.includes('Save AI settings'))})()`,
+        );
+        await shot("01a-settings-ai-managed");
         // 应用内确认弹窗：原生 confirm/prompt 已全部换成应用内弹窗。
         // 这里验证「恢复默认模板」确实弹出可取消的确认框——点取消，不落地任何改动。
         const dialogTriggeredOk = await js(
@@ -764,6 +773,32 @@ function createMainWindow() {
           if (!statsOk) await wait(150);
         }
         await js(`document.querySelector('.modal > header button')?.click()`);
+        await wait(150);
+        await js(`(()=>{document.querySelector('.toolbar-more').open=true;([...document.querySelectorAll('.toolbar-menu button')].find(b=>b.textContent.includes('导入导出与备份')||b.textContent.includes('Import, export & backup')))?.click()})()`);
+        let epubExportReady = false;
+        for (let i = 0; i < 15 && !epubExportReady; i++) {
+          epubExportReady = await js(`Boolean(document.querySelector('.io-export-actions button:last-child:not(:disabled)'))`);
+          if (!epubExportReady) await wait(120);
+        }
+        await js(`document.querySelector('.io-export-actions button:last-child')?.click()`);
+        let epubPreviewReady = false;
+        for (let i = 0; i < 15 && !epubPreviewReady; i++) {
+          epubPreviewReady = await js(`Boolean(document.querySelector('.epub-preview-device-control .zw-select-trigger'))`);
+          if (!epubPreviewReady) await wait(120);
+        }
+        await wait(180);
+        await shot("10-epub-reader-preview");
+        await js(`document.querySelector('.epub-preview-device-control .zw-select-trigger')?.click()`);
+        await wait(100);
+        await js(`([...document.querySelectorAll('.zw-select-option')].find(option=>option.textContent.includes('手机')))?.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}))`);
+        await wait(120);
+        const epubReaderViewportOk = epubPreviewReady && await js(
+          `(()=>{const reader=document.querySelector('.epub-preview-reader');const trigger=document.querySelector('.epub-preview-device-control .zw-select-trigger');return Boolean(reader&&trigger?.textContent.includes('390')&&Math.round(reader.getBoundingClientRect().width)<=390&&reader.getBoundingClientRect().height>200)})()`,
+        );
+        await shot("10a-epub-reader-phone");
+        await js(`document.querySelector('.epub-preview-dialog')?.closest('.modal')?.querySelector('header button')?.click()`);
+        await wait(120);
+        await js(`document.querySelector('.io')?.closest('.modal')?.querySelector('header button')?.click()`);
         await wait(150);
         await js(`document.querySelector('[data-fd-id="ai-add-ref"]')?.click()`);
         await wait(200);
@@ -895,6 +930,7 @@ function createMainWindow() {
           languageOk,
           translatedSettingsOk,
           translatedAiSettingsOk,
+          managedAiSettingsOk,
           dialogOk,
           translatedAiPanelOk,
           translatedLibraryOk,
@@ -905,6 +941,7 @@ function createMainWindow() {
           bookSearchOk,
           bookSearchRunOk,
           statsOk,
+          epubReaderViewportOk,
           homeGoalScopeOk,
           goalScopeOk,
           reduceMotionOk,
@@ -953,7 +990,7 @@ function createMainWindow() {
         if (shotsFailed.length)
           console.log(`UI_SHOTS_FAIL ${shotsFailed.join(",")}`);
         console.log(
-          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n reference_picker typography_settings daily_goal database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared ai_style_manager_action_icons history_drawer history_archive_scope ai_dock_left ai_dock_restore summary_modal library_kinds relation_graph relation_expand library_detail library_trash ${status} ${out}`,
+          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n ai_managed_settings epub_reader_viewport reference_picker typography_settings daily_goal database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared ai_style_manager_action_icons history_drawer history_archive_scope ai_dock_left ai_dock_restore summary_modal library_kinds relation_graph relation_expand library_detail library_trash ${status} ${out}`,
         );
         app.exit(0);
       } catch (e) {

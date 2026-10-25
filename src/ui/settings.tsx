@@ -412,9 +412,10 @@ export function Settings({
                   }
                 />
               </label>
-              <label>
+              <label data-fd-id="settings-reasoning-field">
                 {tr("思考深度", "Reasoning effort")}
                 <Select
+                  id="settings-reasoning"
                   value={edit.reasoningEffort || ""}
                   aria-label={tr("思考深度", "Reasoning effort")}
                   onValueChange={(v) => setEdit({ ...edit, reasoningEffort: v })}
@@ -443,12 +444,14 @@ export function Settings({
                 {tr("流式回复", "Stream responses")}
               </label>
             </div>
-            <div className="row end">
-              <button className="primary" onClick={save}>
-                {tr("保存连接", "Save connection")}
+            <div className="row end settings-ai-actions">
+              <button type="button" className="primary" data-fd-id="settings-ai-save" onClick={save}>
+                {edit.locked ? tr("保存 AI 设置", "Save AI settings") : tr("保存连接", "Save connection")}
               </button>
               {edit.id && (
                 <button
+                  type="button"
+                  data-fd-id="settings-ai-test-connection"
                   onClick={() =>
                     setConfirmAction({
                       kind: "test-connection",
