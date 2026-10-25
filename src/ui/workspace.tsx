@@ -2106,7 +2106,7 @@ export function Workspace({
         {right && !focus && (
           <aside
             className="right-panel"
-            style={{ width: aiExpanded ? "min(72vw, 900px)" : (envEffective.rightWidth ?? rightWidth) }}
+            style={{ width: aiExpanded ? "min(50vw, 900px)" : (envEffective.rightWidth ?? rightWidth) }}
             data-fd-id="workspace-ai-panel"
           >
             <div
