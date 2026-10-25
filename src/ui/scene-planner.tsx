@@ -332,7 +332,7 @@ export function ScenePlanner({
           {!visibleChapters.length && <div className="scene-board-no-chapters"><span>{tr("当前筛选范围内没有章节。", "No chapters match the current filters.")}</span><button type="button" onClick={() => { setVolumeFilter("all"); setStatusFilter("all"); setSceneStatusFilter("all"); setPovFilter("all"); setTrackFilter("all"); }}>{tr("清除筛选", "Clear filters")}</button></div>}
           <button className="scene-lane-new-chapter" onClick={() => onCreateScene()}>{tr("＋ 新场景", "+ New scene")}</button>
         </div>
-      </div> : viewMode === "outline" ? <SceneOutliner scenes={visibleScenes} chapters={chapters} volumes={volumes} language={language} onOpenScene={onOpenScene} /> : viewMode === "timeline" ? <div className="scene-timeline-scroll" data-fd-id="scene-timeline">
+      </div> : viewMode === "outline" ? <SceneOutliner scenes={visibleScenes} chapters={chapters} volumes={volumes} writingStatusOptions={writingStatusOptions} sceneStatusBusy={Boolean(sceneStatusBusyId)} language={language} onOpenScene={onOpenScene} onWritingStatusChange={(scene, status) => void updateSceneStatus(scene, status)} /> : viewMode === "timeline" ? <div className="scene-timeline-scroll" data-fd-id="scene-timeline">
         <div className="scene-timeline-note">{tr("按章节顺序与已保存的场景顺序排列。时间标签保留作者原文，不会被解析成日期；需调整顺序时切回规划板拖动。", "Ordered by chapter and saved scene order. Time markers remain author-written labels and are not parsed as dates; switch to Board to reorder.")}</div>
         <div className="scene-timeline-groups">
           {timelineGroups.map(({ chapter, scenes: chapterScenes }, chapterIndex) => {
@@ -501,14 +501,20 @@ function SceneOutliner({
   scenes,
   chapters,
   volumes,
+  writingStatusOptions,
+  sceneStatusBusy,
   language,
   onOpenScene,
+  onWritingStatusChange,
 }: {
   scenes: SceneRow[];
   chapters: SceneRow[];
   volumes: SceneRow[];
+  writingStatusOptions: SelectOption[];
+  sceneStatusBusy: boolean;
   language: UiLanguage;
   onOpenScene: (scene: SceneRow) => void;
+  onWritingStatusChange: (scene: SceneRow, status: string) => void;
 }) {
   const tr = (zh: string, en: string) => language === "en" ? en : zh;
   const [sort, setSort] = useState<{ key: "order" | "title" | "chapter" | "status" | "target"; direction: 1 | -1 }>({ key: "order", direction: 1 });
@@ -540,10 +546,6 @@ function SceneOutliner({
   const sortHeader = (key: typeof sort.key, label: string) => <th scope="col" aria-sort={sort.key === key ? sort.direction === 1 ? "ascending" : "descending" : "none"}>
     <button type="button" onClick={() => toggleSort(key)} aria-label={tr(`按${label}排序`, `Sort by ${label}`)}>{label}{sort.key === key && <span aria-hidden="true">{sort.direction === 1 ? " ↑" : " ↓"}</span>}</button>
   </th>;
-  const statusName = (value: unknown) => {
-    const status = normalizeSceneWritingStatus(value);
-    return ({ planned: tr("计划中", "Planned"), drafting: tr("写作中", "Drafting"), revision: tr("待修订", "Needs revision"), final: tr("已定稿", "Final") } as Record<string, string>)[status] || status;
-  };
   const formatWords = (value: number) => new Intl.NumberFormat(language === "en" ? "en-US" : "zh-CN").format(value);
 
   return <div className="scene-outliner-scroll" data-fd-id="scene-outliner">
@@ -567,7 +569,9 @@ function SceneOutliner({
           <td className="scene-outliner-index">{index + 1}</td>
           <td className="scene-outliner-title"><button type="button" onClick={() => onOpenScene(scene)} title={String(scene.title || tr("未命名场景", "Untitled scene"))}>{scene.title || tr("未命名场景", "Untitled scene")}</button>{data.plotRole && <small>{data.plotRole}</small>}</td>
           <td className="scene-outliner-chapter"><span>{chapter?.title || tr("未安排", "Unassigned")}</span>{chapter && <small>{volume?.title || tr("未分卷", "No volume")}</small>}</td>
-          <td><span className={`scene-outliner-status state-${SCENE_WRITING_STATUSES.includes(normalizeSceneWritingStatus(data.writingStatus) as typeof SCENE_WRITING_STATUSES[number]) ? normalizeSceneWritingStatus(data.writingStatus) : "custom"}`}>{statusName(data.writingStatus)}</span></td>
+          <td><div className={`scene-outliner-status-cell state-${SCENE_WRITING_STATUSES.includes(normalizeSceneWritingStatus(data.writingStatus) as typeof SCENE_WRITING_STATUSES[number]) ? normalizeSceneWritingStatus(data.writingStatus) : "custom"}`}>
+            <Select language={language} searchable size="compact" value={normalizeSceneWritingStatus(data.writingStatus)} missingLabel={normalizeSceneWritingStatus(data.writingStatus)} aria-label={tr(`${scene.title || "场景"}写作进度`, `Writing status for ${scene.title || "scene"}`)} disabled={sceneStatusBusy} options={writingStatusOptions} onValueChange={(status) => onWritingStatusChange(scene, status)} />
+          </div></td>
           <td className="scene-outliner-number">{normalizeSceneTargetWords(data.targetWords) == null ? "—" : formatWords(normalizeSceneTargetWords(data.targetWords) || 0)}</td>
           <td>{data.pov || "—"}</td>
           <td className="scene-outliner-labels" title={labels.join(" · ")}>{labels.length ? labels.join(" · ") : "—"}</td>
