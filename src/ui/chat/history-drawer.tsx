@@ -110,6 +110,11 @@ export function HistoryDrawer({
           <span className="zchat-conv-title">
           {pinned && !archivedMode && <IconPin className="zchat-conv-pin-indicator" size={12} />}
             <b className="zchat-ellipsis" title={title}>{title || tr("未命名对话", "Untitled")}</b>
+            {conversation.generating && (
+              <small className="zchat-conv-generating" role="status">
+                {tr("生成中", "Generating")}
+              </small>
+            )}
           </span>
           <small className="zchat-ellipsis" title={snippet}>{snippet || tr("（暂无内容摘要）", "(no summary)")}</small>
         </button>

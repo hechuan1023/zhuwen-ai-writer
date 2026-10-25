@@ -39,6 +39,7 @@ let focusTracker: FocusTracker;
 let closeReady = false;
 let quitting = false;
 const requests = new Map<string, AbortController>();
+const aiGenerations = new Map<string, { requestId: string; content: string }>();
 const searchTasks = new Map<string, { cancelled: boolean }>();
 const importTasks = new Map<number, AbortController>();
 const importFiles = new Map<string, { file: string; createdAt: number }>();
@@ -164,6 +165,13 @@ const aiSession: AiSession = {
   requestId: "",
   generatingConversationId: "",
 };
+function syncActiveGenerationState() {
+  const conversationId = String(aiSession.conversationId || "");
+  const generation = aiGenerations.get(conversationId);
+  aiSession.generating = Boolean(generation);
+  aiSession.requestId = generation?.requestId || "";
+  aiSession.generatingConversationId = generation ? conversationId : "";
+}
 const AI_SESSION_MESSAGE_WINDOW = 80;
 function trimAiSessionMessageWindow() {
   const allMessages = aiSession.messages;
@@ -3255,7 +3263,13 @@ function registerIpc(userDir: string) {
           limit,
           offset,
         );
-    return ok({ rows, limit, offset, novelId, hasMore: rows.length === limit });
+    return ok({
+      rows: rows.map((row: any) => ({ ...row, generating: aiGenerations.has(String(row.id)) })),
+      limit,
+      offset,
+      novelId,
+      hasMore: rows.length === limit,
+    });
   });
   function broadcastConversations(novelId: string) {
     if (!novelId) return;
@@ -3271,9 +3285,13 @@ function registerIpc(userDir: string) {
          LIMIT 50`,
         novelId,
       );
+      const conversationRows = rows.map((row: any) => ({
+        ...row,
+        generating: aiGenerations.has(String(row.id)),
+      }));
       for (const w of [win, floatWin]) {
         if (w && !w.isDestroyed())
-          w.webContents.send("ai:conversations:list", { novelId, rows });
+          w.webContents.send("ai:conversations:list", { novelId, rows: conversationRows });
       }
     } catch {}
   }
@@ -3294,7 +3312,7 @@ function registerIpc(userDir: string) {
     if (!id || !conversation || String(conversation.novel_id) !== String(aiSession.novelId || ""))
       return fail("对话不存在或不属于当前作品");
     const archived = p?.archived === true;
-    if (archived && aiSession.generatingConversationId === id)
+    if (archived && aiGenerations.has(id))
       return fail("请等待当前回复完成后再归档对话");
     const changedAt = timestamp();
     if (archived) {
@@ -3324,7 +3342,6 @@ function registerIpc(userDir: string) {
     return ok(true);
   });
   ipcMain.handle("ai:conversation:branch", (_, messageId) => {
-    if (aiSession.generating) return fail("请等待当前回复完成后再创建分支");
     const targetId = String(messageId || "");
     const target: any = get(
       `SELECT m.id,m.conversation_id,m.role,m.chapter_id AS message_chapter_id,c.novel_id,c.chapter_id,c.title
@@ -3334,6 +3351,8 @@ function registerIpc(userDir: string) {
     );
     if (!target || target.role !== "user") return fail("找不到这条用户提问，无法创建分支");
     if (target.novel_id !== aiSession.novelId) return fail("这条提问不属于当前小说项目");
+    if (aiGenerations.has(String(target.conversation_id)))
+      return fail("请等待这条对话的回复完成后再创建分支");
 
     const sourceRows: any[] = all(
       `SELECT rowid AS source_rowid,* FROM ai_messages
@@ -3404,6 +3423,9 @@ function registerIpc(userDir: string) {
     return ok({ conversationId: branchId, title: branchTitle });
   });
   ipcMain.handle("ai:conversation:trash", (_, id) => {
+    const conversationId = String(id || "");
+    const generation = aiGenerations.get(conversationId);
+    if (generation) requests.get(generation.requestId)?.abort();
     const conv: any = get(
       "SELECT novel_id FROM ai_conversations WHERE id=?",
       id,
@@ -3413,13 +3435,10 @@ function registerIpc(userDir: string) {
     ).run(timestamp(), timestamp(), id);
     if (conv?.novel_id)
       clearConversationDraft(String(conv.novel_id), String(id));
-    if (aiSession.conversationId === id) {
-      // 删除正在生成的会话：停止请求
-      if (aiSession.requestId) requests.get(aiSession.requestId)?.abort();
+    if (aiSession.conversationId === conversationId) {
       aiSession.conversationId = "";
       resetAiSessionMessageWindow();
-      aiSession.generating = false;
-      aiSession.requestId = "";
+      syncActiveGenerationState();
       broadcastSession();
     }
     broadcastConversations(String(aiSession.novelId || ""));
@@ -3500,6 +3519,7 @@ function registerIpc(userDir: string) {
         const existing: any = get("SELECT novel_id,archived_at FROM ai_conversations WHERE id=? AND deleted_at IS NULL", conv);
         if (!existing || String(existing.novel_id) !== String(p.novelId || ""))
           return fail("对话不存在或不属于当前作品");
+        if (aiGenerations.has(conv)) return fail("此对话仍在生成，请等待回复完成");
         if (existing.archived_at) {
           db.prepare("UPDATE ai_conversations SET archived_at=NULL,updated_at=?,data_version=data_version+1 WHERE id=?")
             .run(timestamp(), conv);
@@ -3536,11 +3556,10 @@ function registerIpc(userDir: string) {
       );
       aiSession.novelId = p.novelId ?? aiSession.novelId;
       aiSession.connectionId = p.connectionId || aiSession.connectionId;
+      aiGenerations.set(conv, { requestId, content: "" });
       if (isNewConversation) resetAiSessionMessageWindow();
       aiSession.conversationId = conv;
-      aiSession.requestId = requestId;
-      aiSession.generating = true;
-      aiSession.generatingConversationId = conv;
+      syncActiveGenerationState();
       aiSession.text = "";
       aiSession.messages = [
         ...aiSession.messages,
@@ -3647,10 +3666,12 @@ function registerIpc(userDir: string) {
             controller,
             (chunk) => {
               content += chunk;
+              const generation = aiGenerations.get(conv);
+              if (generation && generation.requestId === requestId) generation.content = content;
               // 仅当用户仍停留在该生成会话时更新共享流，避免串话
               if (aiSession.conversationId === conv) {
                 const last = aiSession.messages[aiSession.messages.length - 1];
-                if (last?.streaming) last.content += chunk;
+                if (last?.streaming && last.conversationId === conv) last.content += chunk;
                 scheduleSessionBroadcast();
               }
             },
@@ -3688,15 +3709,17 @@ function registerIpc(userDir: string) {
         conv,
       );
       const last = aiSession.messages[aiSession.messages.length - 1];
-      if (last?.streaming) {
+      if (last?.streaming && last.conversationId === conv && aiSession.conversationId === conv) {
         last.streaming = false;
         last.id = aid;
         last.created_at = assistantCreatedAt;
         last.source_revision = p.sourceRevision;
         last.model = connection.model;
       }
-      aiSession.generating = false;
+      aiGenerations.delete(conv);
+      syncActiveGenerationState();
       broadcastSession();
+      broadcastConversations(String(p.novelId || aiSession.novelId || ""));
       return ok({ requestId, conversationId: conv, messageId: aid });
     } catch (e) {
       const aborted = controller.signal.aborted;
@@ -3725,7 +3748,7 @@ function registerIpc(userDir: string) {
               "UPDATE ai_conversations SET updated_at=? WHERE id=?",
             ).run(createdAt, conv);
           })();
-          if (last?.streaming) {
+          if (last?.streaming && last.conversationId === conv && aiSession.conversationId === conv) {
             last.id = aid;
             last.created_at = createdAt;
             last.model = connection?.model || p.model || null;
@@ -3733,15 +3756,21 @@ function registerIpc(userDir: string) {
           }
         } catch {}
       }
-      if (last?.streaming) {
+      if (last?.streaming && last.conversationId === conv && aiSession.conversationId === conv) {
         last.streaming = false;
         last.incomplete = true;
       }
-      aiSession.generating = false;
+      aiGenerations.delete(conv);
+      syncActiveGenerationState();
       broadcastSession();
+      if (conv) broadcastConversations(String(p.novelId || aiSession.novelId || ""));
       return fail(aborted ? "已停止生成" : classifyError(e));
     } finally {
       requests.delete(requestId);
+      if (aiGenerations.get(conv)?.requestId === requestId) {
+        aiGenerations.delete(conv);
+        syncActiveGenerationState();
+      }
     }
   });
   ipcMain.handle("ai:cancel", (_, id) => {
@@ -3842,6 +3871,7 @@ function registerIpc(userDir: string) {
         String(aiSession.conversationId || ""),
       );
     }
+    syncActiveGenerationState();
     broadcastSession();
     return ok({ accepted: true, version: aiSession.draftVersion });
   });
@@ -3924,7 +3954,22 @@ function registerIpc(userDir: string) {
         hasEarlier,
         beforeMessageId: hasEarlier ? String(aiSession.messages[0]?.id || "") || null : null,
       };
+      const generation = aiGenerations.get(String(conversationId));
+      if (generation) {
+        const lastUser = [...aiSession.messages].reverse().find((message) => message.role === "user");
+        aiSession.messages.push({
+          id: `streaming-${generation.requestId}`,
+          role: "assistant",
+          content: generation.content,
+          streaming: true,
+          conversationId: String(conversationId),
+          source_message_id: lastUser?.id || "",
+          source_refs: lastUser?.source_refs || [],
+        });
+        trimAiSessionMessageWindow();
+      }
     }
+    syncActiveGenerationState();
     loadConversationDraft(
       String(aiSession.novelId || ""),
       String(aiSession.conversationId || ""),
