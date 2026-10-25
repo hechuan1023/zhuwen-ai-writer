@@ -300,13 +300,19 @@ export function Composer({
             ariaLabel={tr("提示词模板", "Prompt templates")}
             dataFdId="ai-prompt-template-menu"
             menuClassName="prompt-menu open-up"
-            trigger={<IconCopy size={14} />}
-            triggerClassName="zchat-pill"
+            trigger={
+              <>
+                <IconCopy size={14} />
+                <span>{tr("模板", "Prompts")}</span>
+              </>
+            }
+            triggerClassName="zchat-pill wide"
             items={promptItems}
           />
           <ChatMenu
             ariaLabel={tr("任务类型", "Task type")}
             dataFdId="ai-task-menu"
+            menuClassName="open-up"
             trigger={
               <>
                 <IconSparkle />
