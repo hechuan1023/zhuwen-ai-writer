@@ -101,6 +101,9 @@ export function HistoryDrawer({
     const id = String(conversation.id || "");
     const pinned = Number(conversation.pinned) === 1;
     const title = String(conversation.title || "");
+    const snippet = String(
+      query.trim() ? conversation.search_snippet || conversation.last_snippet || "" : conversation.last_snippet || "",
+    ).trim();
     return (
       <div className={`zchat-conv-item ${id === currentId ? "active" : ""}`} key={id} data-fd-id="ai-history-row">
         <button type="button" className="zchat-conv-row" aria-current={id === currentId ? "true" : undefined} onClick={() => onSelect(id)}>
@@ -108,7 +111,7 @@ export function HistoryDrawer({
           {pinned && !archivedMode && <IconPin className="zchat-conv-pin-indicator" size={12} />}
             <b className="zchat-ellipsis" title={title}>{title || tr("未命名对话", "Untitled")}</b>
           </span>
-          <small className="zchat-ellipsis">{String(conversation.last_snippet || "").trim() || tr("（暂无内容摘要）", "(no summary)")}</small>
+          <small className="zchat-ellipsis" title={snippet}>{snippet || tr("（暂无内容摘要）", "(no summary)")}</small>
         </button>
         <button
           type="button"

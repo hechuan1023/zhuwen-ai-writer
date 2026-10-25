@@ -3221,18 +3221,21 @@ function registerIpc(userDir: string) {
     const offset = Math.max(0, Number(p?.offset) || 0);
     const search = String(p?.search || "").trim();
     const archivedAtFilter = p?.archived === true ? "IS NOT NULL" : "IS NULL";
-    const like = `%${search}%`;
+    const like = `%${search.replace(/[!%_]/g, "!$&")}%`;
     const rows = search
       ? all(
           `SELECT c.*,
             (SELECT substr(m.content,1,120) FROM ai_messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_snippet,
+            (SELECT substr(m.content,MAX(1,instr(lower(m.content),lower(?))-48),120) FROM ai_messages m WHERE m.conversation_id=c.id AND m.content LIKE ? ESCAPE '!' ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS search_snippet,
             (SELECT m.incomplete FROM ai_messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_incomplete,
             (SELECT m.role FROM ai_messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_role
            FROM ai_conversations c
            WHERE c.novel_id=? AND c.deleted_at IS NULL AND c.archived_at ${archivedAtFilter}
-             AND (c.title LIKE ? OR EXISTS (SELECT 1 FROM ai_messages m WHERE m.conversation_id=c.id AND m.content LIKE ?))
+             AND (c.title LIKE ? ESCAPE '!' OR EXISTS (SELECT 1 FROM ai_messages m WHERE m.conversation_id=c.id AND m.content LIKE ? ESCAPE '!'))
            ORDER BY c.pinned DESC, c.updated_at DESC, c.id DESC
            LIMIT ? OFFSET ?`,
+          search,
+          like,
           novelId,
           like,
           like,
