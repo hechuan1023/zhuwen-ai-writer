@@ -1182,6 +1182,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.zchat-suggestion-copy .zchat-suggestion-excerpt {
+  display: -webkit-box;
+  color: color-mix(in srgb, var(--ink, #35362f) 76%, var(--muted, #8a8577));
+  line-height: 1.45;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.zchat-suggestion-excerpt span {
+  color: var(--accent, #4d7a68);
+  font-weight: 600;
+}
 .zchat-suggestion-action {
   display: inline-flex;
   align-items: center;

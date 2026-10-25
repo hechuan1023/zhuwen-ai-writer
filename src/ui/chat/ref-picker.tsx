@@ -144,6 +144,11 @@ export function RefPicker({
                       <span className="zchat-suggestion-copy">
                         <b className="zchat-ellipsis">{suggestion.title}</b>
                         <small>{suggestion.reasons.join(" · ") || tr(`正文提及「${suggestion.matched}」`, `Matched "${suggestion.matched}"`)}</small>
+                        {suggestion.matchedSnippet ? (
+                          <small className="zchat-suggestion-excerpt">
+                            <span>{tr("命中片段 · ", "Matched passage · ")}</span>{suggestion.matchedSnippet}
+                          </small>
+                        ) : null}
                       </span>
                       <span className="zchat-suggestion-action">{added ? <><IconCheck />{tr("已添加", "Added")}</> : tr("＋ 添加", "+ Add")}</span>
                     </button>

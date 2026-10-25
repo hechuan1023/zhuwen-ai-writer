@@ -6,6 +6,7 @@ export type MaterialSuggestion = {
   title: string;
   content: string;
   matched: string;
+  matchedSnippet?: string;
   count: number;
   score: number;
   reasons: string[];
@@ -55,6 +56,30 @@ function escapeRegExp(s: string) {
 function countOccurrences(corpus: string, term: string) {
   if (!term || term.length < 2) return 0;
   return (corpus.match(new RegExp(escapeRegExp(term), "g")) || []).length;
+}
+
+function excerptAroundMatch(source: string, rawTerm: string, maxLength = 132) {
+  const term = String(rawTerm || "").trim();
+  if (!source || !term || term.length > maxLength - 8) return "";
+  const lowerSource = source.toLocaleLowerCase();
+  const lowerTerm = term.toLocaleLowerCase();
+  let start = lowerSource.indexOf(lowerTerm);
+  let end = start < 0 ? -1 : start + lowerTerm.length;
+  let excerptSource = source;
+  if (start < 0) {
+    excerptSource = source.normalize("NFKC");
+    start = excerptSource.toLocaleLowerCase().indexOf(term.normalize("NFKC").toLocaleLowerCase());
+    if (start < 0) return "";
+    end = start + term.normalize("NFKC").length;
+  }
+  const context = Math.max(16, Math.floor((maxLength - (end - start)) / 2));
+  const from = Math.max(0, start - context);
+  const to = Math.min(excerptSource.length, end + context);
+  let excerpt = excerptSource.slice(from, to).replace(/\s+/g, " ").trim();
+  if (from > 0) excerpt = `…${excerpt}`;
+  if (to < excerptSource.length) excerpt = `${excerpt}…`;
+  if (excerpt.length > maxLength) excerpt = `${excerpt.slice(0, maxLength - 1).trimEnd()}…`;
+  return excerpt;
 }
 
 const KEYWORD_FIELDS: Record<string, string[]> = {
@@ -270,6 +295,8 @@ export function relevantMaterials(
     let count = 0;
     let matched = "";
     let bestWeighted = 0;
+    let matchedSnippet = "";
+    let snippetWeight = 0;
     const reasons: string[] = [];
     let participantsHit = 0;
     const en = context.language === "en";
@@ -298,6 +325,14 @@ export function relevantMaterials(
         matched = rawTerm;
       }
       bestWeighted = Math.max(bestWeighted, weighted);
+      if ((fullCount || selectionCount) && weighted > snippetWeight) {
+        const snippetSource = selectionCount ? context.selectionText || corpus : corpus;
+        const snippet = excerptAroundMatch(snippetSource, rawTerm);
+        if (snippet) {
+          matchedSnippet = snippet;
+          snippetWeight = weighted;
+        }
+      }
       if (selectionCount) reasons.push(en ? `Selection mentions “${rawTerm}” ${selectionCount} time(s)` : `选区提及「${rawTerm}」${selectionCount} 次`);
       else if (type === "title") reasons.push(en ? `Text mentions “${rawTerm}” · ${fullCount}` : `正文提及「${rawTerm}」${fullCount} 次`);
       else if (type === "alias") reasons.push(en ? `Alias match “${rawTerm}” · ${fullCount}` : `命中别名「${rawTerm}」${fullCount} 次`);
@@ -325,6 +360,7 @@ export function relevantMaterials(
       title: item.kind === "relation" ? `${item.from || "?"} 与 ${item.to || "?"}` : title || "未命名资料",
       content: contextContent(item, 6000, context.chapterTitles, context.chapterOrder, context.chapterId),
       matched: matched || String(item.title || "").trim(),
+      matchedSnippet: matchedSnippet || undefined,
       count,
       score: score + bestWeighted * 0.01,
       reasons: [...new Set(reasons)].slice(0, 3),
