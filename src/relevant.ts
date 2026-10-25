@@ -108,6 +108,20 @@ function contentKeywords(kind: string, content: Record<string, any>): string[] {
   return [...keywords];
 }
 
+type CachedMaterialKeywords = { kind: string; source: unknown; terms: string[] };
+const materialKeywordCache = new WeakMap<object, CachedMaterialKeywords>();
+
+/** Cache extracted terms per immutable library row; context edits reuse this work. */
+function indexedContentKeywords(material: Material): string[] {
+  const kind = String(material.kind || "");
+  const source = material.content_json;
+  const cached = materialKeywordCache.get(material);
+  if (cached && cached.kind === kind && cached.source === source) return cached.terms;
+  const terms = contentKeywords(kind, parseObject(source));
+  materialKeywordCache.set(material, { kind, source, terms });
+  return terms;
+}
+
 function chinesePhraseCounts(text: string): Map<string, number> {
   const counts = new Map<string, number>();
   for (const match of text.matchAll(/[\p{Script=Han}]+/gu)) {
@@ -217,7 +231,7 @@ export function relevantMaterials(
   for (const material of items) {
     if (!material || material.deleted_at || !material.id) continue;
     const key = `${material.kind}:${material.id}`;
-    const terms = contentKeywords(String(material.kind || ""), parseObject(material.content_json));
+    const terms = indexedContentKeywords(material);
     if (!terms.length) continue;
     keywordTermsByMaterial.set(key, terms);
     for (const term of terms) keywordDocumentFrequency.set(term, (keywordDocumentFrequency.get(term) || 0) + 1);
