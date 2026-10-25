@@ -20,6 +20,7 @@ export function ScenePlanner({
   onOpenChapter,
   onChapterStatusChange,
   onSceneWritingStatusChange,
+  onSceneArchiveChange,
   onMoveScene,
   notify,
   canReorder,
@@ -37,6 +38,7 @@ export function ScenePlanner({
   onOpenChapter: (chapter: SceneRow) => void;
   onChapterStatusChange: (chapterId: string, status: string) => void;
   onSceneWritingStatusChange: (scene: SceneRow, status: string) => Promise<boolean>;
+  onSceneArchiveChange: (scene: SceneRow, archived: boolean) => Promise<boolean>;
   onMoveScene: (sceneId: string, chapterId: string | null, beforeId?: string) => void;
   notify: (message: string) => void;
   canReorder: boolean;
@@ -47,10 +49,11 @@ export function ScenePlanner({
   const [sceneStatusFilter, setSceneStatusFilter] = useState("all");
   const [povFilter, setPovFilter] = useState("all");
   const [trackFilter, setTrackFilter] = useState("all");
-  const [viewMode, setViewMode] = useState<"board" | "timeline" | "matrix">("board");
+  const [viewMode, setViewMode] = useState<"board" | "timeline" | "matrix" | "archive">("board");
   const [draggingId, setDraggingId] = useState("");
   const [statusBusyId, setStatusBusyId] = useState("");
   const [sceneStatusBusyId, setSceneStatusBusyId] = useState("");
+  const [archiveBusyId, setArchiveBusyId] = useState("");
   useEffect(() => {
     if (volumeFilter !== "all" && volumeFilter !== "unvolumed" && !volumes.some((volume) => volume.id === volumeFilter))
       setVolumeFilter("all");
@@ -67,9 +70,18 @@ export function ScenePlanner({
     const state = match === "missing" && Number(currentChapter.revision || 0) <= link.chapterRevision ? "pending" : match;
     return { state, words, chapterTitle: link.chapterTitle };
   };
-  const orderedScenes = useMemo(
-    () => [...scenes].sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)),
+  const archivedScenes = useMemo(
+    () => scenes.filter((scene) => Boolean(parseJson(scene.content_json).archivedAt)),
     [scenes],
+  );
+  const planningScenes = useMemo(
+    () => scenes.filter((scene) => !parseJson(scene.content_json).archivedAt),
+    [scenes],
+  );
+  const orderedScenes = useMemo(
+    () => [...(viewMode === "archive" ? archivedScenes : planningScenes)]
+      .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)),
+    [archivedScenes, planningScenes, viewMode],
   );
   const sceneTargetTotals = useMemo(() => {
     const totals = new Map<string, number>();
@@ -164,6 +176,18 @@ export function ScenePlanner({
       setSceneStatusBusyId("");
     }
   };
+  const updateSceneArchive = async (scene: SceneRow, archived: boolean) => {
+    if (archiveBusyId) return;
+    setArchiveBusyId(scene.id);
+    try {
+      const saved = await onSceneArchiveChange(scene, archived);
+      if (!saved) notify(archived ? tr("场景归档失败", "Could not archive scene") : tr("场景恢复失败", "Could not restore scene"));
+    } catch {
+      notify(archived ? tr("场景归档失败", "Could not archive scene") : tr("场景恢复失败", "Could not restore scene"));
+    } finally {
+      setArchiveBusyId("");
+    }
+  };
   const knownChapterIds = new Set(chapters.map((chapter) => chapter.id));
   const visibleScenes = useMemo(
     () => filterScenesByTrack(filterScenesByPov(orderedScenes, povFilter), trackFilter)
@@ -204,23 +228,23 @@ export function ScenePlanner({
         <div className="scene-planner-actions">
           <div className="scene-planner-filter">
             <label>{tr("查看范围", "Volume")}</label>
-            <Select value={volumeFilter} aria-label={tr("按卷筛选", "Filter by volume")} onValueChange={setVolumeFilter} options={volumeOptions} />
+            <Select language={language} value={volumeFilter} aria-label={tr("按卷筛选", "Filter by volume")} onValueChange={setVolumeFilter} options={volumeOptions} />
           </div>
           <div className="scene-planner-filter scene-planner-status-filter">
             <label>{tr("章节状态", "Chapter status")}</label>
-            <Select value={statusFilter} aria-label={tr("按章节状态筛选", "Filter by chapter status")} onValueChange={setStatusFilter} options={statusOptions} />
+            <Select language={language} value={statusFilter} aria-label={tr("按章节状态筛选", "Filter by chapter status")} onValueChange={setStatusFilter} options={statusOptions} />
           </div>
           <div className="scene-planner-filter scene-planner-writing-status-filter">
             <label>{tr("场景写作进度", "Scene writing status")}</label>
-            <Select searchable value={sceneStatusFilter} aria-label={tr("按场景写作进度筛选", "Filter by scene writing status")} onValueChange={setSceneStatusFilter} options={sceneStatusOptions} />
+            <Select language={language} searchable value={sceneStatusFilter} aria-label={tr("按场景写作进度筛选", "Filter by scene writing status")} onValueChange={setSceneStatusFilter} options={sceneStatusOptions} />
           </div>
           <div className="scene-planner-filter scene-planner-pov-filter">
             <label>{tr("视角人物", "POV")}</label>
-            <Select value={povFilter} aria-label={tr("按视角人物筛选", "Filter by point of view")} onValueChange={setPovFilter} options={povOptions} />
+            <Select language={language} value={povFilter} aria-label={tr("按视角人物筛选", "Filter by point of view")} onValueChange={setPovFilter} options={povOptions} />
           </div>
           <div className="scene-planner-filter scene-planner-tag-filter">
             <label>{tr("剧情线 / 标签 / 属性", "Plotline / label / property")}</label>
-            <Select searchable value={trackFilter} aria-label={tr("按剧情线、标签或自定义属性筛选", "Filter by plotline, label, or custom property")} onValueChange={setTrackFilter} options={trackOptions} />
+            <Select language={language} searchable value={trackFilter} aria-label={tr("按剧情线、标签或自定义属性筛选", "Filter by plotline, label, or custom property")} onValueChange={setTrackFilter} options={trackOptions} />
           </div>
           <button className="primary" onClick={() => onCreateScene()}>{tr("＋ 新建场景", "+ New scene")}</button>
           <button className="scene-planner-close" onClick={onClose}>{tr("返回资料库", "Back to story bible")}</button>
@@ -236,8 +260,9 @@ export function ScenePlanner({
           <button type="button" className={viewMode === "board" ? "active" : ""} aria-pressed={viewMode === "board"} onClick={() => setViewMode("board")}>{tr("规划板", "Board")}</button>
           <button type="button" className={viewMode === "timeline" ? "active" : ""} aria-pressed={viewMode === "timeline"} onClick={() => setViewMode("timeline")}>{tr("时间线", "Timeline")}</button>
           <button type="button" className={viewMode === "matrix" ? "active" : ""} aria-pressed={viewMode === "matrix"} onClick={() => setViewMode("matrix")}>{tr("剧情矩阵", "Matrix")}</button>
+          <button type="button" className={viewMode === "archive" ? "active" : ""} aria-pressed={viewMode === "archive"} onClick={() => setViewMode("archive")}>{tr(`已归档 (${archivedScenes.length})`, `Archived (${archivedScenes.length})`)}</button>
         </div>
-        <small>{viewMode === "matrix" ? tr("矩阵按章节汇总剧情线覆盖；点场景标题可打开细纲。", "Matrix summarizes plotline coverage by chapter; click a scene to open its outline.") : canReorderVisible ? tr("拖动卡片可调整章节与顺序 · 点击标题编辑细纲", "Drag to reorder or change chapter · Click a title to edit") : tr("筛选结果仅供查看；清除视角、剧情线、标签或场景进度筛选后可调整顺序。", "Filtered results are view-only; clear POV, plotline, label, or scene progress filters to reorder.")}</small>
+        <small>{viewMode === "archive" ? tr("归档场景不会出现在活动规划板与剧情矩阵中；可随时恢复。", "Archived scenes are hidden from active planning and the plot matrix; restore them at any time.") : viewMode === "matrix" ? tr("矩阵按章节汇总剧情线覆盖；点场景标题可打开细纲。", "Matrix summarizes plotline coverage by chapter; click a scene to open its outline.") : canReorderVisible ? tr("拖动卡片可调整章节与顺序 · 点击标题编辑细纲", "Drag to reorder or change chapter · Click a title to edit") : tr("筛选结果仅供查看；清除视角、剧情线、标签或场景进度筛选后可调整顺序。", "Filtered results are view-only; clear POV, plotline, label, or scene progress filters to reorder.")}</small>
       </div>
 
       {viewMode === "board" ? <div className="scene-board-scroll" data-fd-id="scene-board-columns">
@@ -283,6 +308,7 @@ export function ScenePlanner({
                   <span>{tr("章节进度", "Chapter status")}</span>
                   <Select
                     size="compact"
+                    language={language}
                     value={chapter.status || "draft"}
                     aria-label={tr(`${chapter.title}章节状态`, `Status for ${chapter.title}`)}
                     disabled={statusBusyId === chapter.id}
@@ -321,7 +347,7 @@ export function ScenePlanner({
                       <header><span className="scene-timeline-time">{data.when || tr("未填写时间标记", "No time marker")}</span>{data.plotRole && <span className="scene-timeline-role">{data.plotRole}</span>}{scenePlotlines(data).slice(0, 2).map((plotline) => <span className="scene-timeline-tag plotline" key={`plotline:${plotline}`}>{plotline}</span>)}{sceneTags(data).slice(0, 2).map((tag) => <span className="scene-timeline-tag" key={`tag:${tag}`}>{tag}</span>)}{sceneCustomFields(data).slice(0, 2).map((field) => <span className="scene-timeline-tag custom" key={`custom:${field.key}`} title={`${field.key}: ${field.value}`}>{field.key}: {field.value}</span>)}</header>
                       <div className={`scene-timeline-status state-${sceneStatusTone(data.writingStatus)}`}>
                         <span>{tr("写作进度", "Writing status")}</span>
-                        <Select searchable size="compact" value={normalizeSceneWritingStatus(data.writingStatus)} missingLabel={normalizeSceneWritingStatus(data.writingStatus)} aria-label={tr(`${scene.title || "场景"}写作进度`, `Writing status for ${scene.title || "scene"}`)} disabled={Boolean(sceneStatusBusyId)} options={writingStatusOptions} onValueChange={(status) => void updateSceneStatus(scene, status)} />
+                        <Select language={language} searchable size="compact" value={normalizeSceneWritingStatus(data.writingStatus)} missingLabel={normalizeSceneWritingStatus(data.writingStatus)} aria-label={tr(`${scene.title || "场景"}写作进度`, `Writing status for ${scene.title || "scene"}`)} disabled={Boolean(sceneStatusBusyId)} options={writingStatusOptions} onValueChange={(status) => void updateSceneStatus(scene, status)} />
                       </div>
                       <button type="button" className="scene-timeline-title" onClick={() => onOpenScene(scene)}>{scene.title || tr("未命名场景", "Untitled scene")}</button>
                       {normalizeSceneTargetWords(data.targetWords) != null && <div className="scene-timeline-target" title={tr("相对条表示该场景目标字数占本章所有已规划场景目标字数的比例，不是写作进度", "The bar shows this scene's share of all planned scene targets in this chapter, not writing progress")}><span>{tr("目标", "Target")} {formatWords(normalizeSceneTargetWords(data.targetWords) || 0)} {tr("字", "words")}</span><span>{targetShare(scene)}%</span><i aria-hidden="true"><b style={{ width: `${targetShare(scene)}%` }} /></i></div>}
@@ -340,6 +366,16 @@ export function ScenePlanner({
           </section>}
           {!timelineGroups.length && <div className="scene-board-no-chapters"><span>{tr("当前筛选范围内没有章节。", "No chapters match the current filters.")}</span><button type="button" onClick={() => { setVolumeFilter("all"); setStatusFilter("all"); setSceneStatusFilter("all"); setPovFilter("all"); setTrackFilter("all"); }}>{tr("清除筛选", "Clear filters")}</button></div>}
         </div>
+      </div> : viewMode === "archive" ? <div className="scene-archive-scroll" data-fd-id="scene-archive-list">
+        {visibleScenes.length ? <div className="scene-archive-list">{visibleScenes.map((scene) => {
+          const data = dataFor(scene);
+          const linkedChapter = chapters.find((item) => item.id === scene.chapter_id);
+          return <article className="scene-archive-row" key={scene.id} data-fd-id={`scene-archive-${scene.id}`}>
+            <div><b>{scene.title || tr("未命名场景", "Untitled scene")}</b><small>{linkedChapter?.title || tr("未安排章节", "Unassigned chapter")} · {tr("归档于", "Archived")} {String(data.archivedAt || "").slice(0, 10)}</small>{data.plotRole && <p>{data.plotRole}</p>}</div>
+            <button type="button" onClick={() => onOpenScene(scene)}>{tr("打开细纲", "Open outline")}</button>
+            <button type="button" className="primary" disabled={archiveBusyId === scene.id} onClick={() => void updateSceneArchive(scene, false)}>{archiveBusyId === scene.id ? tr("恢复中…", "Restoring…") : tr("恢复", "Restore")}</button>
+          </article>;
+        })}</div> : <div className="scene-archive-empty"><b>{tr("归档区为空", "No archived scenes")}</b><span>{tr("从细纲编辑器归档暂时不参与规划的场景；之后可在这里恢复。", "Archive scenes from the outline editor when they are out of active planning. Restore them here later.")}</span></div>}
       </div> : <div className="scene-matrix-scroll" data-fd-id="scene-plotline-matrix">
         <div className="scene-matrix-note">{tr("每格列出该章节属于对应剧情线的场景。矩阵只读，未安排到章节的场景不计入；可用上方视角与标签筛选缩小范围。", "Each cell lists scenes in that chapter assigned to the plotline. The matrix is read-only and excludes unassigned scenes; use the POV and label filters above to narrow the view.")}</div>
         {plotlineMatrix.plotlines.length ? <table className="scene-matrix-table">
@@ -422,6 +458,7 @@ function SceneCard({
       <div className={`scene-card-writing-state state-${writingStatusTone}`}>
         <span>{tr("写作进度", "Writing status")}</span>
         <Select
+          language={language}
           searchable
           size="compact"
           value={writingStatus}

@@ -1724,6 +1724,7 @@ export function Workspace({
                       </button>
                       <Select
                         size="compact"
+                        language={language}
                         value={batchTarget}
                         aria-label={tr("移动到目标卷", "Move to volume")}
                         placeholder={tr("移动到…", "Move to…")}
@@ -1846,6 +1847,7 @@ export function Workspace({
                 />
                 <Select
                   size="compact"
+                  language={language}
                   value={chapter.status || "draft"}
                   aria-label={tr("章节状态", "Chapter status")}
                   onValueChange={async (status) => {

@@ -191,6 +191,7 @@ export function Settings({
               {tr("界面语言", "Interface language")}
               <Select
                 id="settings-language"
+                language={language}
                 value={language}
                 aria-label={tr("界面语言", "Interface language")}
                 onValueChange={(v) => onLanguage(v as UiLanguage)}
@@ -416,6 +417,7 @@ export function Settings({
                 {tr("思考深度", "Reasoning effort")}
                 <Select
                   id="settings-reasoning"
+                  language={language}
                   value={edit.reasoningEffort || ""}
                   aria-label={tr("思考深度", "Reasoning effort")}
                   onValueChange={(v) => setEdit({ ...edit, reasoningEffort: v })}
@@ -581,6 +583,7 @@ export function Settings({
               <label>
                 {tr("正文字体", "Body font")}
                 <Select
+                  language={language}
                   value={typography.fontFamily}
                   aria-label={tr("正文字体", "Body font")}
                   onValueChange={(v) => onChangeTypography({ fontFamily: v })}
@@ -967,6 +970,7 @@ export function AppearanceSettings({
       <label>
         {tr("填充方式", "Image fit")}
         <Select
+          language={language}
           value={value.backgroundFit}
           aria-label={tr("填充方式", "Image fit")}
           onValueChange={(v) => onChange({ backgroundFit: v })}

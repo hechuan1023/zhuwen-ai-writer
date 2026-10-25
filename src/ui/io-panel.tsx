@@ -273,6 +273,7 @@ export function IoPanel({
         <label>
           {tr("导出范围", "Export scope")}
           <Select
+            language={language}
             value={exportScope}
             aria-label={tr("导出范围", "Export scope")}
             onValueChange={(v) => setExportScope(v as any)}
@@ -297,6 +298,7 @@ export function IoPanel({
         <label>
           {tr("EPUB 排版（仅影响 EPUB）", "EPUB layout (EPUB only)")}
           <Select
+            language={language}
             value={epubLayout}
             aria-label={tr("EPUB 排版", "EPUB layout")}
             onValueChange={(value) => void changeEpubLayout(value as typeof epubLayout)}
@@ -602,6 +604,7 @@ export function IoPanel({
               <label>
                 {tr("文本编码", "Text encoding")}
                 <Select
+                  language={language}
                   value={imported.encoding}
                   aria-label={tr("文本编码", "Text encoding")}
                   onValueChange={async (encoding) => {
@@ -701,6 +704,7 @@ export function IoPanel({
               <label>
                 {tr("预览章节", "Preview chapter")}
                 <Select
+                  language={language}
                   value={epubPreviewChapterId}
                   aria-label={tr("选择预览章节", "Choose preview chapter")}
                   onValueChange={(id) => {
@@ -717,6 +721,7 @@ export function IoPanel({
                 {tr("阅读器画布（参考尺寸）", "Reader viewport (reference size)")}
                 <Select
                   id="epub-reader-viewport"
+                  language={language}
                   value={epubReaderViewport}
                   aria-label={tr("阅读器参考尺寸", "Reader reference viewport")}
                   onValueChange={(value) => setEpubReaderViewport(value as EpubReaderViewport)}

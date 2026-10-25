@@ -235,6 +235,7 @@ export function WritingStatsCenter({
         <label className="row" style={{ gap: 8 }}>
           <span className="hint">{tr("作品", "Novel")}</span>
           <Select
+            language={language}
             value={filter}
             aria-label={tr("作品范围", "Novel scope")}
             searchable={novels.length > 8}

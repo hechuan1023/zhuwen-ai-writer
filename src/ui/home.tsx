@@ -202,6 +202,7 @@ export function CreativeHome({
           />
           <Select
             size="compact"
+            language={language}
             value={sort}
             aria-label={tr("排序", "Sort")}
             onValueChange={setSort}

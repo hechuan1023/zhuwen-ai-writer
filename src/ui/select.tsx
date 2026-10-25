@@ -27,6 +27,7 @@ export type SelectProps = {
   id?: string;
   "aria-label"?: string;
   className?: string;
+  language?: "zh-CN" | "en";
   /** 当前值不在列表时的显示（不静默改选） */
   missingLabel?: string;
 };
@@ -51,6 +52,7 @@ export function Select({
   searchable,
   id,
   className,
+  language = "zh-CN",
   missingLabel,
   ...rest
 }: SelectProps) {
@@ -275,7 +277,7 @@ export function Select({
               aria-controls={listboxId}
               aria-autocomplete="list"
               aria-activedescendant={filtered[activeIndex] && !filtered[activeIndex].disabled ? `${listboxId}-option-${activeIndex}` : undefined}
-              placeholder="搜索…"
+              placeholder={language === "en" ? "Search…" : "搜索…"}
               value={query}
               onChange={(e) => {
                 const nextQuery = e.target.value;
@@ -302,7 +304,7 @@ export function Select({
           >
             {filtered.length === 0 && (
               <div className="zw-select-empty" role="presentation">
-                无匹配项
+                {language === "en" ? "No matches" : "无匹配项"}
               </div>
             )}
             {filtered.map((o, i) => (

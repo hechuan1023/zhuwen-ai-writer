@@ -27,6 +27,7 @@ function styleLabel(card: StyleCard, language: string) {
     "style-relationship-progression": ["Relationship progression", "Use goals, boundaries, choices, and concrete actions to move relationships."],
     "style-rule-instance-progression": ["Rule-based instances", "Use verifiable rules, active testing, staged payoffs, and a persistent arc."],
     "style-short-form-closure": ["Short-form closure & pacing", "Focus causal progression and a satisfying resolution within a bounded length."],
+    "style-road-journey-healing": ["Road journey & gradual healing", "Connect episodic stops, evolving relationships, and slow, earned change through a journey."],
   };
   const [name, description] = labels[card.id] || [card.name, card.description];
   return { name, description };
@@ -37,6 +38,12 @@ function taskLabel(task: string, language: string) {
 }
 
 const TECHNIQUE_PRESETS = [
+  {
+    id: "genre-road-journey-healing",
+    name: ["公路漫游疗愈", "Road journey & gradual healing"],
+    description: ["旅途单元 + 群像关系 + 生活肌理", "Episodic journey + ensemble relationships + lived detail"],
+    cardIds: ["style-road-journey-healing", "style-human-ensemble", "style-lived-realism"],
+  },
   {
     id: "genre-short-form-closure",
     name: ["中短篇现实题材", "Short-form grounded story"],

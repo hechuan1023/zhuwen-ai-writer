@@ -3857,6 +3857,33 @@ function registerIpc(userDir: string) {
     });
     return ok({ rows: hydrated, hasEarlier });
   });
+  ipcMain.handle("ai:conversation:messages:stats", (_, p) => {
+    const conversationId = String(p?.conversationId || "").trim();
+    const novelId = String(p?.novelId || "").trim();
+    const conversation: any = get(
+      "SELECT id FROM ai_conversations WHERE id=? AND novel_id=? AND deleted_at IS NULL",
+      conversationId,
+      novelId,
+    );
+    if (!conversation || novelId !== String(aiSession.novelId || ""))
+      return fail("对话不存在或不属于当前作品");
+    const rows: any[] = all(
+      "SELECT content FROM ai_messages WHERE conversation_id=? ORDER BY created_at,rowid",
+      conversationId,
+    );
+    const liveStreamingChars = conversationId === aiSession.conversationId
+      ? aiSession.messages.reduce(
+          (total, row) => total + (row.streaming ? String(row.content || "").length : 0),
+          0,
+        )
+      : 0;
+    return ok({
+      messageCount: rows.length,
+      characterCount:
+        rows.reduce((total, row) => total + String(row.content || "").length, 0) +
+        liveStreamingChars,
+    });
+  });
   ipcMain.handle("ai:message:contexts", (_, messageId) => {
     const row: any = get(
       "SELECT m.id,c.novel_id FROM ai_messages m JOIN ai_conversations c ON c.id=m.conversation_id WHERE m.id=? AND m.role='user'",

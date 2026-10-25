@@ -42,6 +42,14 @@
 .scene-planner-view-switch button { min-height: 27px; padding: 3px 10px; border: 0; border-radius: calc(var(--r-sm) - 2px); background: transparent; color: var(--muted); font-size: 10px; }
 .scene-planner-view-switch button.active { background: var(--paper); color: var(--accent); box-shadow: var(--shadow-sm); }
 .scene-planner-view-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.scene-archive-scroll { flex: 1; min-height: 0; overflow: auto; padding: 22px clamp(16px, 3vw, 38px) 32px; }
+.scene-archive-list { display: grid; gap: 9px; width: min(880px, 100%); margin: 0 auto; }
+.scene-archive-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-md); background: color-mix(in srgb, var(--panel) 42%, var(--paper)); }
+.scene-archive-row > div { display: grid; gap: 4px; min-width: 0; }
+.scene-archive-row b { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.scene-archive-row small,.scene-archive-row p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.scene-archive-empty { display: grid; justify-items: center; gap: 7px; width: min(440px, 100%); margin: 54px auto; padding: 26px; border: 1px dashed var(--line-strong); border-radius: var(--r-lg); color: var(--muted); text-align: center; font-size: 11px; line-height: 1.6; }
+.scene-archive-empty b { color: var(--ink); font-size: 13px; }
 .scene-board-scroll { flex: 1; min-height: 0; overflow: auto; padding: 22px clamp(16px, 2.5vw, 32px) 30px; }
 .scene-board-columns { display: flex; align-items: stretch; gap: 12px; min-height: 100%; width: max-content; min-width: 100%; }
 .scene-lane { display: flex; flex: 0 0 270px; flex-direction: column; align-self: stretch; min-height: 270px; padding: 11px; border: 1px solid var(--line); border-radius: var(--r-lg); background: color-mix(in srgb, var(--panel) 68%, transparent); transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease); }
@@ -196,6 +204,11 @@
   .scene-planner-summary { gap: 11px; flex-wrap: wrap; }
   .scene-planner-summary small { width: 100%; margin-left: 0; }
   .scene-lane { flex-basis: min(270px, 78vw); }
+}
+@media (max-width: 560px) {
+  .scene-archive-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .scene-archive-row > div { grid-column: 1 / -1; }
+  .scene-archive-row > button { min-width: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .scene-lane,.scene-card { transition: none; }

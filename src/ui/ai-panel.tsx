@@ -1037,6 +1037,11 @@ export function AiPanel({
       ? sendHint
       : "";
   const [contextOpen, setContextOpen] = useState(false);
+  const [contextHistoryStats, setContextHistoryStats] = useState<{
+    messageCount: number;
+    characterCount: number;
+  } | null>(null);
+  const contextStatsSeq = useRef(0);
   const [refPreview, setRefPreview] = useState<AnyRow | null>(null);
   const previewMessageSource = useCallback(async (messageId: string, source: AnyRow) => {
     if (!messageId) return;
@@ -1052,6 +1057,18 @@ export function AiPanel({
   const previewSeq = useRef(0);
   async function openContext() {
     setContextOpen(true);
+    setContextHistoryStats(null);
+    const statsSeq = ++contextStatsSeq.current;
+    if (conversation) {
+      void api<{ messageCount: number; characterCount: number }>(
+        "ai:conversation:messages:stats",
+        { novelId, conversationId: conversation },
+      )
+        .then((stats) => {
+          if (statsSeq === contextStatsSeq.current && stats.ok && stats.data)
+            setContextHistoryStats(stats.data);
+        });
+    }
     const seq = ++previewSeq.current;
     const plan = buildSendPlan();
     if (!plan) {
@@ -1650,16 +1667,20 @@ export function AiPanel({
         <ContextDialog
           language={language}
           refs={refsForUi}
-          historyChars={historyChars}
+          historyChars={contextHistoryStats?.characterCount ?? historyChars}
           draftChars={draftChars}
-          historyCount={historyCount}
+          historyCount={contextHistoryStats?.messageCount ?? historyCount}
+          historyStatsComplete={Boolean(contextHistoryStats) || !conversation}
           ruleChars={styleRuleChars}
           projectInstructionChars={Array.from(projectInstructions).length}
           estimateTokens={Math.ceil(displayedPayloadChars / 2)}
           payloadChars={payloadChars}
           contextLimitChars={contextLimitChars}
           previewMessages={previewMessages.length ? previewMessages : null}
-          onClose={() => setContextOpen(false)}
+          onClose={() => {
+            contextStatsSeq.current += 1;
+            setContextOpen(false);
+          }}
         />
       )}
       {projectInstructionsOpen && createPortal(

@@ -45,6 +45,7 @@ function ProgressionsEditor({
   chapters,
   volumes,
   chapter,
+  language,
   updateEditing,
   tr,
   subject,
@@ -53,6 +54,7 @@ function ProgressionsEditor({
   chapters: AnyRow[];
   volumes: AnyRow[];
   chapter: AnyRow | null;
+  language: UiLanguage;
   updateEditing: (patch: AnyRow) => void;
   tr: (zh: string, en: string) => string;
   subject: "character" | "world";
@@ -74,6 +76,7 @@ function ProgressionsEditor({
         <div className="character-progression-row" key={index} data-fd-id={`${subject}-progression-row-${index + 1}`}>
           <div className="character-progression-heading">
             <Select
+              language={language}
               value={String(progression.chapterId || "")}
               aria-label={tr("变化所属章节", "Progression chapter")}
               onValueChange={(value) => {
@@ -430,6 +433,32 @@ export function LibraryPanel({
     load();
     return true;
   }
+  async function saveSceneArchiveStatus(scene: AnyRow, archived: boolean) {
+    let tags: string[] = [];
+    try {
+      const parsed = JSON.parse(String(scene.tags_json || "[]"));
+      if (Array.isArray(parsed)) tags = parsed.map((tag) => String(tag));
+    } catch {}
+    const content = parseJson(scene.content_json);
+    content.archivedAt = archived ? new Date().toISOString() : null;
+    const result = await api("library:save", {
+      id: scene.id,
+      novelId: novel.id,
+      kind: "scene",
+      title: scene.title,
+      content,
+      tags,
+      status: scene.status || "idea",
+      chapterId: scene.chapter_id || null,
+    });
+    if (!result.ok) {
+      notify(result.error || (archived ? tr("场景归档失败", "Could not archive scene") : tr("场景恢复失败", "Could not restore scene")));
+      return false;
+    }
+    load();
+    notify(archived ? tr("场景已归档，可随时恢复", "Scene archived; you can restore it anytime") : tr("场景已恢复到规划板", "Scene restored to the planning board"));
+    return true;
+  }
   async function openSceneHistory() {
     if (!editing?.id || kind !== "scene" || dirty || saveBusy) return;
     const result = await api<AnyRow[]>("library:revisions:list", { novelId: novel.id, itemId: editing.id });
@@ -588,17 +617,19 @@ export function LibraryPanel({
     .filter((x) => x.kind === "character")
     .map((x) => x.title);
   const sortedItems =
-    kind === "timeline"
-      ? [...items].sort((a, b) =>
+    kind === "scene"
+      ? items.filter((item) => !parseJson(item.content_json).archivedAt)
+      : kind === "timeline"
+        ? [...items].sort((a, b) =>
           String(parseJson(a.content_json).when || "").localeCompare(
             String(parseJson(b.content_json).when || ""),
           ),
         )
-      : items;
+        : items;
   async function moveScene(sceneId: string, chapterId: string | null, beforeId?: string) {
     if (search.trim()) return;
     if (sceneId === beforeId) return;
-    const scenes = [...items].filter((item) => item.kind === "scene").sort(
+    const scenes = [...items].filter((item) => item.kind === "scene" && !parseJson(item.content_json).archivedAt).sort(
       (a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0),
     );
     const moved = scenes.find((item) => item.id === sceneId);
@@ -691,6 +722,7 @@ export function LibraryPanel({
               <div className="row" style={{ marginBottom: 10 }}>
                 <Select
                   size="compact"
+                  language={language}
                   value={nameKind}
                   aria-label={tr("命名类型", "Name type")}
                   onValueChange={(v) => {
@@ -785,6 +817,7 @@ export function LibraryPanel({
             <>
               <Select
                 id="world-category"
+                language={language}
                 value={editing.category || ""}
                 aria-label={tr("世界设定分类", "World category")}
                 onValueChange={(v) => updateEditing({ category: v })}
@@ -814,6 +847,7 @@ export function LibraryPanel({
               chapters={chapters}
               volumes={volumes}
               chapter={chapter}
+              language={language}
               updateEditing={updateEditing}
               tr={tr}
               subject="world"
@@ -846,6 +880,7 @@ export function LibraryPanel({
                 <Select
                   searchable
                   size="compact"
+                  language={language}
                   value={String(editing.writingStatus || "planned")}
                   missingLabel={normalizeSceneWritingStatus(editing.writingStatus)}
                   aria-label={tr("场景写作进度", "Scene writing status")}
@@ -925,6 +960,7 @@ export function LibraryPanel({
                 {[...new Set(allItems.filter((item) => item.kind === "scene").map((item) => String(parseJson(item.content_json).pov || "").trim()).filter(Boolean))].map((pov) => <option key={pov} value={pov} />)}
               </datalist>
               <Select
+                language={language}
                 value={editing.chapter_id || ""}
                 aria-label={tr("关联所属章节", "Linked chapter")}
                 onValueChange={(v) => updateEditing({ chapter_id: v || null })}
@@ -1114,6 +1150,7 @@ export function LibraryPanel({
                     <div className="character-progression-row" key={index} data-fd-id={`character-progression-row-${index + 1}`}>
                       <div className="character-progression-heading" data-fd-id={`character-progression-chapter-${index + 1}`}>
                         <Select
+                          language={language}
                           value={String(progression.chapterId || "")}
                           aria-label={tr("阶段变化所属章节", "Progression chapter")}
                           onValueChange={(value) => {
@@ -1203,6 +1240,7 @@ export function LibraryPanel({
                 }
               />
               <Select
+                language={language}
                 value={editing.importance || ""}
                 aria-label={tr("伏笔重要度", "Foreshadow importance")}
                 onValueChange={(v) => updateEditing({ importance: v })}
@@ -1233,6 +1271,7 @@ export function LibraryPanel({
             }
           />
           <Select
+            language={language}
             value={editing.status || "idea"}
             aria-label={tr("资料状态", "Item status")}
             onValueChange={(v) => updateEditing({ status: v })}
@@ -1265,6 +1304,20 @@ export function LibraryPanel({
                 onClick={() => void openSceneHistory()}
               >
                 {tr("版本历史", "History")}
+              </button>
+            )}
+            {kind === "scene" && editing.id && (
+              <button
+                type="button"
+                className={editing.archivedAt ? "secondary" : ""}
+                data-fd-id="scene-archive-toggle"
+                disabled={dirty || saveBusy}
+                title={dirty ? tr("请先保存或放弃未保存修改，再更改归档状态", "Save or discard edits before changing archive status") : undefined}
+                onClick={() => void saveSceneArchiveStatus(editing, !editing.archivedAt).then((saved) => {
+                  if (saved) { setEditing(null); setBaseline(null); }
+                })}
+              >
+                {editing.archivedAt ? tr("恢复到规划板", "Restore to planner") : tr("归档场景", "Archive scene")}
               </button>
             )}
             <span className="spacer" />
@@ -1357,6 +1410,7 @@ export function LibraryPanel({
           onOpenChapter={(targetChapter) => onSelectChapter?.(targetChapter)}
           onChapterStatusChange={(chapterId, status) => onChapterStatusChange?.(chapterId, status)}
           onSceneWritingStatusChange={saveSceneWritingStatus}
+          onSceneArchiveChange={saveSceneArchiveStatus}
           onMoveScene={(sceneId, chapterId, beforeId) => void moveScene(sceneId, chapterId, beforeId)}
           notify={notify}
           canReorder={!search.trim()}

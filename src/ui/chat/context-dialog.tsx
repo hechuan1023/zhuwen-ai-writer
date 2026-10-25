@@ -9,6 +9,7 @@ export function ContextDialog({
   historyChars,
   draftChars,
   historyCount,
+  historyStatsComplete,
   estimateTokens,
   ruleChars = 0,
   projectInstructionChars = 0,
@@ -23,6 +24,7 @@ export function ContextDialog({
   historyChars: number;
   draftChars: number;
   historyCount: number;
+  historyStatsComplete: boolean;
   estimateTokens: number;
   ruleChars?: number;
   projectInstructionChars?: number;
@@ -44,7 +46,9 @@ export function ContextDialog({
       chars: refChars,
     },
     {
-      label: tr("对话历史", "Conversation history"),
+      label: historyStatsComplete
+        ? tr("完整对话历史", "Full conversation history")
+        : tr("最近已载入消息", "Recently loaded messages"),
       value: `${historyCount} ${tr("条消息", "messages")}`,
       chars: historyChars,
     },

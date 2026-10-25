@@ -69,6 +69,7 @@ export function editorToLibraryContent(kind: string, editing: any): any {
       manuscriptLink: normalizeSceneManuscriptLink(editing.manuscriptLink),
       targetWords: normalizeSceneTargetWords(editing.targetWords),
       writingStatus: normalizeSceneWritingStatus(editing.writingStatus),
+      archivedAt: String(editing.archivedAt || "") || null,
       when: editing.when || "",
     };
   if (kind === "relation")
@@ -152,6 +153,7 @@ export function normalizeLibraryDraft(kind: string, d: any) {
     plotlinesText: String(d.plotlinesText ?? (Array.isArray(d.plotlines) ? d.plotlines.join("，") : d.plotlines || "")),
     customFields: normalizeSceneCustomFields(d.customFields),
     targetWords: String(d.targetWords ?? ""),
+    archivedAt: String(d.archivedAt || ""),
     alias: String(d.alias || ""),
     appearance: String(d.appearance || ""),
     personality: String(d.personality || ""),
