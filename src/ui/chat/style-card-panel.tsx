@@ -14,6 +14,7 @@ function styleLabel(card: StyleCard, language: string) {
     "style-close-survival": ["Close survival", "For travel, danger, investigation, and constrained combat."],
     "style-human-ensemble": ["Lived-in ensemble", "For towns, factions, friends, and intersecting relationships."],
     "style-serial-hook-payoff": ["Serial hooks & payoff", "Connect chapter rewards, unresolved actions, and the next reading impulse."],
+    "style-scene-visual-payoff": ["Visual scene anchors & emotional aftermath", "Sharpen action and spatial clarity while preserving interiority and emotional resonance."],
     "style-suspense-information-control": ["Clues & information control", "Keep clues traceable and reveals consequential."],
     "style-character-voice-tension": ["Character voice & tension", "Give dialogue a character-specific agenda and subtext."],
     "style-light-comedy-mismatch": ["Situational comedy", "Build humor from character relationships and mismatched situations."],
@@ -58,6 +59,12 @@ const TECHNIQUE_PRESETS = [
     name: ["中短篇现实题材", "Short-form grounded story"],
     description: ["篇幅收束 + 现实肌理 + 人物关系", "Bounded arc + lived detail + character relationships"],
     cardIds: ["style-short-form-closure", "style-lived-realism", "style-character-voice-tension"],
+  },
+  {
+    id: "genre-visual-serial-scenes",
+    name: ["强冲突场景连载", "High-impact scene serial"],
+    description: ["视觉锚点 + 场景递进 + 章节兑现", "Visual anchors + scene progression + serial payoff"],
+    cardIds: ["style-scene-visual-payoff", "style-serial-hook-payoff", "style-character-voice-tension"],
   },
   {
     id: "genre-cultural-growth",
