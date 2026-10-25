@@ -1014,17 +1014,24 @@
   cursor: pointer;
 }
 
-.zchat-compare-view { display: flex; flex-direction: column; min-height: 0; gap: 10px; }
+.modal.zchat-compare-modal { width: min(1120px, calc(100% - 24px)); }
+.zchat-compare-view { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 0; gap: 14px; }
+.zchat-compare-column { display: flex; flex-direction: column; min-width: 0; min-height: 0; gap: 10px; }
 .zchat-compare-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 2px 8px; border-bottom: 1px solid var(--line, #e2ddd2); }
 .zchat-compare-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .zchat-compare-head span, .zchat-compare-state { color: var(--muted, #8a8577); font-size: 12px; }
-.zchat-compare-transcript { display: flex; flex-direction: column; gap: 10px; max-height: min(65vh, 680px); overflow: auto; padding: 2px 6px 4px 2px; }
+.zchat-compare-transcript { display: flex; flex-direction: column; gap: 10px; height: min(65vh, 680px); min-height: 0; overflow: auto; padding: 2px 6px 4px 2px; }
 .zchat-compare-message { min-width: 0; padding: 10px 12px; border: 1px solid var(--line, #e2ddd2); border-radius: 10px; background: var(--paper, #fff); }
 .zchat-compare-message.user { background: var(--accent-soft, var(--accent2, #e9efe9)); }
 .zchat-compare-message > small { display: block; margin-bottom: 5px; color: var(--muted, #8a8577); font-size: 11px; }
 .zchat-compare-message .md > :first-child { margin-top: 0; }
 .zchat-compare-message .md > :last-child { margin-bottom: 0; }
 .zchat-compare-state { text-align: center; padding: 24px 8px; }
+@media (max-width: 720px) {
+  .modal.zchat-compare-modal { width: min(620px, calc(100% - 16px)); }
+  .zchat-compare-view { grid-template-columns: minmax(0, 1fr); }
+  .zchat-compare-transcript { height: min(38vh, 420px); }
+}
 
 /* ── 引用选择器浮层 ───────────────────────────────────────── */
 .zchat-picker-scrim {

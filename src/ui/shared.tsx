@@ -368,10 +368,12 @@ export function Modal({
   title,
   close,
   children,
+  className,
 }: {
   title: string;
   close: () => void;
   children: any;
+  className?: string;
 }) {
   const language = useContext(UiLanguageContext);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -432,7 +434,7 @@ export function Modal({
     >
       <div
         ref={dialogRef}
-        className="modal"
+        className={`modal ${className || ""}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

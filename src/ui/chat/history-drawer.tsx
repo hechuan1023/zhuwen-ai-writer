@@ -115,6 +115,7 @@ export function HistoryDrawer({
           className="zchat-conv-pin zchat-conv-compare"
           aria-label={tr(`对照阅读：${title}`, `Compare conversation: ${title}`)}
           title={tr("对照阅读", "Read side by side")}
+          disabled={id === currentId}
           onClick={() => onCompare(id)}
         >
           <IconDoc size={14} />

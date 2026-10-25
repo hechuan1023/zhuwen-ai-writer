@@ -1723,6 +1723,7 @@ export function AiPanel({
       {(compareLoading || compareConversation) && (
         <Modal
           title={tr("对话对照阅读", "Conversation comparison")}
+          className="zchat-compare-modal"
           close={() => {
             compareRequestSeq.current += 1;
             setCompareConversation(null);
@@ -1732,20 +1733,35 @@ export function AiPanel({
           {compareLoading ? (
             <p className="zchat-compare-state" role="status">{tr("正在读取对话…", "Loading conversation…")}</p>
           ) : compareConversation ? (
-            <div className="zchat-compare-view">
-              <header className="zchat-compare-head">
-                <strong title={String(compareConversation.title || "")}>{String(compareConversation.title || tr("未命名对话", "Untitled conversation"))}</strong>
-                <span>{tr("只读 · 最近 120 条消息", "Read only · latest 120 messages")}</span>
-              </header>
-              <div className="zchat-compare-transcript">
-                {(compareConversation.messages || []).map((message: AnyRow) => (
-                  <article className={`zchat-compare-message ${message.role === "user" ? "user" : "assistant"}`} key={String(message.id)}>
-                    <small>{message.role === "user" ? tr("你", "You") : tr("AI", "AI")}</small>
-                    <MdView text={String(message.content || "")} />
-                  </article>
-                ))}
-                {!compareConversation.messages?.length && <p className="zchat-compare-state">{tr("此对话还没有消息。", "This conversation has no messages yet.")}</p>}
-              </div>
+            <div className="zchat-compare-view" role="group" aria-label={tr("两个会话的只读对照", "Read-only comparison of two conversations")}>
+              {[
+                {
+                  id: conversation || "current-draft",
+                  title: currentTitle || tr("当前对话", "Current conversation"),
+                  messages: messages.filter((message) => !message.streaming).slice(-120),
+                },
+                {
+                  id: String(compareConversation.id || "comparison"),
+                  title: String(compareConversation.title || tr("未命名对话", "Untitled conversation")),
+                  messages: compareConversation.messages || [],
+                },
+              ].map((column, index) => (
+                <section className="zchat-compare-column" key={column.id}>
+                  <header className="zchat-compare-head">
+                    <strong title={column.title}>{column.title}</strong>
+                    <span>{index === 0 ? tr("当前会话", "Current") : tr("历史快照", "History snapshot")}</span>
+                  </header>
+                  <div className="zchat-compare-transcript" aria-label={tr(`${column.title}消息`, `${column.title} messages`)}>
+                    {column.messages.map((message: AnyRow, messageIndex: number) => (
+                      <article className={`zchat-compare-message ${message.role === "user" ? "user" : "assistant"}`} key={String(message.id || `${column.id}-${messageIndex}`)}>
+                        <small>{message.role === "user" ? tr("你", "You") : tr("AI", "AI")}</small>
+                        <MdView text={String(message.content || "")} />
+                      </article>
+                    ))}
+                    {!column.messages.length && <p className="zchat-compare-state">{tr("此对话还没有消息。", "This conversation has no messages yet.")}</p>}
+                  </div>
+                </section>
+              ))}
             </div>
           ) : null}
         </Modal>
