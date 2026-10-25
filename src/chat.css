@@ -371,6 +371,12 @@
 .zchat-act.icon-only {
   padding: 3px 5px;
 }
+.zchat-icon-btn.zchat-act.wide {
+  width: auto;
+  height: auto;
+  min-height: 28px;
+  padding: 3px 8px;
+}
 .zchat-retry-prompt {
   color: var(--accent, #4d7a68);
   background: color-mix(in srgb, var(--accent) 6%, transparent);

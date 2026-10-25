@@ -105,8 +105,10 @@ export function AiPanel({
   const [payloadPreviewStatus, setPayloadPreviewStatus] = useState<"idle" | "pending" | "checking" | "ready" | "error">("pending");
   const payloadSeq = useRef(0);
   const [continuationId, setContinuationId] = useState<string | null>(null);
+  const [pendingRegenerateConversation, setPendingRegenerateConversation] = useState<string | null>(null);
   const prevGenerating = useRef(false);
   const pendingContinue = useRef(false);
+  const sendLatest = useRef<() => void>(() => {});
   const novelId: string = session?.novelId || novel?.id || "";
   const chapterId: string | null = session?.chapter?.id || chapter?.id || null;
   const chapterTitle = session?.chapter?.title || chapter?.title || "";
@@ -765,6 +767,12 @@ export function AiPanel({
       loadConversations({ archived: historyArchived });
     }
   }
+  sendLatest.current = () => { void send(); };
+  useEffect(() => {
+    if (!pendingRegenerateConversation || conversation !== pendingRegenerateConversation || generating) return;
+    setPendingRegenerateConversation(null);
+    window.requestAnimationFrame(() => sendLatest.current());
+  }, [pendingRegenerateConversation, conversation, generating]);
   async function verifyAdoptionSource(
     sourceMessageId: string | null | undefined,
     sourceChapterId: string | null | undefined,
@@ -1215,7 +1223,7 @@ export function AiPanel({
     (text: string) => <MdView text={text} />,
     [],
   );
-  async function reusePrompt(message: AnyRow) {
+  async function reusePrompt(message: AnyRow, regenerate = false) {
     if (generating) {
       notify(tr("请等待当前回复完成后再复用提问。", "Wait for the current response to finish before reusing a prompt."));
       return;
@@ -1304,10 +1312,20 @@ export function AiPanel({
     });
     setHistoryOpen(false);
     loadConversations({ offset: 0 });
-    notify(tr(
-      `已从此处创建分支，原对话保留；技法卡组合已作为分支专属设置恢复，不会更改作品默认风格。检查问题和引用后发送即可重试。${styleRestoreNotice ? ` ${styleRestoreNotice}` : ""}`,
-      `A new branch was created; the original conversation is unchanged. Its technique cards are restored as branch-only settings and won't change the novel default. Review the prompt and references, then send to retry.${styleRestoreNotice ? ` ${styleRestoreNotice}` : ""}`,
-    ));
+    if (regenerate && styleRestoreNotice) {
+      notify(tr(
+        `原提问的部分技法卡不可用，已恢复可用卡片，但为避免改变原写作规则，本次未自动发送。请检查分支规则后手动发送。${styleRestoreNotice}`,
+        `Some original technique cards are unavailable. The remaining cards were restored, but nothing was sent to avoid silently changing the writing rules. Review the branch and send manually. ${styleRestoreNotice}`,
+      ));
+      return;
+    }
+    if (regenerate) setPendingRegenerateConversation(branchId);
+    notify(regenerate
+      ? tr("已在新分支中按原问题与引用重新生成；原对话和回复均保留。", "Regenerating from the original prompt and references in a new branch; the source conversation and reply are preserved.")
+      : tr(
+          `已从此处创建分支，原对话保留；技法卡组合已作为分支专属设置恢复，不会更改作品默认风格。检查问题和引用后发送即可重试。${styleRestoreNotice ? ` ${styleRestoreNotice}` : ""}`,
+          `A new branch was created; the original conversation is unchanged. Its technique cards are restored as branch-only settings and won't change the novel default. Review the prompt and references, then send to retry.${styleRestoreNotice ? ` ${styleRestoreNotice}` : ""}`,
+        ));
   }
   const currentTitle =
     conversations.find((c) => c.id === conversation)?.title ||
@@ -1401,6 +1419,7 @@ export function AiPanel({
         actionsFor={actionsFor}
         onOpenSource={previewMessageSource}
         onReusePrompt={(message) => void reusePrompt(message)}
+        onRegeneratePrompt={(message) => void reusePrompt(message, true)}
         emptyState={
           <Empty
             title={tr("今天想写些什么？", "What would you like to write today?")}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   contextBreakdown,
   filterConversations,
+  findSourcePrompt,
   groupConversations,
   markInvalidRefs,
   partitionPinnedConversations,
@@ -64,6 +65,23 @@ describe("置顶对话分区", () => {
     const result = partitionPinnedConversations(rows);
     expect(result.pinned.map((row) => row.id)).toEqual(["pinned-a", "pinned-b"]);
     expect(result.recent.map((row) => row.id)).toEqual(["recent"]);
+  });
+});
+
+describe("assistant 回复与原始提问的关联", () => {
+  const messages = [
+    { id: "u-1", role: "user", content: "第一次提问" },
+    { id: "a-1", role: "assistant", source_message_id: "u-1", content: "回复一" },
+    { id: "u-2", role: "user", content: "第二次提问" },
+    { id: "a-2", role: "assistant", source_message_id: "u-2", content: "回复二" },
+  ];
+  it("按来源 ID 找到正确问题，不依赖相邻顺序", () => {
+    expect(findSourcePrompt(messages, messages[1])).toBe(messages[0]);
+    expect(findSourcePrompt(messages, messages[3])).toBe(messages[2]);
+  });
+  it("来源缺失或指向 assistant 消息时不提供重试入口", () => {
+    expect(findSourcePrompt(messages, { role: "assistant" })).toBeNull();
+    expect(findSourcePrompt(messages, { source_message_id: "a-1" })).toBeNull();
   });
 });
 

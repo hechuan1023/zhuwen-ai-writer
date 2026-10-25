@@ -9,9 +9,11 @@ import {
   IconDoc,
   IconMore,
   IconQuote,
+  IconRename,
   IconRetry,
   IconUser,
 } from "./icons";
+import { findSourcePrompt } from "./chat-model";
 
 /** 回到底部按钮：仅在用户上翻离开底部时出现 */
 function ScrollToBottom({ language }: { language: string }) {
@@ -135,14 +137,36 @@ function AssistantActions({
   content,
   language,
   actions,
+  sourcePrompt,
   onRetryPrompt,
+  onRegeneratePrompt,
 }: {
   content: string;
   language: string;
   actions: ReplyActions;
-  onRetryPrompt?: () => void;
+  sourcePrompt: AnyRow | null;
+  onRetryPrompt?: (message: AnyRow) => void;
+  onRegeneratePrompt?: (message: AnyRow) => void;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
+  const retryItems: MenuItem[] = [
+    {
+      id: "ai-regenerate-branch",
+      label: tr("重新生成（新分支）", "Try again in a new branch"),
+      icon: <IconRetry />,
+      hint: tr("保留当前回复", "Keeps this reply"),
+      disabled: !sourcePrompt || !onRegeneratePrompt,
+      onSelect: () => { if (sourcePrompt) onRegeneratePrompt?.(sourcePrompt); },
+    },
+    {
+      id: "ai-edit-prompt-branch",
+      label: tr("编辑原提问并重试", "Edit prompt and retry"),
+      icon: <IconRename />,
+      hint: tr("检查后手动发送", "Review before sending"),
+      disabled: !sourcePrompt || !onRetryPrompt,
+      onSelect: () => { if (sourcePrompt) onRetryPrompt?.(sourcePrompt); },
+    },
+  ];
   const adoptItems: MenuItem[] = [
     {
       id: "ai-adopt-insert",
@@ -206,17 +230,15 @@ function AssistantActions({
   return (
     <div className="zchat-actions">
       <CopyButton text={content} language={language} compact />
-      {onRetryPrompt && (
-        <button
-          type="button"
-          className="zchat-act icon-only zchat-retry-prompt"
-          data-fd-id="ai-retry-from-reply"
-          aria-label={tr("编辑原提问并重试", "Edit the original prompt and retry")}
-          title={tr("从原提问创建分支，编辑后重试", "Branch from the original prompt, edit, then retry")}
-          onClick={onRetryPrompt}
-        >
-          <IconRetry />
-        </button>
+      {sourcePrompt && (onRetryPrompt || onRegeneratePrompt) && (
+        <ChatMenu
+          ariaLabel={tr("重新生成或编辑提问", "Retry or edit prompt")}
+          dataFdId="ai-retry-options"
+          trigger={<IconRetry />}
+          triggerClassName="zchat-act icon-only zchat-retry-prompt"
+          items={retryItems}
+          align="start"
+        />
       )}
       {actions.floatOnlyHint ? (
         <span className="zchat-actions-hint">
@@ -264,6 +286,7 @@ export type MessageListProps = {
   errorMessage?: string | null;
   onOpenSource?: (messageId: string, source: AnyRow) => void;
   onReusePrompt?: (message: AnyRow) => void;
+  onRegeneratePrompt?: (message: AnyRow) => void;
 };
 
 export function MessageList({
@@ -278,6 +301,7 @@ export function MessageList({
   retryLabel,
   onOpenSource,
   onReusePrompt,
+  onRegeneratePrompt,
 }: MessageListProps) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -361,12 +385,9 @@ export function MessageList({
                   content={String(m.content || "")}
                   language={language}
                   actions={actionsFor(m)}
-                  onRetryPrompt={(() => {
-                    const prompt = messages.find(
-                      (candidate) => candidate.role === "user" && candidate.id === m.source_message_id,
-                    );
-                    return prompt && onReusePrompt ? () => onReusePrompt(prompt) : undefined;
-                  })()}
+                  sourcePrompt={findSourcePrompt(messages, m)}
+                  onRetryPrompt={onReusePrompt}
+                  onRegeneratePrompt={onRegeneratePrompt}
                 />
               )}
               {isUser && !m.streaming && (
@@ -391,7 +412,7 @@ export function MessageList({
         );
       }),
     // 依赖消息数组与语言：内容变化（流式）时只重渲染列表，不重建结构
-    [messages, language, actionsFor, renderMarkdown, onOpenSource, onReusePrompt],
+    [messages, language, actionsFor, renderMarkdown, onOpenSource, onReusePrompt, onRegeneratePrompt],
   );
 
   return (

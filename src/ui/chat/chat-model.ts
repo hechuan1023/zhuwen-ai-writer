@@ -16,6 +16,15 @@ export function partitionPinnedConversations(rows: AnyRow[]) {
   };
 }
 
+/** Find the exact user turn cited by an assistant reply; never infer from row adjacency. */
+export function findSourcePrompt(messages: AnyRow[], reply: AnyRow): AnyRow | null {
+  const sourceId = String(reply?.source_message_id || "");
+  if (!sourceId) return null;
+  return messages.find((message) =>
+    message.role === "user" && String(message.id || "") === sourceId,
+  ) || null;
+}
+
 /** 历史对话按时间分组：今天 / 近 7 天 / 更早（以本地日历日计算） */
 export function groupConversations(
   rows: AnyRow[],

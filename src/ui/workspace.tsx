@@ -17,6 +17,8 @@ import { api, fmt, time, tx, UiLanguage, Empty, Modal, ConfirmDialog, AnyRow, re
 import { NovelEdit } from "./novel-edit";
 import { DailyGoalMeter } from "./daily-goal";
 import { WritingStatsCenter } from "./stats-center";
+import { FocusSessionDialog } from "./focus-session-dialog";
+import { FocusSession, FocusSessionMode, focusElapsedMs, isFocusSessionComplete, normalizeFocusSession } from "./focus-session";
 import { Select } from "./select";
 import { applyReduceMotion } from "./motion";
 import { findRepeatedPhrases } from "./repetition-audit";
@@ -205,6 +207,9 @@ export function Workspace({
     [reduceMotion, setReduceMotion] = useState(false);
   const [aiSceneDraftRequest, setAiSceneDraftRequest] = useState<AiSceneDraftRequest | null>(null);
   const [sourceNavigationRequest, setSourceNavigationRequest] = useState<SourceNavigationRequest | null>(null);
+  const [focusSession, setFocusSession] = useState<FocusSession | null>(null);
+  const [focusSessionOpen, setFocusSessionOpen] = useState(false);
+  const [focusNow, setFocusNow] = useState(() => Date.now());
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const languageRef = useRef(language);
   languageRef.current = language;
@@ -530,10 +535,18 @@ export function Workspace({
       }
     });
     api<any>("preferences:get", "writing").then((r) => {
-      if (r.ok && r.data && typeof r.data.dailyGoal === "number")
-        setDailyGoal(Math.floor(bounded(r.data.dailyGoal, 0, 1000000, 0)));
+      if (r.ok && r.data) {
+        if (typeof r.data.dailyGoal === "number")
+          setDailyGoal(Math.floor(bounded(r.data.dailyGoal, 0, 1000000, 0)));
+        setFocusSession(normalizeFocusSession(r.data.focusSession));
+      }
     });
   }, []);
+  useEffect(() => {
+    if (!focusSession?.startedAt) return;
+    const timer = window.setInterval(() => setFocusNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [focusSession?.startedAt]);
   useEffect(() => {
     document.documentElement.classList.remove(
       "theme-light",
@@ -1179,6 +1192,56 @@ export function Workspace({
   }
   const modKey = window.zhuwen.platform === "darwin" ? "⌘" : "Ctrl";
   const total = chapters.reduce((n, c) => n + (c.word_count || 0), 0);
+  function persistFocusSession(session: FocusSession | null) {
+    api("preferences:set", {
+      key: "writing",
+      value: { focusSession: session },
+      merge: true,
+    });
+  }
+  function startFocusSession(mode: FocusSessionMode, targetMinutes: number, targetWords: number) {
+    const now = Date.now();
+    const session = normalizeFocusSession({
+      version: 1,
+      novelId: novel.id,
+      mode,
+      targetMinutes,
+      targetWords,
+      startWords: total,
+      elapsedMs: 0,
+      startedAt: now,
+      createdAt: now,
+    });
+    if (!session) return;
+    setFocusSession(session);
+    setFocusNow(now);
+    persistFocusSession(session);
+  }
+  function pauseFocusSession() {
+    if (!focusSession?.startedAt) return;
+    const session = { ...focusSession, elapsedMs: focusElapsedMs(focusSession), startedAt: null };
+    setFocusSession(session);
+    persistFocusSession(session);
+  }
+  function resumeFocusSession() {
+    if (!focusSession || focusSession.startedAt) return;
+    const session = { ...focusSession, startedAt: Date.now() };
+    setFocusSession(session);
+    setFocusNow(Date.now());
+    persistFocusSession(session);
+  }
+  function finishFocusSession(completed = false) {
+    setFocusSession(null);
+    setFocusSessionOpen(false);
+    persistFocusSession(null);
+    notify(completed ? tr("专注目标已达成", "Focus goal completed") : tr("专注会话已结束", "Focus session ended"));
+  }
+  useEffect(() => {
+    if (focusSession && isFocusSessionComplete(focusSession, focusSession.novelId === novel.id ? total : focusSession.startWords, focusNow))
+      finishFocusSession(true);
+    // Completion should be reevaluated when time or the active novel's word count changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusNow, total, novel.id, focusSession]);
   // 专注极简模式：鼠标移到窗口上/下边缘时显出顶栏/状态栏
   const rootRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -1867,6 +1930,24 @@ export function Workspace({
               compact
               onOpenStats={openStats}
             />
+            <button
+              type="button"
+              className={`focus-session-trigger ${focusSession ? "is-active" : ""}`}
+              data-fd-id="workspace-focus-session-trigger"
+              title={tr("设置或查看本次专注目标", "Set or review this focus session")}
+              aria-label={tr("专注会话", "Focus session")}
+              onClick={() => setFocusSessionOpen(true)}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5M9 2h6M12 2v3M19 6l1.5-1.5"/></svg>
+              {focusSession ? (
+                <>
+                  <strong>{focusSession.mode === "words"
+                    ? `${fmt(Math.max(0, focusSession.targetWords - Math.max(0, total - (focusSession.novelId === novel.id ? focusSession.startWords : total))))} ${tr("字", "w")}`
+                    : (() => { const left = Math.max(0, focusSession.targetMinutes * 60000 - focusElapsedMs(focusSession, focusNow)); const seconds = Math.ceil(left / 1000); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; })()}</strong>
+                  {!focusSession.startedAt && <span>{tr("已暂停", "Paused")}</span>}
+                </>
+              ) : <span>{tr("专注", "Focus")}</span>}
+            </button>
             <div className="status-tools">
               <button
                 className={typewriterMode ? "active" : ""}
@@ -2262,6 +2343,20 @@ export function Workspace({
             language={language}
           />
         </Suspense>
+      )}
+      {focusSessionOpen && (
+        <FocusSessionDialog
+          language={language}
+          session={focusSession}
+          currentNovelId={novel.id}
+          currentWords={total}
+          now={focusNow}
+          onClose={() => setFocusSessionOpen(false)}
+          onStart={startFocusSession}
+          onPause={pauseFocusSession}
+          onResume={resumeFocusSession}
+          onFinish={() => finishFocusSession(false)}
+        />
       )}
     </div>
   );

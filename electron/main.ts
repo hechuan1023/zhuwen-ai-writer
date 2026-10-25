@@ -556,11 +556,88 @@ function createMainWindow() {
         const goalScopeOk = await js(
           `(()=>{const el=document.querySelector('.status [data-fd-id="daily-goal-meter"]');if(!el)return false;const label=el.querySelector('.goal-meter__scope');return el.dataset.scope.startsWith('novel:')&&Boolean(label&&label.textContent.trim())})()`,
         );
+        await js(`document.querySelector('[data-fd-id="workspace-focus-session-trigger"]')?.click()`);
+        await wait(120);
+        const focusSessionSetupOk = await js(`Boolean(document.querySelector('[data-fd-id="focus-session-setup"]')&&document.querySelector('.focus-session-mode button[aria-pressed="true"]'))`);
+        await shot("focus-session-setup");
+        await js(`(()=>{document.querySelectorAll('.focus-session-mode button')[0]?.click();[...document.querySelectorAll('.focus-session-start')][0]?.click()})()`);
+        await wait(150);
+        let focusSessionActiveOk = await js(`Boolean(document.querySelector('[data-fd-id="focus-session-live"]')&&document.querySelector('.focus-session-state.running'))`);
+        await js(`document.querySelector('.modal > header button')?.click()`);
+        await wait(80);
+        await js(`document.querySelector('[data-fd-id="workspace-focus-session-trigger"]')?.click()`);
+        await wait(100);
+        await js(`([...document.querySelectorAll('.focus-session-actions button')].find(b=>b.textContent.includes('暂停')||b.textContent.includes('Pause')))?.click()`);
+        await wait(80);
+        const focusSessionPauseOk = await js(`Boolean(document.querySelector('.focus-session-state.paused'))`);
+        await js(`([...document.querySelectorAll('.focus-session-actions button')].find(b=>b.textContent.includes('继续专注')||b.textContent.includes('Resume')))?.click()`);
+        await wait(80);
+        focusSessionActiveOk = focusSessionActiveOk && await js(`Boolean(document.querySelector('.focus-session-state.running'))`);
+        await js(`([...document.querySelectorAll('.focus-session-actions button')].find(b=>b.textContent.includes('结束会话')||b.textContent.includes('End session')))?.click()`);
+        await wait(120);
+        const focusSessionFinishOk = await js(`!document.querySelector('[data-fd-id="focus-session-live"]')&&!document.querySelector('[data-fd-id="focus-session-setup"]')`);
         await js(`(()=>{if(!document.querySelector('.right-panel'))document.querySelector('.topbar .primary.small')?.click()})()`);
         await wait(250);
         const aiOk = await js(
           `Boolean(document.querySelector('.zchat [data-fd-id="ai-composer"]')&&document.querySelector('[data-fd-id="ai-toolbar"]'))`,
         );
+        const smokeAiSession: any = await js(`window.zhuwen.invoke('ai:session:get').then(r=>r.data||{})`);
+        const smokeAiNovel: any = smokeAiSession.novelId
+          ? db.prepare("SELECT id FROM novels WHERE id=?").get(smokeAiSession.novelId)
+          : db.prepare("SELECT id FROM novels WHERE title=?").get("界面测试作品");
+        const smokeAiChapter: any = smokeAiSession.chapter?.id && smokeAiNovel
+          ? db.prepare("SELECT id FROM chapters WHERE id=? AND novel_id=?").get(smokeAiSession.chapter.id, smokeAiNovel.id)
+          : null;
+        let regenerateUiOk = false;
+        const regenerateDiagnostics: Record<string, unknown> = {
+          activeNovelId: smokeAiSession.novelId,
+          activeChapterId: smokeAiSession.chapter?.id,
+          seededNovelId: smokeAiNovel?.id,
+          seededChapterId: smokeAiChapter?.id,
+        };
+        if (smokeAiNovel && smokeAiChapter) {
+          const sourceConvId = randomUUID();
+          const sourcePromptId = randomUUID();
+          const sourceReplyId = randomUUID();
+          const createdAt = timestamp();
+          db.prepare("INSERT INTO ai_conversations(id,novel_id,chapter_id,title,created_at,updated_at) VALUES(?,?,?,?,?,?)")
+            .run(sourceConvId, smokeAiNovel.id, smokeAiChapter.id, "UI smoke regeneration", createdAt, createdAt);
+          db.prepare("INSERT INTO ai_messages(id,conversation_id,role,content,chapter_id,created_at) VALUES(?,?,?,?,?,?)")
+            .run(sourcePromptId, sourceConvId, "user", "UI smoke: regenerate this exact prompt", smokeAiChapter.id, createdAt);
+          db.prepare("INSERT INTO ai_messages(id,conversation_id,role,content,chapter_id,created_at) VALUES(?,?,?,?,?,?)")
+            .run(sourceReplyId, sourceConvId, "assistant", "Original response remains in its source conversation.", smokeAiChapter.id, createdAt);
+          const bridgeReady = await js(`typeof window.zhuwen.__uiSmokeGetLastAiSend==='function'`);
+          regenerateDiagnostics.bridgeReady = bridgeReady;
+          if (bridgeReady) {
+            await js(`window.zhuwen.invoke('ai:session:patch',{connectionId:'ui-smoke-no-network'})`);
+            await js(`window.zhuwen.invoke('ai:session:loadConversation','${sourceConvId}')`);
+            let sourceReplyReady = false;
+            for (let i = 0; i < 20 && !sourceReplyReady; i++) {
+              sourceReplyReady = await js(`Boolean([...document.querySelectorAll('.zchat-msg.assistant .zchat-msg-content')].some(el=>el.textContent.includes('Original response remains in its source conversation.')))`);
+              if (!sourceReplyReady) await wait(100);
+            }
+            regenerateDiagnostics.sourceReplyReady = sourceReplyReady;
+            await js(`document.querySelector('.zchat-msg.assistant [data-fd-id="ai-retry-options"]')?.click()`);
+            await wait(80);
+            const retryMenuOk = await js(`Boolean(document.querySelector('[data-fd-id="ai-regenerate-branch"]')&&document.querySelector('[data-fd-id="ai-edit-prompt-branch"]'))`);
+            regenerateDiagnostics.retryMenuOk = retryMenuOk;
+            await shot("ai-retry-options");
+            await js(`document.querySelector('[data-fd-id="ai-regenerate-branch"]')?.click()`);
+            let retrySent = false;
+            for (let i = 0; i < 30 && !retrySent; i++) {
+              retrySent = await js(`Boolean(window.zhuwen.__uiSmokeGetLastAiSend()?.prompt)`);
+              if (!retrySent) await wait(100);
+            }
+            regenerateDiagnostics.retrySent = retrySent;
+            regenerateDiagnostics.toast = await js(`document.querySelector('.toast')?.textContent||''`);
+            regenerateDiagnostics.currentSession = await js(`window.zhuwen.invoke('ai:session:get').then(r=>({conversationId:r.data?.conversationId,novelId:r.data?.novelId,chapterId:r.data?.chapter?.id}))`);
+            regenerateDiagnostics.branchRows = db.prepare("SELECT id,title FROM ai_conversations WHERE novel_id=? AND title LIKE '%分支%' ORDER BY created_at DESC LIMIT 2").all(smokeAiNovel.id);
+            regenerateDiagnostics.sentPayload = retrySent ? await js(`({prompt:window.zhuwen.__uiSmokeGetLastAiSend()?.prompt,conversationId:window.zhuwen.__uiSmokeGetLastAiSend()?.conversationId,connectionId:window.zhuwen.__uiSmokeGetLastAiSend()?.connectionId})`) : null;
+            regenerateUiOk = sourceReplyReady && retryMenuOk && retrySent && await js(
+              `window.zhuwen.__uiSmokeGetLastAiSend().prompt==='UI smoke: regenerate this exact prompt'&&window.zhuwen.__uiSmokeGetLastAiSend().conversationId!=='${sourceConvId}'&&window.zhuwen.__uiSmokeGetLastAiSend().connectionId==='ui-smoke-no-network'`,
+            );
+          }
+        }
         await js(`document.querySelector('[data-fd-id="ai-style-menu"]')?.click()`);
         await wait(100);
         await js(`([...document.querySelectorAll('.zchat-menu-item')].find(button=>/查看与管理风格卡|View and manage style cards/.test(button.textContent))?.click())`);
@@ -921,6 +998,7 @@ function createMainWindow() {
           typewriterOk,
           zoomOk,
           aiOk,
+          regenerateUiOk,
           aiStyleManagerOk,
           pickerOk,
           historyDrawerOk,
@@ -944,6 +1022,10 @@ function createMainWindow() {
           epubReaderViewportOk,
           homeGoalScopeOk,
           goalScopeOk,
+          focusSessionSetupOk,
+          focusSessionActiveOk,
+          focusSessionPauseOk,
+          focusSessionFinishOk,
           reduceMotionOk,
           reduceMotionIndependentOk,
           reduceMotionOffOk,
@@ -964,6 +1046,7 @@ function createMainWindow() {
           libraryTrashDialogOk,
           libraryTrashCancelOk,
         };
+        console.log(`REGENERATE_UI_DIAGNOSTICS ${JSON.stringify(regenerateDiagnostics)}`);
         const failedChecks = Object.entries(checks)
           .filter(([, v]) => !v)
           .map(([k, v]) => `${k}=${String(v)}`);
@@ -990,7 +1073,7 @@ function createMainWindow() {
         if (shotsFailed.length)
           console.log(`UI_SHOTS_FAIL ${shotsFailed.join(",")}`);
         console.log(
-          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n ai_managed_settings epub_reader_viewport reference_picker typography_settings daily_goal database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared ai_style_manager_action_icons history_drawer history_archive_scope ai_dock_left ai_dock_restore summary_modal library_kinds relation_graph relation_expand library_detail library_trash ${status} ${out}`,
+          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n ai_managed_settings epub_reader_viewport reference_picker typography_settings daily_goal focus_session database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared ai_style_manager_action_icons history_drawer history_archive_scope ai_dock_left ai_dock_restore summary_modal library_kinds relation_graph relation_expand library_detail library_trash ${status} ${out}`,
         );
         app.exit(0);
       } catch (e) {

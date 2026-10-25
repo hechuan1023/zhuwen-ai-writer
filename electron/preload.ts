@@ -11,6 +11,7 @@ const allowedChannels = new Set([
   'ai:conversation:trash',
   'ai:conversation:update',
   'ai:conversations',
+  'ai:message:contexts',
   'ai:float:close',
   'ai:float:open',
   'ai:previewRequest',
@@ -99,13 +100,22 @@ const allowedChannels = new Set([
   'world:presence',
 ])
 
+let uiSmokeLastAiSend: unknown = null
+
 contextBridge.exposeInMainWorld('zhuwen', {
   platform: process.platform,
   invoke: (channel: string, payload?: unknown) => {
     if (!allowedChannels.has(channel))
       return Promise.reject(new Error(`Blocked IPC channel: ${channel}`))
+    if (process.env.ZHUWEN_UI_SMOKE && channel === 'ai:previewRequest')
+      return Promise.resolve({ ok: true, data: [{ role: 'user', content: String((payload as any)?.prompt || '') }] })
+    if (process.env.ZHUWEN_UI_SMOKE && channel === 'ai:send') {
+      uiSmokeLastAiSend = payload
+      return Promise.resolve({ ok: true, data: { smoke: true } })
+    }
     return ipcRenderer.invoke(channel, payload)
   },
+  ...(process.env.ZHUWEN_UI_SMOKE ? { __uiSmokeGetLastAiSend: () => uiSmokeLastAiSend } : {}),
   onAiChunk: (handler: (event: unknown) => void) => { const fn=(_:unknown,data:unknown)=>handler(data); ipcRenderer.on('ai:chunk',fn); return ()=>ipcRenderer.removeListener('ai:chunk',fn) },
   onAiDone: (handler: (event: unknown) => void) => { const fn=(_:unknown,data:unknown)=>handler(data); ipcRenderer.on('ai:done',fn); return ()=>ipcRenderer.removeListener('ai:done',fn) },
   onAiSession: (handler: (event: unknown) => void) => { const fn=(_:unknown,data:unknown)=>handler(data); ipcRenderer.on('ai:session',fn); return ()=>ipcRenderer.removeListener('ai:session',fn) }
