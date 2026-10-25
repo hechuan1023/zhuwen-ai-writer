@@ -1147,6 +1147,23 @@ export function AiPanel({
     if (item.kind === "__summary__") return addSummary();
     addContext(item);
   }
+  function handleAddManyFromPicker(items: Array<{
+    label: string;
+    kind: string;
+    content: string;
+    sourceId: string;
+  }>) {
+    setContexts((xs) => {
+      const seen = new Set(xs.map((item) => JSON.stringify([item.kind, item.sourceId || ""])));
+      const additions = items.filter((item) => {
+        const key = JSON.stringify([item.kind, item.sourceId || ""]);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      return additions.length ? [...xs, ...additions] : xs;
+    });
+  }
   const canApplyFromReply = !float && Boolean(editor) && Boolean(chapter);
   const applyDisabledReason = !canApplyFromReply
     ? tr("主窗口中才能修改正文", "Apply from the main window")
@@ -1782,12 +1799,17 @@ export function AiPanel({
           language={language}
           chapterId={chapterId}
           chapterTitle={chapterTitle}
+          currentChapterText={chapterText()}
           summary={chapter?.summary}
           bookChapters={bookChapters}
           libraryAll={libraryAll}
           suggestions={suggestions}
           selectedSources={contexts.map(({ kind, sourceId }) => ({ kind, sourceId }))}
+          currentPayloadChars={payloadChars ?? breakdown.totalChars}
+          contextLimitChars={contextLimitChars}
+          contextPreviewReady={payloadChars != null && (payloadPreviewStatus === "ready" || payloadPreviewStatus === "idle")}
           onAdd={handleAddFromPicker}
+          onAddMany={handleAddManyFromPicker}
           onClose={() => setPickerOpen(false)}
         />
       )}

@@ -9,23 +9,33 @@ export function RefPicker({
   language,
   chapterId,
   chapterTitle,
+  currentChapterText,
   summary,
   bookChapters,
   libraryAll,
   suggestions,
   selectedSources,
+  currentPayloadChars,
+  contextLimitChars,
+  contextPreviewReady,
   onAdd,
+  onAddMany,
   onClose,
 }: {
   language: string;
   chapterId: string | null;
   chapterTitle: string;
+  currentChapterText: string;
   summary?: string;
   bookChapters: AnyRow[];
   libraryAll: AnyRow[];
   suggestions: MaterialSuggestion[];
   selectedSources: Array<{ kind: string; sourceId?: string }>;
+  currentPayloadChars: number;
+  contextLimitChars: number;
+  contextPreviewReady: boolean;
   onAdd: (item: { label: string; kind: string; content: string; sourceId: string }) => void;
+  onAddMany: (items: Array<{ label: string; kind: string; content: string; sourceId: string }>) => void;
   onClose: () => void;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
@@ -34,6 +44,9 @@ export function RefPicker({
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const [loadingChapter, setLoadingChapter] = useState<string | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(0);
+  const [bulkMessage, setBulkMessage] = useState("");
   const isAdded = (kind: string, sourceId?: string) =>
     selectedSources.some((source) => source.kind === kind && source.sourceId === sourceId);
 
@@ -87,6 +100,59 @@ export function RefPicker({
     (chapter) => String(chapter.summary || "").trim() && !isAdded("summary", chapter.id),
   );
   const savedSummaryCount = bookChapters.filter((chapter) => String(chapter.summary || "").trim()).length;
+  const remainingChapterCount = bookChapters.filter((chapter) => !isAdded("chapter", chapter.id)).length;
+  const remainingContextChars = Math.max(0, contextLimitChars - currentPayloadChars);
+
+  async function addWholeChapters() {
+    if (bulkLoading || !contextPreviewReady || remainingContextChars <= 0) return;
+    const candidates = bookChapters.filter((chapter) => !isAdded("chapter", chapter.id));
+    if (!candidates.length) return;
+    setBulkLoading(true);
+    setBulkProgress(0);
+    setBulkMessage("");
+    const references: Array<{ label: string; kind: string; content: string; sourceId: string }> = [];
+    let remaining = remainingContextChars;
+    let skippedForLimit = 0;
+    let failed = 0;
+    try {
+      for (let index = 0; index < candidates.length; index += 1) {
+        const chapter = candidates[index];
+        setBulkProgress(index + 1);
+        let content = "";
+        if (chapter.id === chapterId) {
+          content = currentChapterText;
+        } else {
+          try {
+            const result = await window.zhuwen.invoke<any>("chapters:get", chapter.id);
+            if (!result?.ok) {
+              failed += 1;
+              continue;
+            }
+            content = String(result.data?.plain_text || "");
+          } catch {
+            failed += 1;
+            continue;
+          }
+        }
+        if (!content.trim()) continue;
+        const label = `${chapter.title} · ${tr("全文", "Full text")}`;
+        const estimatedCost = Array.from(content).length + Array.from(label).length + 64;
+        if (estimatedCost > remaining) {
+          skippedForLimit = candidates.length - index;
+          break;
+        }
+        references.push({ label, kind: "chapter", content, sourceId: chapter.id });
+        remaining -= estimatedCost;
+      }
+      if (references.length) onAddMany(references);
+      setBulkMessage(tr(
+        `已加入 ${references.length} 章${skippedForLimit ? `；剩余 ${skippedForLimit} 章超出当前额度，未截断` : ""}${failed ? `；${failed} 章读取失败` : ""}`,
+        `Added ${references.length} chapters${skippedForLimit ? `; ${skippedForLimit} remaining chapters exceed the current allowance and were not truncated` : ""}${failed ? `; ${failed} chapters could not be loaded` : ""}`,
+      ));
+    } finally {
+      setBulkLoading(false);
+    }
+  }
 
   return (
     <>
@@ -225,6 +291,35 @@ export function RefPicker({
                   : tr("全书摘要已添加", "All summaries added")}</span>
                 <small>{tr(`共 ${savedSummaryCount} 章`, `${savedSummaryCount} chapters`)}</small>
               </button>
+            </section>
+          ) : null}
+          {bookChapters.length > 0 ? (
+            <section data-fd-id="ai-picker-full-manuscript">
+              <h4>
+                <IconDoc /> {tr("全书正文", "Full manuscript")}
+              </h4>
+              <p className="zchat-picker-match-note">
+                {tr("按卷章顺序加入完整章节，并遵守当前请求的剩余上下文额度；超出的章节保持完整、不截断。剩余额度还会受对话历史和提示词影响。", "Add complete chapters in book order within the remaining context allowance. Chapters that do not fit stay intact and are skipped; chat history and prompts also use the allowance.")}
+              </p>
+              <button
+                type="button"
+                className="zchat-picker-bulk"
+                data-fd-id="ai-picker-all-chapters"
+                disabled={bulkLoading || !contextPreviewReady || remainingContextChars <= 0 || !remainingChapterCount}
+                onClick={() => void addWholeChapters()}
+              >
+                <span><IconPlus /> {bulkLoading
+                  ? tr(`正在读取章节（${bulkProgress}/${remainingChapterCount}）`, `Loading chapters (${bulkProgress}/${remainingChapterCount})`)
+                  : !remainingChapterCount
+                    ? tr("全书正文已添加", "Full manuscript already added")
+                    : !contextPreviewReady
+                      ? tr("正在核对当前上下文…", "Checking current context…")
+                      : remainingContextChars <= 0
+                        ? tr("当前上下文已满", "No context space remaining")
+                        : tr(`添加可容纳的完整章节（${remainingChapterCount}）`, `Add complete chapters that fit (${remainingChapterCount})`)}</span>
+                <small>{tr(`约余 ${fmt(remainingContextChars)} 字`, `~${fmt(remainingContextChars)} chars left`)}</small>
+              </button>
+              {bulkMessage ? <p className="zchat-picker-match-note" role="status" data-fd-id="ai-picker-bulk-status">{bulkMessage}</p> : null}
             </section>
           ) : null}
           <section>
