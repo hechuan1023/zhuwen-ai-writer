@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
-import { AnyRow } from "../shared";
+import { AnyRow, time } from "../shared";
 import { ChatMenu, type MenuItem } from "./menu";
 import {
   IconArrowDown,
@@ -422,6 +422,11 @@ export function MessageList({
       allMessages.map((m, i) => {
         const isUser = m.role === "user";
         const key = m.id || `local-${i}`;
+        const createdAt = String(m.created_at || "");
+        const createdAtMs = Date.parse(createdAt);
+        const displayedTime = Number.isFinite(createdAtMs)
+          ? time(createdAt, language === "en" ? "en" : "zh-CN")
+          : "";
         return (
           <div
             className={`zchat-msg ${isUser ? "user" : "assistant"}`}
@@ -434,6 +439,11 @@ export function MessageList({
             <div className="zchat-msg-body">
               <div className="zchat-msg-meta">
                 <span>{isUser ? tr("你", "You") : tr("AI", "AI")}</span>
+                {displayedTime ? (
+                  <time dateTime={createdAt} title={new Date(createdAtMs).toLocaleString(language === "en" ? "en-US" : "zh-CN")}>
+                    {displayedTime}
+                  </time>
+                ) : null}
                 {m.incomplete && (
                   <em className="zchat-incomplete">{tr("未完整回答", "incomplete")}</em>
                 )}

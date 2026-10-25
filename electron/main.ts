@@ -3548,6 +3548,7 @@ function registerIpc(userDir: string) {
           id: uid,
           role: "user",
           content: p.prompt,
+          created_at: t,
           chapter_id: p.chapterId ?? null,
           project_instructions: projectInstructionSnapshot,
           source_revision: p.sourceRevision ?? null,
@@ -3666,6 +3667,7 @@ function registerIpc(userDir: string) {
         }
       }
       const aid = newId();
+      const assistantCreatedAt = timestamp();
       db.prepare(
         "INSERT INTO ai_messages(id,conversation_id,role,content,model,connection_id,chapter_id,source_revision,selection_text,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
       ).run(
@@ -3678,7 +3680,7 @@ function registerIpc(userDir: string) {
         p.chapterId ?? null,
         p.sourceRevision ?? null,
         p.selectionText ?? "",
-        timestamp(),
+        assistantCreatedAt,
       );
       assistantSaved = true;
       db.prepare("UPDATE ai_conversations SET updated_at=? WHERE id=?").run(
@@ -3689,6 +3691,7 @@ function registerIpc(userDir: string) {
       if (last?.streaming) {
         last.streaming = false;
         last.id = aid;
+        last.created_at = assistantCreatedAt;
         last.source_revision = p.sourceRevision;
         last.model = connection.model;
       }
@@ -3724,6 +3727,7 @@ function registerIpc(userDir: string) {
           })();
           if (last?.streaming) {
             last.id = aid;
+            last.created_at = createdAt;
             last.model = connection?.model || p.model || null;
             last.source_revision = p.sourceRevision;
           }
