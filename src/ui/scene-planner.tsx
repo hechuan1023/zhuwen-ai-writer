@@ -53,7 +53,7 @@ export function ScenePlanner({
   const [sceneStatusFilter, setSceneStatusFilter] = useState("all");
   const [povFilter, setPovFilter] = useState("all");
   const [trackFilter, setTrackFilter] = useState("all");
-  const [viewMode, setViewMode] = useState<"board" | "timeline" | "matrix" | "archive">("board");
+  const [viewMode, setViewMode] = useState<"board" | "outline" | "timeline" | "matrix" | "archive">("board");
   const [draggingId, setDraggingId] = useState("");
   const [statusBusyId, setStatusBusyId] = useState("");
   const [sceneStatusBusyId, setSceneStatusBusyId] = useState("");
@@ -262,11 +262,12 @@ export function ScenePlanner({
         <span>{tr("章节", "Chapters")} · {chapters.filter((item) => (item.status || "draft") === "draft").length} {tr("草稿", "draft")} / {chapters.filter((item) => item.status === "review").length} {tr("待修改", "review")} / {chapters.filter((item) => item.status === "done").length} {tr("完成", "done")}</span>
         <div className="scene-planner-view-switch" role="group" aria-label={tr("规划视图", "Planning view")} data-fd-id="scene-planner-view-switch">
           <button type="button" className={viewMode === "board" ? "active" : ""} aria-pressed={viewMode === "board"} onClick={() => setViewMode("board")}>{tr("规划板", "Board")}</button>
+          <button type="button" className={viewMode === "outline" ? "active" : ""} aria-pressed={viewMode === "outline"} onClick={() => setViewMode("outline")}>{tr("大纲表", "Outliner")}</button>
           <button type="button" className={viewMode === "timeline" ? "active" : ""} aria-pressed={viewMode === "timeline"} onClick={() => setViewMode("timeline")}>{tr("时间线", "Timeline")}</button>
           <button type="button" className={viewMode === "matrix" ? "active" : ""} aria-pressed={viewMode === "matrix"} onClick={() => setViewMode("matrix")}>{tr("剧情矩阵", "Matrix")}</button>
           <button type="button" className={viewMode === "archive" ? "active" : ""} aria-pressed={viewMode === "archive"} onClick={() => setViewMode("archive")}>{tr(`已归档 (${archivedScenes.length})`, `Archived (${archivedScenes.length})`)}</button>
         </div>
-        <small>{viewMode === "archive" ? tr("归档场景不会出现在活动规划板与剧情矩阵中；可随时恢复。", "Archived scenes are hidden from active planning and the plot matrix; restore them at any time.") : viewMode === "matrix" ? tr("矩阵按章节汇总剧情线覆盖；点场景标题可打开细纲。", "Matrix summarizes plotline coverage by chapter; click a scene to open its outline.") : canReorderVisible ? tr("拖动卡片可调整章节与顺序 · 点击标题编辑细纲", "Drag to reorder or change chapter · Click a title to edit") : tr("筛选结果仅供查看；清除视角、剧情线、标签或场景进度筛选后可调整顺序。", "Filtered results are view-only; clear POV, plotline, label, or scene progress filters to reorder.")}</small>
+        <small>{viewMode === "archive" ? tr("归档场景不会出现在活动规划板与剧情矩阵中；可随时恢复。", "Archived scenes are hidden from active planning and the plot matrix; restore them at any time.") : viewMode === "matrix" ? tr("矩阵按章节汇总剧情线覆盖；点场景标题可打开细纲。", "Matrix summarizes plotline coverage by chapter; click a scene to open its outline.") : viewMode === "outline" ? tr("按章节顺序查看场景元数据；点击列名排序，点击场景名编辑细纲。排序仅影响当前视图。", "Review scene metadata in chapter order. Click a column to sort or a scene to edit; sorting only affects this view.") : canReorderVisible ? tr("拖动卡片可调整章节与顺序 · 点击标题编辑细纲", "Drag to reorder or change chapter · Click a title to edit") : tr("筛选结果仅供查看；清除视角、剧情线、标签或场景进度筛选后可调整顺序。", "Filtered results are view-only; clear POV, plotline, label, or scene progress filters to reorder.")}</small>
       </div>
 
       {viewMode === "board" ? <div className="scene-board-scroll" data-fd-id="scene-board-columns">
@@ -331,7 +332,7 @@ export function ScenePlanner({
           {!visibleChapters.length && <div className="scene-board-no-chapters"><span>{tr("当前筛选范围内没有章节。", "No chapters match the current filters.")}</span><button type="button" onClick={() => { setVolumeFilter("all"); setStatusFilter("all"); setSceneStatusFilter("all"); setPovFilter("all"); setTrackFilter("all"); }}>{tr("清除筛选", "Clear filters")}</button></div>}
           <button className="scene-lane-new-chapter" onClick={() => onCreateScene()}>{tr("＋ 新场景", "+ New scene")}</button>
         </div>
-      </div> : viewMode === "timeline" ? <div className="scene-timeline-scroll" data-fd-id="scene-timeline">
+      </div> : viewMode === "outline" ? <SceneOutliner scenes={visibleScenes} chapters={chapters} volumes={volumes} language={language} onOpenScene={onOpenScene} /> : viewMode === "timeline" ? <div className="scene-timeline-scroll" data-fd-id="scene-timeline">
         <div className="scene-timeline-note">{tr("按章节顺序与已保存的场景顺序排列。时间标签保留作者原文，不会被解析成日期；需调整顺序时切回规划板拖动。", "Ordered by chapter and saved scene order. Time markers remain author-written labels and are not parsed as dates; switch to Board to reorder.")}</div>
         <div className="scene-timeline-groups">
           {timelineGroups.map(({ chapter, scenes: chapterScenes }, chapterIndex) => {
@@ -494,4 +495,85 @@ function SceneCard({
       <button className="scene-card-draft" type="button" disabled={!canDraft} title={!canDraft ? tr("请先把场景分配到章节", "Assign this scene to a chapter first") : tr("把细纲带入 AI 面板，检查后再发送", "Bring this outline to AI; review before sending")} onClick={(event) => { event.stopPropagation(); onDraft(); }}>{tr("✦ 用 AI 起草", "✦ Draft with AI")}</button>
     </article>
   );
+}
+
+function SceneOutliner({
+  scenes,
+  chapters,
+  volumes,
+  language,
+  onOpenScene,
+}: {
+  scenes: SceneRow[];
+  chapters: SceneRow[];
+  volumes: SceneRow[];
+  language: UiLanguage;
+  onOpenScene: (scene: SceneRow) => void;
+}) {
+  const tr = (zh: string, en: string) => language === "en" ? en : zh;
+  const [sort, setSort] = useState<{ key: "order" | "title" | "chapter" | "status" | "target"; direction: 1 | -1 }>({ key: "order", direction: 1 });
+  const chapterOrder = new Map(chapters.map((chapter, index) => [String(chapter.id), index]));
+  const chapterById = new Map(chapters.map((chapter) => [String(chapter.id), chapter]));
+  const volumeById = new Map(volumes.map((volume) => [String(volume.id), volume]));
+  const dataFor = (scene: SceneRow) => ({ ...parseJson(scene.content_json), ...scene });
+  const collator = new Intl.Collator(language === "en" ? "en-US" : "zh-CN", { numeric: true, sensitivity: "base" });
+  const sortedScenes = useMemo(() => {
+    if (sort.key === "order") return scenes;
+    return [...scenes].sort((left, right) => {
+      const a = dataFor(left);
+      const b = dataFor(right);
+      let comparison = 0;
+      if (sort.key === "title") comparison = collator.compare(String(left.title || ""), String(right.title || ""));
+      if (sort.key === "chapter") {
+        comparison = (chapterOrder.get(String(left.chapter_id || "")) ?? Number.MAX_SAFE_INTEGER) - (chapterOrder.get(String(right.chapter_id || "")) ?? Number.MAX_SAFE_INTEGER);
+        if (comparison === 0) comparison = Number(left.sort_order || 0) - Number(right.sort_order || 0);
+      }
+      if (sort.key === "status") comparison = collator.compare(normalizeSceneWritingStatus(a.writingStatus), normalizeSceneWritingStatus(b.writingStatus));
+      if (sort.key === "target") comparison = (normalizeSceneTargetWords(a.targetWords) ?? -1) - (normalizeSceneTargetWords(b.targetWords) ?? -1);
+      return comparison * sort.direction || Number(left.sort_order || 0) - Number(right.sort_order || 0);
+    });
+  }, [scenes, sort, collator, chapterOrder]);
+  const toggleSort = (key: typeof sort.key) => setSort((current) => ({
+    key,
+    direction: current.key === key ? (current.direction === 1 ? -1 : 1) : 1,
+  }));
+  const sortHeader = (key: typeof sort.key, label: string) => <th scope="col" aria-sort={sort.key === key ? sort.direction === 1 ? "ascending" : "descending" : "none"}>
+    <button type="button" onClick={() => toggleSort(key)} aria-label={tr(`按${label}排序`, `Sort by ${label}`)}>{label}{sort.key === key && <span aria-hidden="true">{sort.direction === 1 ? " ↑" : " ↓"}</span>}</button>
+  </th>;
+  const statusName = (value: unknown) => {
+    const status = normalizeSceneWritingStatus(value);
+    return ({ planned: tr("计划中", "Planned"), drafting: tr("写作中", "Drafting"), revision: tr("待修订", "Needs revision"), final: tr("已定稿", "Final") } as Record<string, string>)[status] || status;
+  };
+  const formatWords = (value: number) => new Intl.NumberFormat(language === "en" ? "en-US" : "zh-CN").format(value);
+
+  return <div className="scene-outliner-scroll" data-fd-id="scene-outliner">
+    {sortedScenes.length ? <table className="scene-outliner-table">
+      <thead><tr>
+        <th scope="col" className="scene-outliner-index">#</th>
+        {sortHeader("title", tr("场景", "Scene"))}
+        {sortHeader("chapter", tr("章节", "Chapter"))}
+        {sortHeader("status", tr("写作进度", "Status"))}
+        {sortHeader("target", tr("目标字数", "Target"))}
+        <th scope="col">{tr("视角", "POV")}</th>
+        <th scope="col">{tr("剧情线 / 标签", "Plotlines / tags")}</th>
+        <th scope="col">{tr("时间标记", "When")}</th>
+      </tr></thead>
+      <tbody>{sortedScenes.map((scene, index) => {
+        const data = dataFor(scene);
+        const chapter = chapterById.get(String(scene.chapter_id || ""));
+        const volume = chapter ? volumeById.get(String(chapter.volume_id || "")) : null;
+        const labels = [...scenePlotlines(data), ...sceneTags(data), ...sceneCustomFields(data).map((field) => `${field.key}: ${field.value}`)];
+        return <tr key={scene.id} data-fd-id={`scene-outliner-row-${scene.id}`}>
+          <td className="scene-outliner-index">{index + 1}</td>
+          <td className="scene-outliner-title"><button type="button" onClick={() => onOpenScene(scene)} title={String(scene.title || tr("未命名场景", "Untitled scene"))}>{scene.title || tr("未命名场景", "Untitled scene")}</button>{data.plotRole && <small>{data.plotRole}</small>}</td>
+          <td className="scene-outliner-chapter"><span>{chapter?.title || tr("未安排", "Unassigned")}</span>{chapter && <small>{volume?.title || tr("未分卷", "No volume")}</small>}</td>
+          <td><span className={`scene-outliner-status state-${SCENE_WRITING_STATUSES.includes(normalizeSceneWritingStatus(data.writingStatus) as typeof SCENE_WRITING_STATUSES[number]) ? normalizeSceneWritingStatus(data.writingStatus) : "custom"}`}>{statusName(data.writingStatus)}</span></td>
+          <td className="scene-outliner-number">{normalizeSceneTargetWords(data.targetWords) == null ? "—" : formatWords(normalizeSceneTargetWords(data.targetWords) || 0)}</td>
+          <td>{data.pov || "—"}</td>
+          <td className="scene-outliner-labels" title={labels.join(" · ")}>{labels.length ? labels.join(" · ") : "—"}</td>
+          <td className="scene-outliner-when" title={String(data.when || "")}>{data.when || "—"}</td>
+        </tr>;
+      })}</tbody>
+    </table> : <div className="scene-outliner-empty">{tr("当前筛选下没有场景。", "No scenes match the current filters.")}</div>}
+  </div>;
 }

@@ -162,6 +162,29 @@
 .scene-matrix-table td button:hover { color: var(--accent); text-decoration: underline; }
 .scene-matrix-table td small { color: var(--muted); font-size: 9px; }
 .scene-matrix-dash { display: block; padding-top: 17px; color: var(--faint); text-align: center; }
+.scene-outliner-scroll { flex: 1; min-height: 0; overflow: auto; padding: 18px clamp(12px, 2vw, 28px) 30px; }
+.scene-outliner-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; color: var(--ink); background: var(--paper); font-size: 11px; }
+.scene-outliner-table th,.scene-outliner-table td { max-width: 300px; padding: 8px 10px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+.scene-outliner-table thead th { position: sticky; top: 0; z-index: 2; min-width: 105px; background: var(--panel); color: var(--muted); font-size: 10px; font-weight: 650; white-space: nowrap; }
+.scene-outliner-table thead th:first-child { left: 0; z-index: 3; min-width: 38px; width: 38px; }
+.scene-outliner-table thead th > button { min-height: 24px; padding: 2px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; }
+.scene-outliner-table thead th > button:hover { color: var(--accent); }
+.scene-outliner-table tbody tr:hover { background: color-mix(in srgb, var(--accent-soft) 38%, var(--paper)); }
+.scene-outliner-index { position: sticky; left: 0; z-index: 1; min-width: 38px !important; width: 38px; color: var(--faint); text-align: center !important; font-family: var(--font-num); font-size: 10px; }
+.scene-outliner-title { min-width: 190px; }
+.scene-outliner-title button { display: block; max-width: 280px; overflow: hidden; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: left; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-weight: 650; }
+.scene-outliner-title button:hover { color: var(--accent); text-decoration: underline; }
+.scene-outliner-title small,.scene-outliner-chapter small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+.scene-outliner-chapter { min-width: 150px; }
+.scene-outliner-status { display: inline-flex; padding: 3px 7px; border: 1px solid var(--line); border-radius: 99px; background: var(--panel); color: var(--muted); font-size: 9px; white-space: nowrap; }
+.scene-outliner-status.state-drafting { border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); background: var(--accent-soft); color: var(--accent); }
+.scene-outliner-status.state-revision { border-color: color-mix(in srgb, var(--warning) 28%, var(--line)); background: color-mix(in srgb, var(--warning) 10%, var(--paper)); color: var(--warning); }
+.scene-outliner-status.state-final { border-color: color-mix(in srgb, var(--success) 26%, var(--line)); background: color-mix(in srgb, var(--success) 9%, var(--paper)); color: var(--success); }
+.scene-outliner-status.state-custom { border-color: color-mix(in srgb, var(--accent) 20%, var(--line)); color: var(--ink); }
+.scene-outliner-number { min-width: 90px; text-align: right !important; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.scene-outliner-labels { min-width: 170px; overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.scene-outliner-when { min-width: 120px; color: var(--muted); }
+.scene-outliner-empty { padding: 28px; color: var(--faint); text-align: center; }
 .scene-timeline-note { max-width: 960px; margin: 0 auto 18px; padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line)); border-radius: var(--r-md); background: color-mix(in srgb, var(--accent) 5%, var(--paper)); color: var(--muted); font-size: 11px; line-height: 1.55; }
 .scene-timeline-groups { display: grid; gap: 18px; max-width: 960px; margin: 0 auto; }
 .scene-timeline-chapter { min-width: 0; padding: 14px 16px 14px 18px; border: 1px solid var(--line); border-radius: var(--r-lg); background: color-mix(in srgb, var(--panel) 42%, var(--paper)); }
