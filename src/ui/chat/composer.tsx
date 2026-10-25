@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AnyRow, kindNameFor } from "../shared";
+import { AnyRow, kindNameFor, promptNameFor } from "../shared";
 import { ChatMenu, type MenuItem } from "./menu";
 import {
   IconChevronDown,
   IconClose,
+  IconCopy,
   IconPlus,
   IconQuote,
   IconSend,
@@ -20,6 +21,13 @@ export type ComposerTask = {
   /** 选择任务时准备的草稿内容（可选） */
   draft?: string;
   hint?: string;
+};
+
+export type PromptTemplate = {
+  id: string;
+  name: string;
+  content: string;
+  builtin?: boolean;
 };
 
 /** 引用标签：名称 + 类型 + 单独移除 + 点击预览 */
@@ -103,6 +111,9 @@ export type ComposerProps = {
   onOpenRefPicker: () => void;
   /** 可选的对话与写作任务 */
   tasks: ComposerTask[];
+  promptTemplates?: PromptTemplate[];
+  onSelectPromptTemplate?: (template: PromptTemplate) => void;
+  onManagePromptTemplates?: () => void;
   activeTaskKind: string;
   activeTaskId?: string;
   onSelectTask: (taskId: string) => void;
@@ -141,6 +152,9 @@ export function Composer({
   onPreviewRef,
   onOpenRefPicker,
   tasks,
+  promptTemplates = [],
+  onSelectPromptTemplate,
+  onManagePromptTemplates,
   activeTaskKind,
   activeTaskId,
   onSelectTask,
@@ -204,6 +218,34 @@ export function Composer({
     },
     [tasks, onSelectTask, activeTask?.id, activeTaskKind, language],
   );
+  const promptItems: MenuItem[] = useMemo(() => {
+    const items: MenuItem[] = promptTemplates.map((template) => ({
+      id: `ai-prompt-template-${template.id}`,
+      label: promptNameFor(template.name, template.builtin, language === "en" ? "en" : "zh-CN"),
+      group: template.builtin
+        ? tr("内置模板", "Built-in templates")
+        : tr("自定义模板", "Custom templates"),
+      hint: template.content.replace(/\s+/g, " ").trim().slice(0, 68),
+      onSelect: () => onSelectPromptTemplate?.(template),
+    }));
+    if (!items.length) {
+      items.push({
+        id: "ai-prompt-template-empty",
+        label: tr("暂无可用模板", "No templates available"),
+        disabled: true,
+        onSelect: () => undefined,
+      });
+    }
+    if (onManagePromptTemplates) {
+      items.push({
+        id: "ai-prompt-template-manage",
+        label: tr("管理提示词模板…", "Manage prompt templates…"),
+        group: tr("设置", "Settings"),
+        onSelect: onManagePromptTemplates,
+      });
+    }
+    return items;
+  }, [promptTemplates, onSelectPromptTemplate, onManagePromptTemplates, language]);
 
   return (
     <div className="zchat-composer" data-fd-id="ai-composer">
@@ -254,6 +296,14 @@ export function Composer({
             <IconPlus />
           </button>
           {styleControl}
+          <ChatMenu
+            ariaLabel={tr("提示词模板", "Prompt templates")}
+            dataFdId="ai-prompt-template-menu"
+            menuClassName="prompt-menu open-up"
+            trigger={<IconCopy size={14} />}
+            triggerClassName="zchat-pill"
+            items={promptItems}
+          />
           <ChatMenu
             ariaLabel={tr("任务类型", "Task type")}
             dataFdId="ai-task-menu"

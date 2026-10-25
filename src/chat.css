@@ -109,6 +109,13 @@
 .zchat-menu.align-start {
   left: 0;
 }
+.zchat-menu.open-up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+.zchat-menu.prompt-menu .zchat-menu-hint {
+  display: none;
+}
 .zchat-menu-group {
   padding: 7px 9px 4px;
   color: var(--muted, #8a8577);

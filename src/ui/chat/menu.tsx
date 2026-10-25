@@ -32,6 +32,7 @@ export function ChatMenu({
   align = "end",
   trigger,
   triggerClassName = "",
+  menuClassName = "",
   ariaLabel,
   dataFdId,
 }: {
@@ -41,6 +42,7 @@ export function ChatMenu({
   /** 自定义触发器内容；给出时忽略 label */
   trigger?: ReactNode;
   triggerClassName?: string;
+  menuClassName?: string;
   ariaLabel: string;
   dataFdId?: string;
 }) {
@@ -143,7 +145,7 @@ export function ChatMenu({
       </button>
       {open && (
         <div
-          className={`zchat-menu align-${align}`}
+          className={`zchat-menu align-${align} ${menuClassName}`}
           role="menu"
           id={id}
           aria-label={ariaLabel}

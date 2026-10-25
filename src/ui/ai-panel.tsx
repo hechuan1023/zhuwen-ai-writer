@@ -9,7 +9,7 @@ import { api, useAiSessionStore, fmt, kindNameFor, promptNameFor, parseJson, Emp
 import { ChatToolbar } from "./chat/chat-toolbar";
 import { HistoryDrawer } from "./chat/history-drawer";
 import { MessageList, type ReplyActions } from "./chat/message-list";
-import { Composer, type ComposerTask } from "./chat/composer";
+import { Composer, type ComposerTask, type PromptTemplate } from "./chat/composer";
 import { RefPicker } from "./chat/ref-picker";
 import { ContextDialog } from "./chat/context-dialog";
 import { StyleCardPanel, type StyleCard } from "./chat/style-card-panel";
@@ -203,6 +203,13 @@ export function AiPanel({
       lastSyncedText.current = value;
       void patchDraft(value, convId, version);
     }, 400);
+  }
+  function insertPromptTemplate(template: PromptTemplate) {
+    const current = draftRef.current;
+    const next = current.trim()
+      ? `${current.replace(/\s+$/, "")}\n\n${template.content}`
+      : template.content;
+    updateDraft(next, true);
   }
   function flushDraft() {
     window.clearTimeout(draftTimer.current);
@@ -1533,6 +1540,9 @@ export function AiPanel({
         onPreviewRef={(i) => setRefPreview(refsForUi[i])}
         onOpenRefPicker={() => setPickerOpen(true)}
         tasks={tasks}
+        promptTemplates={prompts as PromptTemplate[]}
+        onSelectPromptTemplate={insertPromptTemplate}
+        onManagePromptTemplates={onOpenSettings}
         activeTaskKind={mode}
         activeTaskId={activeTaskId}
         onSelectTask={(id) => {
