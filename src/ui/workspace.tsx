@@ -150,6 +150,7 @@ export function Workspace({
     [right, setRight] = useState(true),
     /** 主窗口内展开聊天区：会话/草稿/生成状态保留，仅改变宽度 */
     [aiExpanded, setAiExpanded] = useState(false),
+    [expandedAiWidth, setExpandedAiWidth] = useState(() => Math.min(900, Math.max(420, Math.round(window.innerWidth / 2)))),
     [focus, setFocus] = useState(false),
     [leftView, setLeftView] = useState<
       "chapters" | "library" | "history" | "trash"
@@ -639,6 +640,14 @@ export function Workspace({
       narrow.removeEventListener("change", adapt);
       veryNarrow.removeEventListener("change", adapt);
     };
+  }, []);
+  useEffect(() => {
+    const clampExpandedWidth = () => {
+      const max = Math.min(900, Math.max(420, window.innerWidth - 420));
+      setExpandedAiWidth((current) => Math.min(current, max));
+    };
+    window.addEventListener("resize", clampExpandedWidth);
+    return () => window.removeEventListener("resize", clampExpandedWidth);
   }, []);
   useEffect(
     () =>
@@ -1230,31 +1239,63 @@ export function Workspace({
       load();
     }
   }
+  function resizeBounds(side: "left" | "right") {
+    if (side === "left") return { min: 260, max: 520 };
+    if (aiExpanded) return { min: 380, max: Math.min(900, Math.max(420, window.innerWidth - 420)) };
+    return { min: 300, max: 520 };
+  }
+  function resizeValue(side: "left" | "right") {
+    return side === "left" ? leftWidth : aiExpanded ? expandedAiWidth : rightWidth;
+  }
+  function setResizeValue(side: "left" | "right", value: number) {
+    if (side === "left") setLeftWidth(value);
+    else if (aiExpanded) setExpandedAiWidth(value);
+    else setRightWidth(value);
+  }
+  function saveResizeValue(side: "left" | "right", value: number) {
+    if (side === "left") persistAppearance({ leftWidth: value });
+    else if (!aiExpanded) persistAppearance({ rightWidth: value });
+  }
   function resize(side: "left" | "right", e: React.MouseEvent) {
     e.preventDefault();
-    const start = e.clientX,
-      initial = side === "left" ? leftWidth : rightWidth;
+    const start = e.clientX;
+    const initial = resizeValue(side);
+    const { min, max } = resizeBounds(side);
+    const direction = side !== aiDockSide ? 1 : -1;
     let last = initial;
     const move = (x: MouseEvent) => {
-      const value = Math.max(
-        side === "left" ? 260 : 300,
-        Math.min(
-          520,
-          initial + (side === "left" ? x.clientX - start : start - x.clientX),
-        ),
-      );
+      const value = Math.max(min, Math.min(max, initial + direction * (x.clientX - start)));
       last = value;
-      side === "left" ? setLeftWidth(value) : setRightWidth(value);
+      setResizeValue(side, value);
     };
     const up = () => {
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
-      persistAppearance(
-        side === "left" ? { leftWidth: last } : { rightWidth: last },
-      );
+      saveResizeValue(side, last);
     };
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
+  }
+  function resizeByKeyboard(side: "left" | "right", e: React.KeyboardEvent<HTMLDivElement>) {
+    const direction = side !== aiDockSide ? 1 : -1;
+    const { min, max } = resizeBounds(side);
+    let next: number | null = null;
+    if (e.key === "ArrowLeft") next = resizeValue(side) - direction * 16;
+    else if (e.key === "ArrowRight") next = resizeValue(side) + direction * 16;
+    else if (e.key === "Home") next = min;
+    else if (e.key === "End") next = max;
+    if (next == null) return;
+    e.preventDefault();
+    const value = Math.max(min, Math.min(max, next));
+    setResizeValue(side, value);
+    saveResizeValue(side, value);
+  }
+  function resetResize(side: "left" | "right") {
+    const value = side === "left" ? 292 : aiExpanded
+      ? Math.min(900, Math.max(420, Math.round(window.innerWidth / 2)))
+      : 380;
+    setResizeValue(side, value);
+    saveResizeValue(side, value);
   }
   function changeAiDockSide(side: "left" | "right") {
     setAiDockSide(side);
@@ -1878,8 +1919,18 @@ export function Workspace({
               )}
             </div>
             <div
-              className="resizer right-edge"
+              className={`resizer ${aiDockSide === "left" ? "left-edge" : "right-edge"}`}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={tr("调整章节栏宽度", "Resize chapter sidebar")}
+              aria-valuemin={260}
+              aria-valuemax={520}
+              aria-valuenow={Math.round(leftWidth)}
+              aria-valuetext={tr(`章节栏宽度 ${Math.round(leftWidth)} 像素`, `Chapter sidebar width ${Math.round(leftWidth)} pixels`)}
+              tabIndex={0}
               onMouseDown={(e) => resize("left", e)}
+              onKeyDown={(e) => resizeByKeyboard("left", e)}
+              onDoubleClick={() => resetResize("left")}
             />
           </aside>
         )}
@@ -2106,12 +2157,23 @@ export function Workspace({
         {right && !focus && (
           <aside
             className="right-panel"
-            style={{ width: aiExpanded ? "min(50vw, 900px)" : (envEffective.rightWidth ?? rightWidth) }}
+            style={{ width: aiExpanded ? expandedAiWidth : (envEffective.rightWidth ?? rightWidth) }}
             data-fd-id="workspace-ai-panel"
           >
             <div
-              className="resizer left-edge"
+              className={`resizer ${aiDockSide === "left" ? "right-edge" : "left-edge"}`}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={tr("调整 AI 面板宽度", "Resize AI panel")}
+              aria-valuemin={resizeBounds("right").min}
+              aria-valuemax={resizeBounds("right").max}
+              aria-valuenow={Math.round(resizeValue("right"))}
+              aria-valuetext={tr(`AI 面板宽度 ${Math.round(resizeValue("right"))} 像素`, `AI panel width ${Math.round(resizeValue("right"))} pixels`)}
+              title={tr("拖动调整宽度 · 方向键微调 · 双击恢复", "Drag to resize · Arrow keys to adjust · Double-click to reset")}
+              tabIndex={0}
               onMouseDown={(e) => resize("right", e)}
+              onKeyDown={(e) => resizeByKeyboard("right", e)}
+              onDoubleClick={() => resetResize("right")}
             />
             <Suspense fallback={<Empty title={tr("正在载入助手", "Loading assistant")} text={tr("请稍候……", "Please wait…")} />}>
               <AiPanel

@@ -52,16 +52,41 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 6px;
+  width: 10px;
   z-index: 4;
   cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.resizer::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 34px;
+  border-radius: 2px;
+  background: transparent;
+  transform: translateY(-50%);
+  transition: height 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
 .resizer.right-edge {
-  right: -3px;
+  right: -5px;
+}
+.resizer.right-edge::after {
+  left: 4px;
 }
 .resizer.left-edge {
-  left: -3px;
+  left: -5px;
 }
-.resizer:hover {
-  background: color-mix(in srgb, var(--accent) 42%, transparent);
+.resizer.left-edge::after {
+  right: 4px;
+}
+.resizer:hover::after,
+.resizer:focus-visible::after {
+  height: 48px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent);
+}
+.resizer:focus-visible::after {
+  box-shadow: 0 0 0 3px var(--focus);
 }
