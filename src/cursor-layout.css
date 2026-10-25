@@ -9,6 +9,33 @@
   --sidebar: #252826;
   --editor-surface: #1d201e;
 }
+
+/* Let authors place the AI dock beside the manuscript on either side. */
+.workbody.ai-dock-left > .right-panel {
+  order: 0;
+  border-left: 0;
+  border-right: 1px solid var(--line);
+}
+.workbody.ai-dock-left > .editor-area { order: 1; }
+.workbody.ai-dock-left > .left-panel {
+  order: 2;
+  border-right: 0;
+  border-left: 1px solid var(--line);
+}
+@media (max-width: 1180px) {
+  .workbody.ai-dock-left > .right-panel {
+    left: 0;
+    right: auto;
+    box-shadow: 14px 0 34px #1e24201f;
+  }
+}
+@media (max-width: 920px) {
+  .workbody.ai-dock-left > .left-panel {
+    left: auto;
+    right: 0;
+    box-shadow: -14px 0 34px #1e24201f;
+  }
+}
 .topbar {
   height: 44px;
   background: var(--chrome);

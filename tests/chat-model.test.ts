@@ -4,6 +4,7 @@ import {
   filterConversations,
   groupConversations,
   markInvalidRefs,
+  partitionPinnedConversations,
   resolveTaskSwitch,
 } from "../src/ui/chat/chat-model";
 
@@ -50,6 +51,19 @@ describe("groupConversations：本地日历日分组", () => {
       now,
     );
     expect(groups[0].key).toBe("older");
+  });
+});
+
+describe("置顶对话分区", () => {
+  it("separates pinned rows and keeps their existing order", () => {
+    const rows = [
+      { id: "recent", pinned: 0 },
+      { id: "pinned-a", pinned: 1 },
+      { id: "pinned-b", pinned: 1 },
+    ];
+    const result = partitionPinnedConversations(rows);
+    expect(result.pinned.map((row) => row.id)).toEqual(["pinned-a", "pinned-b"]);
+    expect(result.recent.map((row) => row.id)).toEqual(["recent"]);
   });
 });
 

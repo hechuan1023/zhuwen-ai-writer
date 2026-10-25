@@ -28,6 +28,7 @@ import { FocusTracker } from "./focus-tracker";
 import { DraftStorage, draftKey, DraftRecord } from "./draft-storage";
 import { buildTaskAndStyleInstructions, effectiveStyleRules } from "./ai-style-cards";
 import { parseStyleCompositionBundle } from "./ai-style-bundle";
+import { formatConversationMarkdown, safeConversationFilename } from "./ai-conversation-export";
 
 let win: BrowserWindow | null = null;
 let floatWin: BrowserWindow | null = null;
@@ -582,7 +583,10 @@ function createMainWindow() {
         await wait(250);
         await shot("03-history-drawer");
         const historyDrawerOk = await js(
-          `Boolean(document.querySelector('[data-fd-id="ai-history-drawer"]'))`,
+          `Boolean(document.querySelector('[data-fd-id="ai-history-drawer"]')&&document.querySelector('[data-fd-id="ai-history-scope"]'))`,
+        );
+        const historyArchiveScopeOk = await js(
+          `(async()=>{const scope=document.querySelector('[data-fd-id="ai-history-scope"]');const archived=[...scope?.querySelectorAll('button')||[]].find(b=>b.textContent.includes('已归档')||b.textContent.includes('Archived'));if(!archived)return false;archived.click();await new Promise(r=>setTimeout(r,80));const switched=archived.getAttribute('aria-pressed')==='true';const active=[...scope.querySelectorAll('button')].find(b=>b!==archived);active?.click();await new Promise(r=>setTimeout(r,80));return switched&&active?.getAttribute('aria-pressed')==='true'})()`,
         );
         await js(
           `window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`,
@@ -758,8 +762,19 @@ function createMainWindow() {
         await wait(200);
         await shot("04-more-menu");
         const moreMenuOk = await js(
-          `Boolean(document.querySelector('[data-fd-id="ai-menu-rename"]')&&document.querySelector('[data-fd-id="ai-menu-float"]'))`,
+          `Boolean(document.querySelector('[data-fd-id="ai-menu-rename"]')&&document.querySelector('[data-fd-id="ai-menu-archive"]')&&document.querySelector('[data-fd-id="ai-menu-dock-side"]')&&document.querySelector('[data-fd-id="ai-menu-float"]'))`,
         );
+        await js(`document.querySelector('[data-fd-id="ai-menu-dock-side"]')?.click()`);
+        await wait(180);
+        const aiDockLeftOk = await js(`(()=>{const body=document.querySelector('.workbody'),ai=document.querySelector('.right-panel'),editor=document.querySelector('.editor-area'),tools=document.querySelector('.left-panel');return body?.dataset.aiDock==='left'&&getComputedStyle(ai).order==='0'&&getComputedStyle(editor).order==='1'&&getComputedStyle(tools).order==='2'})()`);
+        await shot("06-ai-dock-left");
+        await js(`document.querySelector('[data-fd-id="ai-more-menu"]')?.click()`);
+        await wait(120);
+        await js(`document.querySelector('[data-fd-id="ai-menu-dock-side"]')?.click()`);
+        await wait(180);
+        const aiDockRestoreOk = await js(`document.querySelector('.workbody')?.dataset.aiDock==='right'`);
+        await js(`document.querySelector('[data-fd-id="ai-more-menu"]')?.click()`);
+        await wait(120);
         await js(`document.querySelector('[data-fd-id="ai-menu-float"]')?.click()`);
         await wait(1600);
         const floatLoaded = Boolean(floatWin && !floatWin.isDestroyed());
@@ -858,6 +873,7 @@ function createMainWindow() {
           aiOk,
           pickerOk,
           historyDrawerOk,
+          historyArchiveScopeOk,
           historyClosedOk,
           typoOk,
           languageOk,
@@ -880,6 +896,8 @@ function createMainWindow() {
           reduceMotionOffOk,
           mainShared,
           moreMenuOk,
+          aiDockLeftOk,
+          aiDockRestoreOk,
           floatLoaded,
           floatShared,
           summaryOk,
@@ -919,7 +937,7 @@ function createMainWindow() {
         if (shotsFailed.length)
           console.log(`UI_SHOTS_FAIL ${shotsFailed.join(",")}`);
         console.log(
-          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n reference_picker typography_settings daily_goal database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared history_drawer summary_modal library_kinds relation_graph relation_expand library_detail library_trash ${status} ${out}`,
+          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n reference_picker typography_settings daily_goal database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared history_drawer history_archive_scope ai_dock_left ai_dock_restore summary_modal library_kinds relation_graph relation_expand library_detail library_trash ${status} ${out}`,
         );
         app.exit(0);
       } catch (e) {
@@ -2750,6 +2768,7 @@ function registerIpc(userDir: string) {
     const limit = Math.min(200, Math.max(20, Number(p?.limit) || 50));
     const offset = Math.max(0, Number(p?.offset) || 0);
     const search = String(p?.search || "").trim();
+    const archivedAtFilter = p?.archived === true ? "IS NOT NULL" : "IS NULL";
     const like = `%${search}%`;
     const rows = search
       ? all(
@@ -2758,9 +2777,9 @@ function registerIpc(userDir: string) {
             (SELECT m.incomplete FROM ai_messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_incomplete,
             (SELECT m.role FROM ai_messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_role
            FROM ai_conversations c
-           WHERE c.novel_id=? AND c.deleted_at IS NULL
+           WHERE c.novel_id=? AND c.deleted_at IS NULL AND c.archived_at ${archivedAtFilter}
              AND (c.title LIKE ? OR EXISTS (SELECT 1 FROM ai_messages m WHERE m.conversation_id=c.id AND m.content LIKE ?))
-           ORDER BY c.updated_at DESC, c.id DESC
+           ORDER BY c.pinned DESC, c.updated_at DESC, c.id DESC
            LIMIT ? OFFSET ?`,
           novelId,
           like,
@@ -2774,8 +2793,8 @@ function registerIpc(userDir: string) {
             (SELECT m.incomplete FROM ai_messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_incomplete,
             (SELECT m.role FROM ai_messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_role
            FROM ai_conversations c
-           WHERE c.novel_id=? AND c.deleted_at IS NULL
-           ORDER BY c.updated_at DESC, c.id DESC
+           WHERE c.novel_id=? AND c.deleted_at IS NULL AND c.archived_at ${archivedAtFilter}
+           ORDER BY c.pinned DESC, c.updated_at DESC, c.id DESC
            LIMIT ? OFFSET ?`,
           novelId,
           limit,
@@ -2792,8 +2811,8 @@ function registerIpc(userDir: string) {
           (SELECT m.incomplete FROM ai_messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_incomplete,
           (SELECT m.role FROM ai_messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_role
          FROM ai_conversations c
-         WHERE c.novel_id=? AND c.deleted_at IS NULL
-         ORDER BY c.updated_at DESC, c.id DESC
+         WHERE c.novel_id=? AND c.deleted_at IS NULL AND c.archived_at IS NULL
+         ORDER BY c.pinned DESC, c.updated_at DESC, c.id DESC
          LIMIT 50`,
         novelId,
       );
@@ -2803,6 +2822,45 @@ function registerIpc(userDir: string) {
       }
     } catch {}
   }
+  ipcMain.handle("ai:conversation:pin", (_, p) => {
+    const id = String(p?.id || "").trim();
+    const conversation: any = get("SELECT novel_id FROM ai_conversations WHERE id=? AND deleted_at IS NULL", id);
+    if (!id || !conversation || String(conversation.novel_id) !== String(aiSession.novelId || ""))
+      return fail("对话不存在或不属于当前作品");
+    const pinned = p?.pinned === true ? 1 : 0;
+    db.prepare("UPDATE ai_conversations SET pinned=?,data_version=data_version+1 WHERE id=?")
+      .run(pinned, id);
+    broadcastConversations(String(conversation.novel_id));
+    return ok({ id, pinned: Boolean(pinned) });
+  });
+  ipcMain.handle("ai:conversation:archive", (_, p) => {
+    const id = String(p?.id || "").trim();
+    const conversation: any = get("SELECT novel_id FROM ai_conversations WHERE id=? AND deleted_at IS NULL", id);
+    if (!id || !conversation || String(conversation.novel_id) !== String(aiSession.novelId || ""))
+      return fail("对话不存在或不属于当前作品");
+    const archived = p?.archived === true;
+    if (archived && aiSession.generatingConversationId === id)
+      return fail("请等待当前回复完成后再归档对话");
+    const changedAt = timestamp();
+    if (archived) {
+      db.prepare("UPDATE ai_conversations SET archived_at=?,data_version=data_version+1 WHERE id=?")
+        .run(changedAt, id);
+    } else {
+      db.prepare("UPDATE ai_conversations SET archived_at=NULL,updated_at=?,data_version=data_version+1 WHERE id=?")
+        .run(changedAt, id);
+    }
+    broadcastConversations(String(conversation.novel_id));
+    return ok({ id, archived });
+  });
+  ipcMain.handle("ai:conversation:status", (_, id) => {
+    const conversation: any = get(
+      "SELECT archived_at,title FROM ai_conversations WHERE id=? AND novel_id=? AND deleted_at IS NULL",
+      String(id || ""),
+      String(aiSession.novelId || ""),
+    );
+    if (!conversation) return ok({ archived: false });
+    return ok({ archived: Boolean(conversation.archived_at), title: String(conversation.title || "") });
+  });
   ipcMain.handle("ai:conversation:update", (_, p) => {
     if (!p?.title?.trim()) return fail("会话名称不能为空");
     db.prepare(
@@ -2912,6 +2970,36 @@ function registerIpc(userDir: string) {
     broadcastConversations(String(aiSession.novelId || ""));
     return ok(true);
   });
+  ipcMain.handle("ai:conversation:export", async (_, id) => {
+    try {
+      const conversationId = String(id || "").trim();
+      if (!conversationId) return fail("没有可导出的对话");
+      const conversation: any = get(
+        "SELECT title FROM ai_conversations WHERE id=? AND deleted_at IS NULL",
+        conversationId,
+      );
+      if (!conversation) return fail("对话不存在或已删除");
+      const messages: any[] = all(
+        "SELECT role,content,created_at,incomplete FROM ai_messages WHERE conversation_id=? ORDER BY created_at,rowid",
+        conversationId,
+      );
+      if (!messages.length) return fail("空对话没有可导出的消息");
+      const target = await dialog.showSaveDialog({
+        title: "导出 AI 对话",
+        defaultPath: safeConversationFilename(String(conversation.title || "")),
+        filters: [{ name: "Markdown 文档", extensions: ["md"] }],
+      });
+      if (target.canceled || !target.filePath) return ok(null);
+      await fs.promises.writeFile(
+        target.filePath,
+        formatConversationMarkdown(String(conversation.title || ""), messages),
+        "utf8",
+      );
+      return ok({ file: target.filePath });
+    } catch (error) {
+      return fail(error);
+    }
+  });
   ipcMain.handle("ai:previewRequest", (_, p) => {
     const history = withWriterPersona(conversationHistory(String(p?.conversationId || "")));
     const prefix = contextText(p?.contexts || []);
@@ -2946,6 +3034,15 @@ function registerIpc(userDir: string) {
           t,
           t,
         );
+      } else {
+        const existing: any = get("SELECT novel_id,archived_at FROM ai_conversations WHERE id=? AND deleted_at IS NULL", conv);
+        if (!existing || String(existing.novel_id) !== String(p.novelId || ""))
+          return fail("对话不存在或不属于当前作品");
+        if (existing.archived_at) {
+          db.prepare("UPDATE ai_conversations SET archived_at=NULL,updated_at=?,data_version=data_version+1 WHERE id=?")
+            .run(timestamp(), conv);
+          broadcastConversations(String(existing.novel_id));
+        }
       }
       const uid = newId(),
         t = timestamp();

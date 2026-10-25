@@ -28,6 +28,48 @@ export function IconHistory({ size = 16, className }: IconProps) {
   );
 }
 
+export function IconPin({ size = 16, className }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <path d="M8 4h8l-1 5 3 3v1h-5v7l-2-2v-5H6v-1l3-3-1-5z" />
+    </svg>
+  );
+}
+
+export function IconArchive({ size = 16, className }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <path d="M4 7h16v13H4zM3 4h18v3H3zM9 11h6" />
+    </svg>
+  );
+}
+
+export function IconRestore({ size = 16, className }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <path d="M4 7h16v13H4zM3 4h18v3H3zM12 10v6m-3-3 3-3 3 3" />
+    </svg>
+  );
+}
+
+export function IconDockLeft({ size = 16, className }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <rect x="3.5" y="4" width="17" height="16" rx="2" />
+      <path d="M9 4v16M6 8h.01M6 12h.01M6 16h.01" />
+    </svg>
+  );
+}
+
+export function IconDockRight({ size = 16, className }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <rect x="3.5" y="4" width="17" height="16" rx="2" />
+      <path d="M15 4v16M18 8h.01M18 12h.01M18 16h.01" />
+    </svg>
+  );
+}
+
 export function IconPlus({ size = 16, className }: IconProps) {
   return (
     <svg {...base(size)} className={className}>

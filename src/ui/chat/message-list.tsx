@@ -308,7 +308,6 @@ export function MessageList({
             <div className="zchat-msg-body">
               <div className="zchat-msg-meta">
                 <span>{isUser ? tr("你", "You") : tr("AI", "AI")}</span>
-                {m.model ? <small className="zchat-ellipsis">{m.model}</small> : null}
                 {m.incomplete && (
                   <em className="zchat-incomplete">{tr("未完整回答", "incomplete")}</em>
                 )}

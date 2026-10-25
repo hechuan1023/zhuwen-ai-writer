@@ -1,7 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnyRow } from "../shared";
-import { IconClose, IconPlus, IconRetry, IconSearch } from "./icons";
-import { filterConversations, groupConversations } from "./chat-model";
+import { IconArchive, IconClose, IconPin, IconPlus, IconRetry, IconRestore, IconSearch } from "./icons";
+import { filterConversations, groupConversations, partitionPinnedConversations } from "./chat-model";
 
 /** 历史对话抽屉：浮层覆盖，不挤压消息区；Esc 关闭并归还焦点。 */
 export function HistoryDrawer({
@@ -15,6 +15,10 @@ export function HistoryDrawer({
   onQuery,
   onNew,
   onSelect,
+  onTogglePinned,
+  onToggleArchived,
+  archivedMode,
+  onArchivedModeChange,
   onLoadMore,
   onRetry,
   onClose,
@@ -29,6 +33,10 @@ export function HistoryDrawer({
   onQuery: (q: string) => void;
   onNew: () => void;
   onSelect: (id: string) => void;
+  onTogglePinned: (id: string, pinned: boolean) => Promise<boolean>;
+  onToggleArchived: (id: string, archived: boolean) => Promise<boolean>;
+  archivedMode: boolean;
+  onArchivedModeChange: (archived: boolean) => void;
   onLoadMore: () => void;
   onRetry: () => void;
   onClose: () => void;
@@ -37,6 +45,7 @@ export function HistoryDrawer({
   const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
+  const [busyId, setBusyId] = useState("");
 
   useEffect(() => {
     restoreRef.current = document.activeElement as HTMLElement;
@@ -55,11 +64,72 @@ export function HistoryDrawer({
   }, [onClose]);
 
   const filtered = filterConversations(conversations, query);
-  const groups = groupConversations(filtered).map((g) => ({
+  const partitioned = archivedMode
+    ? { pinned: [] as AnyRow[], recent: filtered }
+    : partitionPinnedConversations(filtered);
+  const groups = groupConversations(partitioned.recent).map((g) => ({
     key: g.key,
     label: language === "en" ? g.labelKey.en : g.labelKey.zh,
     rows: g.rows,
   }));
+
+  async function togglePinned(conversation: AnyRow) {
+    const id = String(conversation.id || "");
+    setBusyId(id);
+    try {
+      await onTogglePinned(id, Number(conversation.pinned) !== 1);
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function toggleArchived(conversation: AnyRow) {
+    const id = String(conversation.id || "");
+    setBusyId(id);
+    try {
+      await onToggleArchived(id, !archivedMode);
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  function renderConversation(conversation: AnyRow) {
+    const id = String(conversation.id || "");
+    const pinned = Number(conversation.pinned) === 1;
+    const title = String(conversation.title || "");
+    return (
+      <div className={`zchat-conv-item ${id === currentId ? "active" : ""}`} key={id} data-fd-id="ai-history-row">
+        <button type="button" className="zchat-conv-row" aria-current={id === currentId ? "true" : undefined} onClick={() => onSelect(id)}>
+          <span className="zchat-conv-title">
+          {pinned && !archivedMode && <IconPin className="zchat-conv-pin-indicator" size={12} />}
+            <b className="zchat-ellipsis" title={title}>{title || tr("未命名对话", "Untitled")}</b>
+          </span>
+          <small className="zchat-ellipsis">{String(conversation.last_snippet || "").trim() || tr("（暂无内容摘要）", "(no summary)")}</small>
+        </button>
+        {!archivedMode && <button
+          type="button"
+          className={`zchat-conv-pin ${pinned ? "pinned" : ""}`}
+          aria-label={pinned ? tr(`取消置顶：${title}`, `Unpin conversation: ${title}`) : tr(`置顶：${title}`, `Pin conversation: ${title}`)}
+          aria-pressed={pinned}
+          title={pinned ? tr("取消置顶", "Unpin") : tr("置顶对话", "Pin conversation")}
+          disabled={busyId === id}
+          onClick={() => void togglePinned(conversation)}
+        >
+          <IconPin size={14} />
+        </button>}
+        <button
+          type="button"
+          className={`zchat-conv-pin zchat-conv-archive ${archivedMode ? "pinned" : ""}`}
+          aria-label={archivedMode ? tr(`恢复对话：${title}`, `Restore conversation: ${title}`) : tr(`归档对话：${title}`, `Archive conversation: ${title}`)}
+          title={archivedMode ? tr("恢复对话", "Restore conversation") : tr("归档对话", "Archive conversation")}
+          disabled={busyId === id}
+          onClick={() => void toggleArchived(conversation)}
+        >
+          {archivedMode ? <IconRestore size={14} /> : <IconArchive size={14} />}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -104,7 +174,21 @@ export function HistoryDrawer({
             <IconClose />
           </button>
         </div>
+        <div className="zchat-history-scope" role="group" aria-label={tr("会话范围", "Conversation scope")} data-fd-id="ai-history-scope">
+          <button type="button" aria-pressed={!archivedMode} onClick={() => onArchivedModeChange(false)}>
+            {tr("会话", "Chats")}
+          </button>
+          <button type="button" aria-pressed={archivedMode} onClick={() => onArchivedModeChange(true)}>
+            {tr("已归档", "Archived")}
+          </button>
+        </div>
         <div className="zchat-drawer-body">
+          {!error && partitioned.pinned.length > 0 && (
+            <section className="zchat-drawer-group zchat-pinned-group" data-fd-id="ai-history-pinned">
+              <h4>{tr("置顶", "Pinned")}</h4>
+              {partitioned.pinned.map(renderConversation)}
+            </section>
+          )}
           {error && (
             <div className="zchat-drawer-state error" role="alert">
               <span>{tr("历史加载失败", "Could not load history")}</span>
@@ -120,10 +204,9 @@ export function HistoryDrawer({
           )}
           {!error && !loading && !conversations.length && (
             <p className="zchat-drawer-state">
-              {tr(
-                "还没有历史对话。发送第一条消息后会出现在这里。",
-                "No conversations yet. Your first message will appear here.",
-              )}
+              {archivedMode
+                ? tr("没有已归档的对话。", "No archived conversations.")
+                : tr("还没有历史对话。发送第一条消息后会出现在这里。", "No conversations yet. Your first message will appear here.")}
             </p>
           )}
           {!error && conversations.length > 0 && !filtered.length && (
@@ -136,24 +219,7 @@ export function HistoryDrawer({
               g.rows.length ? (
                 <section className="zchat-drawer-group" key={g.key}>
                   <h4>{g.label}</h4>
-                  {g.rows.map((c) => (
-                    <button
-                      type="button"
-                      key={c.id}
-                      className={`zchat-conv-row ${c.id === currentId ? "active" : ""}`}
-                      aria-current={c.id === currentId ? "true" : undefined}
-                      data-fd-id="ai-history-row"
-                      onClick={() => onSelect(c.id)}
-                    >
-                      <b className="zchat-ellipsis" title={String(c.title || "")}>
-                        {c.title || tr("未命名对话", "Untitled")}
-                      </b>
-                      <small className="zchat-ellipsis">
-                        {String(c.last_snippet || "").trim() ||
-                          tr("（暂无内容摘要）", "(no summary)")}
-                      </small>
-                    </button>
-                  ))}
+                  {g.rows.map(renderConversation)}
                 </section>
               ) : null,
             )}

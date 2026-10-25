@@ -254,6 +254,20 @@ function migrate(db: Db) {
     for (const row of rows) update.run(JSON.stringify([row.style_id]), row.id)
     db.prepare('INSERT INTO schema_migrations VALUES(16,?)').run(now())
   })()
+  if (version < 17) db.transaction(() => {
+    db.exec(`
+      ALTER TABLE ai_conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK(pinned IN (0,1));
+      CREATE INDEX IF NOT EXISTS idx_ai_conversations_novel_pinned ON ai_conversations(novel_id,pinned DESC,updated_at DESC,id);
+    `)
+    db.prepare('INSERT INTO schema_migrations VALUES(17,?)').run(now())
+  })()
+  if (version < 18) db.transaction(() => {
+    db.exec(`
+      ALTER TABLE ai_conversations ADD COLUMN archived_at TEXT;
+      CREATE INDEX IF NOT EXISTS idx_ai_conversations_novel_archive ON ai_conversations(novel_id,archived_at,pinned DESC,updated_at DESC,id);
+    `)
+    db.prepare('INSERT INTO schema_migrations VALUES(18,?)').run(now())
+  })()
   // 已完成迁移的数据库也要能补齐或升级内置卡；不覆盖用户自定义记录。
   {
     const insert = db.prepare('INSERT OR IGNORE INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')

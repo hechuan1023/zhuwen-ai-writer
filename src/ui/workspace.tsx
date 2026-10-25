@@ -181,6 +181,7 @@ export function Workspace({
     [focusZen, setFocusZen] = useState(false),
     [leftWidth, setLeftWidth] = useState(292),
     [rightWidth, setRightWidth] = useState(380),
+    [aiDockSide, setAiDockSide] = useState<"left" | "right">("right"),
     [fontFamily, setFontFamily] = useState(readerFonts[0].value),
     [fontSize, setFontSize] = useState(17),
     [lineHeight, setLineHeight] = useState(1.7),
@@ -215,6 +216,7 @@ export function Workspace({
     focusZen,
     leftWidth,
     rightWidth,
+    aiDockSide,
     fontFamily,
     fontSize,
     lineHeight,
@@ -239,6 +241,7 @@ export function Workspace({
     focusZen,
     leftWidth,
     rightWidth,
+    aiDockSide,
     fontFamily,
     fontSize,
     lineHeight,
@@ -496,6 +499,8 @@ export function Workspace({
         if (typeof r.data.focusZen === "boolean") setFocusZen(r.data.focusZen);
         setLeftWidth(bounded(r.data.leftWidth, 260, 520, 292));
         setRightWidth(bounded(r.data.rightWidth, 300, 520, 380));
+        if (r.data.aiDockSide === "left" || r.data.aiDockSide === "right")
+          setAiDockSide(r.data.aiDockSide);
         if (readerFonts.some((font) => font.value === r.data.fontFamily))
           setFontFamily(r.data.fontFamily);
         setFontSize(bounded(r.data.fontSize, 14, 30, 17));
@@ -1154,6 +1159,16 @@ export function Workspace({
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
   }
+  function changeAiDockSide(side: "left" | "right") {
+    setAiDockSide(side);
+    if (envPreview) {
+      void api("preferences:set", {
+        key: "appearance",
+        value: { aiDockSide: side },
+        merge: true,
+      });
+    } else persistAppearance({ aiDockSide: side });
+  }
   async function back() {
     const leave = libraryControlsRef.current;
     if (leave?.isDirty()) {
@@ -1242,6 +1257,13 @@ export function Workspace({
         label: tr("AI 助手浮窗", "AI floating window"),
         run: () => api("ai:float:open"),
       },
+      {
+        label: aiDockSide === "right" ? tr("AI 助手移到左侧", "Move AI assistant to left") : tr("AI 助手移到右侧", "Move AI assistant to right"),
+        run: () => {
+          const side = aiDockSide === "right" ? "left" : "right";
+          changeAiDockSide(side);
+        },
+      },
       ...chapters.map((c) => ({
         label: tr(`切换到章节：${c.title}`, `Switch to chapter: ${c.title}`),
         hint: `${fmt(c.word_count)} ${tr("字", "words")}`,
@@ -1260,6 +1282,8 @@ export function Workspace({
     save,
     editorZoom,
     language,
+    aiDockSide,
+    envPreview,
   ]);
   return (
     <div
@@ -1399,7 +1423,7 @@ export function Workspace({
           </div>
         </details>
       </header>
-      <div className="workbody">
+      <div className={`workbody ${aiDockSide === "left" ? "ai-dock-left" : ""}`} data-ai-dock={aiDockSide} data-fd-id="workspace-docking-layout">
         {left && !focus && (
           <aside
             className={`left-panel left-view-${leftView}`}
@@ -1908,6 +1932,8 @@ export function Workspace({
                 language={language}
                 expanded={aiExpanded}
                 onToggleExpand={setAiExpanded}
+                dockSide={aiDockSide}
+                onDockSideChange={changeAiDockSide}
                 sceneDraftRequest={aiSceneDraftRequest}
                 onSceneDraftRequestConsumed={() => setAiSceneDraftRequest(null)}
                 onNavigateSource={(source) => navigateToAiSource(source)}

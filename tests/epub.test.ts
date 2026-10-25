@@ -6,7 +6,7 @@ describe("EPUB export", () => {
   const chapters = [{ title: "开篇", volume_title: "第一卷", plain_text: "正文段落" }];
 
   it("embeds the novel cover as a cover page and EPUB cover-image resource", async () => {
-    const bytes = Buffer.from("cover image bytes");
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     const epub = await JSZip.loadAsync(
       await buildEpub(
         { title: "测试作品", author: "作者", cover_path: `data:image/png;base64,${bytes.toString("base64")}` },
@@ -28,7 +28,7 @@ describe("EPUB export", () => {
     expect(epub.file("EPUB/text/cover.xhtml")).toBeNull();
     await expect(
       buildEpub({ title: "损坏封面", cover_path: "data:image/png;base64,%%%" }, chapters),
-    ).rejects.toThrow("作品封面格式无效");
+    ).rejects.toThrow("图片格式无效，无法嵌入 EPUB");
   });
 
   it("applies each selectable reading layout to the EPUB stylesheet", async () => {

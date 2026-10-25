@@ -4,6 +4,10 @@ import { contextBridge, ipcRenderer } from 'electron'
 const allowedChannels = new Set([
   'ai:cancel',
   'ai:conversation:branch',
+  'ai:conversation:export',
+  'ai:conversation:pin',
+  'ai:conversation:archive',
+  'ai:conversation:status',
   'ai:conversation:trash',
   'ai:conversation:update',
   'ai:conversations',

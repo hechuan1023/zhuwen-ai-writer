@@ -65,8 +65,8 @@ describe("scene label filters", () => {
     expect(sceneTrackOptions(scenes)).toEqual([
       { value: "plotline:复仇主线", kind: "plotline", label: "复仇主线", count: 2 },
       { value: "tag:复仇", kind: "tag", label: "复仇", count: 1 },
-      { value: "tag:宗门暗线", kind: "tag", label: "宗门暗线", count: 1 },
       { value: "plotline:家族支线", kind: "plotline", label: "家族支线", count: 1 },
+      { value: "tag:宗门暗线", kind: "tag", label: "宗门暗线", count: 1 },
     ]);
   });
 

@@ -9,6 +9,13 @@ export type ConversationGroup = {
   rows: AnyRow[];
 };
 
+export function partitionPinnedConversations(rows: AnyRow[]) {
+  return {
+    pinned: rows.filter((row) => Number(row.pinned) === 1),
+    recent: rows.filter((row) => Number(row.pinned) !== 1),
+  };
+}
+
 /** 历史对话按时间分组：今天 / 近 7 天 / 更早（以本地日历日计算） */
 export function groupConversations(
   rows: AnyRow[],

@@ -1,4 +1,4 @@
-import { IconCollapse, IconExpand, IconFloat, IconHistory, IconMore, IconPlus, IconRename, IconTrash } from "./icons";
+import { IconArchive, IconCollapse, IconDockLeft, IconDockRight, IconDownload, IconExpand, IconFloat, IconHistory, IconMore, IconPlus, IconRename, IconRestore, IconTrash } from "./icons";
 import { ChatMenu, type MenuItem } from "./menu";
 
 /**
@@ -12,12 +12,19 @@ export function ChatToolbar({
   canExpand,
   expanded,
   canRenameDelete,
+  canExport,
+  canArchive,
+  archived,
+  dockSide,
   generatingLabel,
   onNew,
   onToggleHistory,
   historyOpen,
   onToggleExpand,
   onRename,
+  onExport,
+  onToggleArchive,
+  onDockSideChange,
   onDelete,
   onOpenFloat,
   onCloseFloat,
@@ -28,12 +35,19 @@ export function ChatToolbar({
   canExpand?: boolean;
   expanded?: boolean;
   canRenameDelete: boolean;
+  canExport: boolean;
+  canArchive: boolean;
+  archived: boolean;
+  dockSide: "left" | "right";
   generatingLabel?: string | null;
   onNew: () => void;
   onToggleHistory: () => void;
   historyOpen: boolean;
   onToggleExpand?: () => void;
   onRename: () => void;
+  onExport: () => void;
+  onToggleArchive: () => void;
+  onDockSideChange: (side: "left" | "right") => void;
   onDelete: () => void;
   onOpenFloat?: () => void;
   onCloseFloat?: () => void;
@@ -44,13 +58,31 @@ export function ChatToolbar({
       id: "ai-menu-rename",
       label: tr("重命名对话", "Rename conversation"),
       icon: <IconRename />,
+      group: tr("对话", "Conversation"),
       disabled: !canRenameDelete,
       onSelect: onRename,
+    },
+    {
+      id: "ai-menu-export",
+      label: tr("导出为 Markdown", "Export as Markdown"),
+      icon: <IconDownload />,
+      group: tr("对话", "Conversation"),
+      disabled: !canExport,
+      onSelect: onExport,
+    },
+    {
+      id: "ai-menu-archive",
+      label: archived ? tr("从归档中恢复", "Restore conversation") : tr("归档对话", "Archive conversation"),
+      icon: archived ? <IconRestore /> : <IconArchive />,
+      group: tr("对话", "Conversation"),
+      disabled: !canArchive,
+      onSelect: onToggleArchive,
     },
     {
       id: "ai-menu-delete",
       label: tr("删除对话", "Delete conversation"),
       icon: <IconTrash />,
+      group: tr("对话", "Conversation"),
       danger: true,
       disabled: !canRenameDelete,
       onSelect: onDelete,
@@ -61,6 +93,7 @@ export function ChatToolbar({
             id: "ai-menu-close-float",
             label: tr("收起浮窗", "Close floating window"),
             icon: <IconCollapse />,
+            group: tr("窗口", "Window"),
             onSelect: () => onCloseFloat?.(),
           } satisfies MenuItem,
         ]
@@ -69,9 +102,19 @@ export function ChatToolbar({
             id: "ai-menu-float",
             label: tr("在独立窗口打开", "Open in floating window"),
             icon: <IconFloat />,
+            group: tr("窗口", "Window"),
             onSelect: () => onOpenFloat?.(),
           } satisfies MenuItem,
         ]),
+    ...(!float
+      ? [{
+          id: "ai-menu-dock-side",
+          label: dockSide === "right" ? tr("移到左侧", "Move to left side") : tr("移到右侧", "Move to right side"),
+          icon: dockSide === "right" ? <IconDockLeft /> : <IconDockRight />,
+          group: tr("布局", "Layout"),
+          onSelect: () => onDockSideChange(dockSide === "right" ? "left" : "right"),
+        } satisfies MenuItem]
+      : []),
   ];
 
   return (

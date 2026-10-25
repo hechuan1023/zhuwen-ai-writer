@@ -45,6 +45,8 @@ export function AiPanel({
   language = "zh-CN",
   expanded,
   onToggleExpand,
+  dockSide = "right",
+  onDockSideChange,
   sceneDraftRequest,
   onSceneDraftRequestConsumed,
   onNavigateSource,
@@ -60,6 +62,8 @@ export function AiPanel({
   /** 主窗口内展开聊天区（与独立浮窗区分） */
   expanded?: boolean;
   onToggleExpand?: (next: boolean) => void;
+  dockSide?: "left" | "right";
+  onDockSideChange?: (side: "left" | "right") => void;
   sceneDraftRequest?: { nonce: string; chapterId: string; scene: AnyRow } | null;
   onSceneDraftRequestConsumed?: () => void;
   onNavigateSource?: (source: { kind: string; sourceId: string }) => Promise<boolean | void> | boolean | void;
@@ -210,16 +214,21 @@ export function AiPanel({
   const selectionText: string = session?.selectionText || "";
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
+  const [historyArchived, setHistoryArchived] = useState(false);
+  const [currentArchived, setCurrentArchived] = useState(false);
+  const [currentConversationTitle, setCurrentConversationTitle] = useState("");
+  const [archiveStatusReady, setArchiveStatusReady] = useState(false);
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const HISTORY_PAGE = 50;
   const historySeq = useRef(0);
   const loadConversations = useCallback(
-    (opts?: { offset?: number; search?: string; append?: boolean }) => {
+    (opts?: { offset?: number; search?: string; append?: boolean; archived?: boolean }) => {
       if (!novelId) return;
       const offset = opts?.offset || 0;
       const search = opts?.search ?? historyQuery;
+      const archived = opts?.archived ?? historyArchived;
       const seq = ++historySeq.current;
       setHistoryLoading(true);
       setHistoryError(null);
@@ -228,6 +237,7 @@ export function AiPanel({
         limit: HISTORY_PAGE,
         offset,
         search,
+        archived,
       }).then((r) => {
         if (seq !== historySeq.current) return;
         setHistoryLoading(false);
@@ -244,8 +254,26 @@ export function AiPanel({
         });
       });
     },
-    [novelId, historyQuery],
+    [novelId, historyQuery, historyArchived],
   );
+  useEffect(() => {
+    let live = true;
+    setArchiveStatusReady(false);
+    if (!conversation) {
+      setCurrentArchived(false);
+      setCurrentConversationTitle("");
+      setArchiveStatusReady(true);
+      return () => { live = false; };
+    }
+    api<{ archived: boolean; title: string }>("ai:conversation:status", conversation).then((result) => {
+      if (live && result.ok) {
+        setCurrentArchived(Boolean(result.data?.archived));
+        setCurrentConversationTitle(String(result.data?.title || ""));
+      }
+      if (live) setArchiveStatusReady(true);
+    });
+    return () => { live = false; };
+  }, [conversation, novelId]);
   useEffect(() => {
     if (!novelId) return;
     loadConversations();
@@ -326,15 +354,23 @@ export function AiPanel({
       const rows = Array.isArray(payload) ? payload : payload?.rows;
       const scope = Array.isArray(payload) ? null : payload?.novelId;
       if (scope && novelId && scope !== novelId) return;
+      if (conversation) {
+        api<{ archived: boolean; title: string }>("ai:conversation:status", conversation).then((result) => {
+          if (result.ok) {
+            setCurrentArchived(Boolean(result.data?.archived));
+            setCurrentConversationTitle(String(result.data?.title || ""));
+          }
+        });
+      }
       // 搜索中或多页浏览时：按当前条件刷新，不直接覆盖成未筛选列表
-      if (historyQuery.trim() || conversations.length > HISTORY_PAGE) {
-        loadConversations({ offset: 0, search: historyQuery });
+      if (historyQuery.trim() || conversations.length > HISTORY_PAGE || historyArchived) {
+        loadConversations({ offset: 0, search: historyQuery, archived: historyArchived });
         return;
       }
       if (Array.isArray(rows)) setConversations(rows);
     });
     return off;
-  }, [novelId, historyQuery, conversations.length, loadConversations]);
+  }, [novelId, historyQuery, historyArchived, conversations.length, conversation, loadConversations]);
   useEffect(() => {
     if (!session) return;
     if (autoSelected.current === novelId) return;
@@ -724,7 +760,10 @@ export function AiPanel({
       pendingContinue.current = false;
       updateDraft(plan.ask, true);
       notify(r.error || tr("发送失败，内容已放回输入框，可修改后重试", "Sending failed. Your text was restored to the composer for retrying"));
-    } else loadConversations();
+    } else {
+      if (conversation) setCurrentArchived(false);
+      loadConversations({ archived: historyArchived });
+    }
   }
   async function verifyAdoptionSource(
     sourceMessageId: string | null | undefined,
@@ -1272,7 +1311,36 @@ export function AiPanel({
   }
   const currentTitle =
     conversations.find((c) => c.id === conversation)?.title ||
+    currentConversationTitle ||
     tr("新对话", "New conversation");
+  async function exportCurrentConversation() {
+    const result = await api<{ file?: string }>("ai:conversation:export", conversation);
+    if (!result.ok) {
+      notify(result.error || tr("导出对话失败。", "Could not export this conversation."));
+      return;
+    }
+    if (result.data?.file) notify(tr("对话已导出为 Markdown。", "Conversation exported as Markdown."));
+  }
+  async function toggleConversationPinned(id: string, pinned: boolean) {
+    const result = await api("ai:conversation:pin", { id, pinned });
+    if (!result.ok) {
+      notify(result.error || tr("置顶状态更新失败。", "Could not update the pin state."));
+      return false;
+    }
+    loadConversations({ offset: 0, search: historyQuery });
+    return true;
+  }
+  async function toggleConversationArchived(id: string, archived: boolean) {
+    const result = await api<{ archived: boolean }>("ai:conversation:archive", { id, archived });
+    if (!result.ok) {
+      notify(result.error || tr("归档状态更新失败。", "Could not update archive status."));
+      return false;
+    }
+    if (id === conversation) setCurrentArchived(archived);
+    loadConversations({ offset: 0, search: historyQuery, archived: historyArchived });
+    notify(archived ? tr("对话已归档，可在「已归档」中恢复。", "Conversation archived. You can restore it from Archived.") : tr("对话已恢复。", "Conversation restored."));
+    return true;
+  }
   return (
     <div className={`zchat ${expanded ? "expanded" : ""}`} data-fd-id="ai-panel">
       <ChatToolbar
@@ -1282,6 +1350,10 @@ export function AiPanel({
         canExpand={!float}
         expanded={expanded}
         canRenameDelete={Boolean(conversation)}
+        canExport={Boolean(conversation && messages.length)}
+        canArchive={Boolean(conversation && !generating && archiveStatusReady)}
+        archived={currentArchived}
+        dockSide={dockSide}
         generatingLabel={
           generating
             ? tr(
@@ -1298,6 +1370,9 @@ export function AiPanel({
         historyOpen={historyOpen}
         onToggleExpand={() => onToggleExpand?.(!expanded)}
         onRename={renameConversation}
+        onExport={() => void exportCurrentConversation()}
+        onToggleArchive={() => void toggleConversationArchived(conversation, !currentArchived)}
+        onDockSideChange={(side) => onDockSideChange?.(side)}
         onDelete={deleteConversation}
         onOpenFloat={() => api("ai:float:open")}
         onCloseFloat={() => api("ai:float:close")}
@@ -1462,26 +1537,37 @@ export function AiPanel({
           loading={historyLoading}
           error={historyError}
           hasMore={historyHasMore}
+          archivedMode={historyArchived}
+          onArchivedModeChange={(archived) => {
+            setHistoryArchived(archived);
+            setConversations([]);
+            setHistoryHasMore(false);
+            loadConversations({ offset: 0, search: historyQuery, archived });
+          }}
           onQuery={(q) => {
             setHistoryQuery(q);
-            loadConversations({ search: q, offset: 0 });
+            loadConversations({ search: q, offset: 0, archived: historyArchived });
           }}
           onNew={() => {
             selectConversation("");
             setHistoryOpen(false);
           }}
           onSelect={(id) => {
+            setCurrentConversationTitle(String(conversations.find((row) => row.id === id)?.title || ""));
             selectConversation(id);
             setHistoryOpen(false);
           }}
+          onTogglePinned={toggleConversationPinned}
+          onToggleArchived={toggleConversationArchived}
           onLoadMore={() =>
             loadConversations({
               offset: conversations.length,
               search: historyQuery,
+              archived: historyArchived,
               append: true,
             })
           }
-          onRetry={() => loadConversations({ search: historyQuery, offset: 0 })}
+          onRetry={() => loadConversations({ search: historyQuery, offset: 0, archived: historyArchived })}
           onClose={() => setHistoryOpen(false)}
         />
       )}
@@ -1619,7 +1705,10 @@ export function AiPanel({
               id: conversation,
               title,
             });
-            if (r.ok) loadConversations();
+            if (r.ok) {
+              setCurrentConversationTitle(title);
+              loadConversations({ archived: historyArchived });
+            }
             else
               notify(
                 r.error || tr("会话重命名失败", "Could not rename conversation"),
