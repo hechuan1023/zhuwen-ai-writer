@@ -1447,6 +1447,23 @@ export function AiPanel({
     conversations.find((c) => c.id === conversation)?.title ||
     currentConversationTitle ||
     tr("新对话", "New conversation");
+  const sessionTabs = useMemo(() => {
+    const activeRow = conversations.find((row) => String(row.id) === conversation);
+    const current = {
+      id: conversation,
+      title: String(activeRow?.title || currentTitle),
+      generating: Boolean(activeRow?.generating || (conversation && generating)),
+    };
+    const recent = conversations
+      .filter((row) => String(row.id || "") !== conversation && !row.archived_at)
+      .slice(0, conversation ? 3 : 4)
+      .map((row) => ({
+        id: String(row.id),
+        title: String(row.title || tr("未命名对话", "Untitled conversation")),
+        generating: Boolean(row.generating),
+      }));
+    return [current, ...recent];
+  }, [conversations, conversation, currentTitle, generating, language]);
   async function exportCurrentConversation() {
     const result = await api<{ file?: string }>("ai:conversation:export", conversation);
     if (!result.ok) {
@@ -1516,6 +1533,29 @@ export function AiPanel({
         onOpenFloat={() => api("ai:float:open")}
         onCloseFloat={() => api("ai:float:close")}
       />
+      {sessionTabs.length > 1 && (
+        <nav className="zchat-session-tabs" aria-label={tr("最近对话", "Recent conversations")}>
+          {sessionTabs.map((tab) => (
+            <button
+              key={tab.id || "new-conversation"}
+              type="button"
+              aria-current={tab.id === conversation ? "page" : undefined}
+              aria-label={tab.generating
+                ? `${tab.title} · ${tr("生成中", "Generating")}`
+                : tab.title}
+              className={`zchat-session-tab ${tab.id === conversation ? "active" : ""}`}
+              title={tab.title}
+              onClick={() => {
+                setCurrentConversationTitle(tab.id ? tab.title : "");
+                if (tab.id !== conversation) selectConversation(tab.id);
+              }}
+            >
+              <span className={`zchat-session-tab-dot ${tab.generating ? "generating" : ""}`} aria-hidden="true" />
+              <span className="zchat-ellipsis">{tab.title}</span>
+            </button>
+          ))}
+        </nav>
+      )}
       {!connections.length && (
         <div className="zchat-notice" data-fd-id="ai-no-connection">
           <p>{tr("尚未配置 AI 连接", "No AI connection configured")}</p>
