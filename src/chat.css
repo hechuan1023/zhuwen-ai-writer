@@ -1202,6 +1202,16 @@
   color: var(--muted, #8a8577);
   font-variant-numeric: tabular-nums;
 }
+.zchat-context-trim {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--warning, #a67c3a);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--warning, #a67c3a) 9%, var(--panel, #f8f5ef));
+  color: var(--text, #35332e);
+  font-size: 11px;
+  line-height: 1.55;
+}
 .zchat-context-h4 {
   margin: 14px 0 6px;
   font-size: 12px;

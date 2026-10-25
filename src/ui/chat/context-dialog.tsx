@@ -35,6 +35,11 @@ export function ContextDialog({
   onClose: () => void;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
+  const trimmedMessageCount = Number(
+    previewMessages?.find((message) =>
+      message.role === "system" && String(message.content || "").startsWith("[Context management:"),
+    )?.content?.match(/^\[Context management: (\d+)/)?.[1] || 0,
+  );
   const refChars = useMemo(
     () => refs.reduce((n, x) => n + String(x.content || "").length, 0),
     [refs],
@@ -87,6 +92,14 @@ export function ContextDialog({
           )}
         </p>
         <p className="hint">{tr("下方分类用于定位内容来源；最终发送长度以上方实际消息预览为准。", "The categories below help locate content; use the actual message preview for the final payload length.")}</p>
+        {trimmedMessageCount > 0 && (
+          <p className="zchat-context-trim" role="status">
+            {tr(
+              `本次请求将省略最早的 ${trimmedMessageCount} 条历史消息；完整记录仍保存在本机。`,
+              `This request omits the ${trimmedMessageCount} earliest messages; your full history remains on this device.`,
+            )}
+          </p>
+        )}
         <div className="zchat-context-rows" data-fd-id="ai-context-breakdown">
           {rows.map((r) => (
             <div className="zchat-context-row" key={r.label}>

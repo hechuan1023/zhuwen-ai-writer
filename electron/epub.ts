@@ -20,6 +20,13 @@ type EpubOptions = {
     paragraphGapEm?: number;
     indentEm?: number;
   };
+  pdfLayout?: "standard" | "compact" | "no-indent" | "custom";
+  pdfCustomLayout?: {
+    lineHeight?: number;
+    marginPercent?: number;
+    paragraphGapEm?: number;
+    indentEm?: number;
+  };
 };
 
 function boundedNumber(value: unknown, fallback: number, min: number, max: number) {
@@ -36,7 +43,7 @@ const COVER_MIME_EXTENSIONS: Record<string, string> = {
 };
 
 type EmbeddedImage = { id: string; href: string; mime: string; data: Buffer };
-type EpubRenderState = { zip: JSZip; images: Map<string, EmbeddedImage>; imageBytes: number };
+type EpubRenderState = { zip?: JSZip; images: Map<string, EmbeddedImage>; imageBytes: number };
 
 function readCover(
   dataUrl: unknown,
@@ -67,6 +74,12 @@ function readCover(
 function renderImage(src: unknown, alt: unknown, state: EpubRenderState): string {
   const image = readCover(src);
   if (!image) throw new Error("正文图片数据无效，无法导出 EPUB");
+  if (!state.zip) {
+    if (state.imageBytes + image.data.length > 20 * 1024 * 1024)
+      throw new Error("正文图片总大小超过 20 MB，无法导出");
+    state.imageBytes += image.data.length;
+    return `<img src="data:${image.mime};base64,${image.data.toString("base64")}" alt="${xml(alt)}"/>`;
+  }
   const digest = createHash("sha256").update(image.data).digest("hex");
   let asset = state.images.get(digest);
   if (!asset) {
@@ -142,6 +155,78 @@ function xhtml(title: string, body: string, stylesheet = "../styles/book.css") {
 <head><meta charset="UTF-8"/><title>${xml(title)}</title><link rel="stylesheet" type="text/css" href="${stylesheet}"/></head>
 <body>${body}</body>
 </html>`;
+}
+
+/** Render a print-ready manuscript using the same rich-text and image validation as EPUB. */
+export function buildPrintHtml(
+  novel: { title?: string | null; author?: string | null; cover_path?: string | null },
+  chapters: EpubChapter[],
+  options: EpubOptions = {},
+): string {
+  if (!chapters.length) throw new Error("没有可导出的章节内容");
+  const title = String(novel.title || "未命名作品").trim() || "未命名作品";
+  const author = String(novel.author || "").trim();
+  const state: EpubRenderState = { images: new Map(), imageBytes: 0 };
+  const pdfLayouts = {
+    standard: { lineHeight: 1.85, marginPercent: 7, paragraphGapEm: 0.7, indentEm: 2 },
+    compact: { lineHeight: 1.65, marginPercent: 6, paragraphGapEm: 0.35, indentEm: 2 },
+    "no-indent": { lineHeight: 2, marginPercent: 8, paragraphGapEm: 0.9, indentEm: 0 },
+  } as const;
+  const pdfCustom = options.pdfCustomLayout || {};
+  const pdfLayout = options.pdfLayout === "custom"
+    ? {
+        lineHeight: boundedNumber(pdfCustom.lineHeight, 1.85, 1.4, 2.4),
+        marginPercent: boundedNumber(pdfCustom.marginPercent, 7, 3, 12),
+        paragraphGapEm: boundedNumber(pdfCustom.paragraphGapEm, 0.7, 0, 1.5),
+        indentEm: boundedNumber(pdfCustom.indentEm, 2, 0, 3),
+      }
+    : pdfLayouts[options.pdfLayout || "standard"] || pdfLayouts.standard;
+  const cover = readCover(novel.cover_path);
+  const coverPage = cover
+    ? `<section class="cover-page"><img src="data:${cover.mime};base64,${cover.data.toString("base64")}" alt="${xml(title)}"/></section>`
+    : "";
+  const titlePage = options.includeTitle !== false || (options.includeAuthor !== false && author)
+    ? `<section class="title-page">${options.includeTitle !== false ? `<h1>${xml(title)}</h1>` : ""}${options.includeAuthor !== false && author ? `<p>${xml(author)}</p>` : ""}</section>`
+    : "";
+  const toc = `<nav class="toc"><h1>目录</h1><ol>${chapters.map((chapter, index) =>
+    `<li><a href="#chapter-${index + 1}">${xml(chapter.title || `第${index + 1}章`)}</a></li>`,
+  ).join("")}</ol></nav>`;
+  const chapterHtml = chapters.map((chapter, index) => {
+    const chapterTitle = String(chapter.title || `第${index + 1}章`).trim();
+    const volume = String(chapter.volume_title || "").trim();
+    const previousVolume = index > 0 ? String(chapters[index - 1].volume_title || "").trim() : "";
+    const volumeTitle = options.includeVolume !== false && volume && volume !== previousVolume
+      ? `<p class="volume-title">${xml(volume)}</p>`
+      : "";
+    const titleHeading = options.includeChapter !== false ? `<h1>${xml(chapterTitle)}</h1>` : "";
+    const body = renderChapterBody(chapter, state) || "<p></p>";
+    return `<section class="chapter" id="chapter-${index + 1}">${volumeTitle}${titleHeading}${body}</section>`;
+  }).join("");
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>${xml(title)}</title><style>
+@page { size: A4; margin: 20mm ${pdfLayout.marginPercent}% 22mm; }
+* { box-sizing: border-box; }
+html { color: #222; font-family: "Noto Serif CJK SC", "Songti SC", "SimSun", "Microsoft YaHei", serif; font-size: 11pt; line-height: ${pdfLayout.lineHeight}; }
+body { margin: 0; }
+h1 { margin: 0 0 1.25em; font-size: 17pt; font-weight: 600; line-height: 1.5; text-align: center; page-break-after: avoid; }
+p { margin: 0 0 ${pdfLayout.paragraphGapEm}em; text-indent: ${pdfLayout.indentEm}em; orphans: 2; widows: 2; }
+img { display: block; max-width: 100%; max-height: 245mm; object-fit: contain; margin: 0 auto 1em; page-break-inside: avoid; }
+.cover-page { height: 255mm; display: flex; align-items: center; justify-content: center; page-break-after: always; }
+.cover-page img { width: 100%; height: 100%; object-fit: contain; }
+.title-page { min-height: 240mm; display: flex; flex-direction: column; align-items: center; justify-content: center; page-break-after: always; }
+.title-page h1 { font-size: 28pt; }
+.title-page p { text-indent: 0; color: #666; }
+.toc { page-break-after: always; }
+.toc ol { padding-left: 2em; }
+.toc li { margin: .25em 0; }
+.toc a { color: inherit; text-decoration: none; }
+.volume-title { margin: 0 0 1em; color: #666; text-align: center; text-indent: 0; font-size: 10pt; }
+.chapter { page-break-before: always; }
+.chapter:first-of-type { page-break-before: auto; }
+blockquote { margin: .8em 2em; color: #555; }
+ul, ol { padding-left: 2em; }
+li p { text-indent: 0; }
+@media screen { body { max-width: 760px; margin: 24px auto; padding: 28px; } }
+</style></head><body>${coverPage}${titlePage}${toc}${chapterHtml}</body></html>`;
 }
 
 /** Build a reflowable EPUB 3.0 publication from ordered manuscript chapters. */

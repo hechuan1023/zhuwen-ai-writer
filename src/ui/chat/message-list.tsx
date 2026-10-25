@@ -322,6 +322,7 @@ export function MessageList({
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [loadEarlierError, setLoadEarlierError] = useState("");
   const prependScroll = useRef<{ height: number; top: number } | null>(null);
+  const previousWindow = useRef({ conversationId, messages });
 
   async function loadEarlier() {
     if (loadingEarlier || !hasEarlier || !onLoadEarlier) return;
@@ -345,7 +346,11 @@ export function MessageList({
     if (!rows.length) prependScroll.current = null;
     setEarlierMessages((current) => {
       const ids = new Set([...current, ...messages].map((message) => String(message.id || "")).filter(Boolean));
-      return [...current, ...rows.filter((message) => !message.id || !ids.has(String(message.id)))];
+      const additions = rows.filter((message) => !message.id || !ids.has(String(message.id)));
+      const anchor = current.findIndex((message) => String(message.id || "") === String(beforeMessageId));
+      return anchor < 0
+        ? [...current, ...additions]
+        : [...current.slice(0, anchor), ...additions, ...current.slice(anchor)];
     });
     setHasEarlier(Boolean(result.hasEarlier && rows.length));
   }
@@ -359,7 +364,7 @@ export function MessageList({
   }, [earlierMessages]);
 
   // 切换会话：先记录位置，再在下一帧恢复到该会话的合理位置（底部）
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (lastConv.current === conversationId) return;
     lastConv.current = conversationId;
     loadSequence.current += 1;
@@ -372,9 +377,31 @@ export function MessageList({
     if (el) el.scrollTop = 0;
   }, [conversationId]);
 
+  // The main process may advance its bounded tail window as new turns arrive.
+  // Keep messages that fell off the front in the already-loaded history list.
+  useLayoutEffect(() => {
+    const previous = previousWindow.current;
+    if (previous.conversationId !== conversationId) {
+      previousWindow.current = { conversationId, messages };
+      return;
+    }
+    const currentIds = new Set(messages.map((message) => String(message.id || "")).filter(Boolean));
+    const dropped = previous.messages.filter((message) =>
+      message.id && !message.streaming && !currentIds.has(String(message.id)),
+    );
+    if (dropped.length) {
+      setEarlierMessages((current) => {
+        if (!current.length) return current;
+        const ids = new Set([...current, ...messages].map((message) => String(message.id || "")).filter(Boolean));
+        return [...current, ...dropped.filter((message) => !ids.has(String(message.id || "")))];
+      });
+    }
+    previousWindow.current = { conversationId, messages };
+  }, [conversationId, messages]);
+
   useEffect(() => {
-    if (hasEarlierMessages) setHasEarlier(true);
-  }, [hasEarlierMessages]);
+    if (hasEarlierMessages && !earlierMessages.length) setHasEarlier(true);
+  }, [hasEarlierMessages, earlierMessages.length]);
 
   const allMessages = useMemo(
     () => {

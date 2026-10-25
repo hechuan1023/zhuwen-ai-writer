@@ -27,6 +27,7 @@ function styleLabel(card: StyleCard, language: string) {
     "style-relationship-progression": ["Relationship progression", "Use goals, boundaries, choices, and concrete actions to move relationships."],
     "style-rule-instance-progression": ["Rule-based instances", "Use verifiable rules, active testing, staged payoffs, and a persistent arc."],
     "style-short-form-closure": ["Short-form closure & pacing", "Focus causal progression and a satisfying resolution within a bounded length."],
+    "style-authorial-genre-bending": ["Genre-bending & authorial voice", "Keep the genre promise while breaking formula through character choices and story-world causality."],
     "style-road-journey-healing": ["Road journey & gradual healing", "Connect episodic stops, evolving relationships, and slow, earned change through a journey."],
   };
   const [name, description] = labels[card.id] || [card.name, card.description];
@@ -38,6 +39,12 @@ function taskLabel(task: string, language: string) {
 }
 
 const TECHNIQUE_PRESETS = [
+  {
+    id: "genre-authorial-fantasy",
+    name: ["作者性幻想连载", "Authorial fantasy serial"],
+    description: ["类型破格 + 世界因果 + 连载回报", "Genre-bending + world causality + serial payoff"],
+    cardIds: ["style-authorial-genre-bending", "style-fantasy-social-fusion", "style-serial-hook-payoff"],
+  },
   {
     id: "genre-road-journey-healing",
     name: ["公路漫游疗愈", "Road journey & gradual healing"],

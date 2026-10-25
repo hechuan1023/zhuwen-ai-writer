@@ -750,6 +750,16 @@ export function AiPanel({
         `Context exceeds the 300k-character limit (about ${fmt(plannedChars)} chars). Remove references or older messages.`,
       ));
     }
+    const historyTrimNotice = (payloadPreview.data || []).find((message: AnyRow) =>
+      message.role === "system" && String(message.content || "").startsWith("[Context management:"),
+    );
+    const trimmedMessageCount = Number(String(historyTrimNotice?.content || "").match(/^\[Context management: (\d+)/)?.[1] || 0);
+    if (trimmedMessageCount > 0) {
+      notify(tr(
+        `本次请求为适配上下文上限，已省略最早的 ${trimmedMessageCount} 条历史消息；本地完整记录仍保留。`,
+        `The ${trimmedMessageCount} earliest messages were omitted from this request to fit the context limit. Your full local history is preserved.`,
+      ));
+    }
     if (!float && save && !(await save(true))) return;
     const id = crypto.randomUUID();
     const composerSave = await saveComposerState(draftRef.current, plan.contexts);

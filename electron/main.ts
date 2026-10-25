@@ -9,13 +9,14 @@ import {
 } from "electron";
 import path from "node:path";
 import fs from "node:fs";
+import { pathToFileURL } from "node:url";
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { extractDocxTextBuffer } from "./docx";
 import { decodeImportBuffer } from "./text-import";
 import { writeVerifiedJson } from "./atomic-json";
 import { Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } from "docx";
-import { buildEpub } from "./epub";
+import { buildEpub, buildPrintHtml } from "./epub";
 import {
   Db,
   builtinPrompts,
@@ -158,23 +159,34 @@ const aiSession: AiSession = {
   draftStyleIds: null,
   draftVersion: 0,
   messages: [],
+  messageWindow: { hasEarlier: false, beforeMessageId: null },
   generating: false,
   requestId: "",
   generatingConversationId: "",
 };
 const AI_SESSION_MESSAGE_WINDOW = 80;
+function trimAiSessionMessageWindow() {
+  const allMessages = aiSession.messages;
+  let start = Math.max(0, allMessages.length - AI_SESSION_MESSAGE_WINDOW);
+  let messages = allMessages.slice(start);
+  if (start > 0 && messages[0]?.role === "assistant" && allMessages[start - 1]?.role === "user") {
+    start -= 1;
+    messages = allMessages.slice(start);
+  }
+  const hasEarlier = Boolean(aiSession.messageWindow?.hasEarlier || start > 0);
+  aiSession.messages = messages;
+  aiSession.messageWindow = {
+    hasEarlier,
+    beforeMessageId: hasEarlier ? String(messages[0]?.id || "") || null : null,
+  };
+}
+function resetAiSessionMessageWindow() {
+  aiSession.messages = [];
+  aiSession.messageWindow = { hasEarlier: false, beforeMessageId: null };
+}
 function aiSessionSnapshot() {
-  const start = Math.max(0, aiSession.messages.length - AI_SESSION_MESSAGE_WINDOW);
-  let messages = aiSession.messages.slice(start);
-  if (start > 0 && messages[0]?.role === "assistant" && aiSession.messages[start - 1]?.role === "user")
-    messages = [aiSession.messages[start - 1], ...messages];
   return JSON.parse(JSON.stringify({
     ...aiSession,
-    messages,
-    messageWindow: {
-      hasEarlier: start > 0,
-      beforeMessageId: start > 0 ? String(messages[0]?.id || "") || null : null,
-    },
   }));
 }
 /** 会话草稿：按 novelId + convId 隔离 */
@@ -1294,6 +1306,35 @@ function conversationHistory(conversationId: string) {
       content: (prefix ? `${prefix}\n\n` : "") + row.content,
     };
   });
+}
+const AI_HISTORY_TRIM_NOTICE = "[Context management:";
+function fitAiHistoryToContextLimit(messages: any[], limit: number) {
+  const bounded = messages.map((message) => ({ ...message }));
+  let omittedMessages = 0;
+  const countChars = (items: any[]) => items.reduce(
+    (total, item) => total + Array.from(String(item?.content || "")).length,
+    0,
+  );
+  const notice = () => ({
+    role: "system",
+    content: `${AI_HISTORY_TRIM_NOTICE} ${omittedMessages} earlier conversation messages were omitted to stay within the ${limit.toLocaleString()}-character limit. Do not assume knowledge of omitted content; ask the user to restate critical details when needed.`,
+  });
+  while (countChars(bounded) + (omittedMessages ? countChars([notice()]) : 0) > limit) {
+    const userIndexes = bounded
+      .map((message, index) => message.role === "user" ? index : -1)
+      .filter((index) => index >= 0);
+    if (userIndexes.length < 2) break;
+    const start = userIndexes[0];
+    const end = userIndexes[1];
+    const removed = bounded.splice(start, end - start);
+    if (!removed.length) break;
+    omittedMessages += removed.length;
+  }
+  if (omittedMessages) {
+    const firstUser = bounded.findIndex((message) => message.role === "user");
+    bounded.splice(firstUser < 0 ? bounded.length : firstUser, 0, notice());
+  }
+  return { messages: bounded, omittedMessages };
 }
 /** 铸文写作助手人设：不暴露底层模型/供应商信息 */
 const ZHUWEN_WRITER_PERSONA = [
@@ -3303,7 +3344,7 @@ function registerIpc(userDir: string) {
       // 删除正在生成的会话：停止请求
       if (aiSession.requestId) requests.get(aiSession.requestId)?.abort();
       aiSession.conversationId = "";
-      aiSession.messages = [];
+      resetAiSessionMessageWindow();
       aiSession.generating = false;
       aiSession.requestId = "";
       broadcastSession();
@@ -3354,12 +3395,13 @@ function registerIpc(userDir: string) {
       role: "user",
       content: (prefix ? `${prefix}\n\n` : "") + String(p?.prompt || ""),
     });
-    return ok(history);
+    return ok(fitAiHistoryToContextLimit(history, ZHUWEN_MAX_CONTEXT_CHARS).messages);
   });
   ipcMain.handle("ai:send", async (_event, p) => {
     const requestId = p.requestId || randomUUID(),
       controller = new AbortController();
     let conv = String(p.conversationId || "");
+    let isNewConversation = false;
     let content = "";
     let connection: any = null;
     let projectInstructionSnapshot = "";
@@ -3369,6 +3411,7 @@ function registerIpc(userDir: string) {
     try {
       if (!conv) {
         conv = newId();
+        isNewConversation = true;
         const t = timestamp();
         db.prepare(
           "INSERT INTO ai_conversations(id,novel_id,chapter_id,title,created_at,updated_at) VALUES(?,?,?,?,?,?)",
@@ -3420,6 +3463,7 @@ function registerIpc(userDir: string) {
       );
       aiSession.novelId = p.novelId ?? aiSession.novelId;
       aiSession.connectionId = p.connectionId || aiSession.connectionId;
+      if (isNewConversation) resetAiSessionMessageWindow();
       aiSession.conversationId = conv;
       aiSession.requestId = requestId;
       aiSession.generating = true;
@@ -3456,6 +3500,7 @@ function registerIpc(userDir: string) {
           })),
         },
       ];
+      trimAiSessionMessageWindow();
       broadcastSession();
       broadcastConversations(String(p.novelId || aiSession.novelId || ""));
       const savedRefs = (p.contexts || []).map((x: any) => {
@@ -3493,6 +3538,7 @@ function registerIpc(userDir: string) {
       const history = withWriterPersona(conversationHistory(conv));
       addProjectInstructions(history, projectInstructionSnapshot);
       if (style.instruction) history.splice(1, 0, { role: "system", content: style.instruction });
+      const requestHistory = fitAiHistoryToContextLimit(history, ZHUWEN_MAX_CONTEXT_CHARS).messages;
       const useUiSmokeEcho =
         process.env.ZHUWEN_UI_SMOKE === "1" &&
         process.env.ZHUWEN_AI_ECHO === "1" &&
@@ -3522,7 +3568,7 @@ function registerIpc(userDir: string) {
           await chatRequest(
             connection,
             key,
-            history,
+            requestHistory,
             Boolean(connection.streaming),
             controller,
             (chunk) => {
@@ -3707,7 +3753,7 @@ function registerIpc(userDir: string) {
     if (p && "novelId" in p && p.novelId !== prevNovel) {
       saveConversationDraft(userDir);
       aiSession.conversationId = "";
-      aiSession.messages = [];
+      resetAiSessionMessageWindow();
       aiSession.contexts = [];
       aiSession.text = "";
       aiSession.draftStyleIds = null;
@@ -3726,13 +3772,37 @@ function registerIpc(userDir: string) {
     saveConversationDraft(userDir);
     if (!conversationId) {
       aiSession.conversationId = "";
-      aiSession.messages = [];
+      resetAiSessionMessageWindow();
     } else {
       aiSession.conversationId = conversationId;
-      const rows: any[] = all(
-        "SELECT * FROM ai_messages WHERE conversation_id=? ORDER BY created_at,rowid",
+      const descending: any[] = all(
+        "SELECT m.*,m.rowid AS _row_order FROM ai_messages m WHERE conversation_id=? ORDER BY created_at DESC,rowid DESC LIMIT ?",
         conversationId,
+        AI_SESSION_MESSAGE_WINDOW + 1,
       );
+      let hasEarlier = descending.length > AI_SESSION_MESSAGE_WINDOW;
+      let rows: any[] = descending.slice(0, AI_SESSION_MESSAGE_WINDOW).reverse();
+      if (rows[0]?.role === "assistant") {
+        const first = rows[0];
+        const previousUser: any = get(
+          "SELECT m.*,m.rowid AS _row_order FROM ai_messages m WHERE conversation_id=? AND role='user' AND (created_at<? OR (created_at=? AND rowid<?)) ORDER BY created_at DESC,rowid DESC LIMIT 1",
+          conversationId,
+          first.created_at,
+          first.created_at,
+          Number(first._row_order),
+        );
+        if (previousUser) {
+          rows.unshift(previousUser);
+        }
+      }
+      const firstLoadedMessage = rows[0];
+      hasEarlier = Boolean(firstLoadedMessage && get(
+        "SELECT 1 FROM ai_messages WHERE conversation_id=? AND (created_at<? OR (created_at=? AND rowid<?)) LIMIT 1",
+        conversationId,
+        firstLoadedMessage.created_at,
+        firstLoadedMessage.created_at,
+        Number(firstLoadedMessage._row_order),
+      ));
       const userIds = rows.filter((row) => row.role === "user").map((row) => row.id);
       const snapshots: any[] = userIds.length
         ? all(
@@ -3756,7 +3826,8 @@ function registerIpc(userDir: string) {
       }
       let lastSourceMessageId = "";
       let lastSourceRefs: any[] = [];
-      aiSession.messages = rows.map((row) => {
+      aiSession.messages = rows.map((rawRow) => {
+        const { _row_order, ...row } = rawRow;
         if (row.role === "user") {
           lastSourceMessageId = row.id;
           lastSourceRefs = refsByMessage.get(row.id) || [];
@@ -3772,6 +3843,10 @@ function registerIpc(userDir: string) {
           source_refs: row.role === "assistant" ? lastSourceRefs : [],
         };
       });
+      aiSession.messageWindow = {
+        hasEarlier,
+        beforeMessageId: hasEarlier ? String(aiSession.messages[0]?.id || "") || null : null,
+      };
     }
     loadConversationDraft(
       String(aiSession.novelId || ""),
@@ -3806,7 +3881,7 @@ function registerIpc(userDir: string) {
       cursor.row_order,
       limit + 1,
     );
-    const hasEarlier = descending.length > limit;
+    let hasEarlier = descending.length > limit;
     let rows: any[] = descending.slice(0, limit).reverse();
     if (rows[0]?.role === "assistant") {
       const first = rows[0];
@@ -3819,6 +3894,14 @@ function registerIpc(userDir: string) {
       );
       if (previousUser) rows.unshift(previousUser);
     }
+    const firstLoadedMessage = rows[0];
+    hasEarlier = Boolean(firstLoadedMessage && get(
+      "SELECT 1 FROM ai_messages WHERE conversation_id=? AND (created_at<? OR (created_at=? AND rowid<?)) LIMIT 1",
+      conversationId,
+      firstLoadedMessage.created_at,
+      firstLoadedMessage.created_at,
+      Number(firstLoadedMessage._row_order),
+    ));
     const userIds = [...new Set(rows.filter((row) => row.role === "user").map((row) => String(row.id)))];
     const snapshots: any[] = userIds.length
       ? all(
@@ -3998,7 +4081,7 @@ function registerIpc(userDir: string) {
   ipcMain.handle("export:novel", async (_, p) => {
     try {
       const requestedFormat = String(p?.format || "");
-      const ext = ["txt", "md", "docx", "epub"].includes(requestedFormat)
+      const ext = ["txt", "md", "docx", "epub", "pdf"].includes(requestedFormat)
         ? requestedFormat
         : "txt";
       const rows: any[] = all(
@@ -4006,7 +4089,7 @@ function registerIpc(userDir: string) {
         p.novelId,
         ...(p.chapterIds || []),
       );
-      if (ext === "epub" && !rows.length)
+      if (["epub", "pdf"].includes(ext) && !rows.length)
         throw new Error("没有可导出的章节内容");
       const novel: any = get("SELECT * FROM novels WHERE id=?", p.novelId);
       const safeTitle = String(novel?.title || p?.title || "小说")
@@ -4022,6 +4105,7 @@ function registerIpc(userDir: string) {
       if (ext === "docx") await writeDocx(f.filePath, novel, rows, p);
       else if (ext === "epub")
         await fs.promises.writeFile(f.filePath, await buildEpub(novel, rows, p));
+      else if (ext === "pdf") await writePdf(f.filePath, novel, rows, p);
       else
         await fs.promises.writeFile(
           f.filePath,
@@ -4246,6 +4330,15 @@ async function chatRequest(
   controller: AbortController,
   onChunk: (s: string) => void,
 ) {
+  const maxContextChars = Number(c.max_context_chars);
+  if (Number.isFinite(maxContextChars) && maxContextChars > 0) {
+    const payloadChars = messages.reduce(
+      (total, message) => total + Array.from(String(message?.content || "")).length,
+      0,
+    );
+    if (payloadChars > maxContextChars)
+      throw new Error(`上下文已超过 ${maxContextChars.toLocaleString()} 字上限（当前约 ${payloadChars.toLocaleString()} 字），请减少引用或历史消息。`);
+  }
   const timer = setTimeout(
     () => controller.abort(new Error("请求超时")),
     c.timeout_ms,
@@ -4781,6 +4874,36 @@ function restoreBackupAsCopy(b: any) {
     return novelId;
   })();
 }
+async function writePdf(file: string, novel: any, rows: any[], options: any) {
+  if (!rows.length) throw new Error("没有可导出的章节内容");
+  const tempDir = await fs.promises.mkdtemp(path.join(app.getPath("temp"), "zhuwen-pdf-"));
+  const htmlPath = path.join(tempDir, "manuscript.html");
+  let printWindow: BrowserWindow | null = null;
+  try {
+    await fs.promises.writeFile(htmlPath, buildPrintHtml(novel, rows, options), "utf8");
+    printWindow = new BrowserWindow({
+      show: false,
+      width: 900,
+      height: 1200,
+      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+    });
+    await printWindow.loadURL(pathToFileURL(htmlPath).href);
+    const buffer = await printWindow.webContents.printToPDF({
+      pageSize: "A4",
+      printBackground: true,
+      preferCSSPageSize: true,
+      displayHeaderFooter: true,
+      headerTemplate: "<div></div>",
+      footerTemplate: '<div style="width:100%;padding:0 18mm;color:#777;font:9px sans-serif;text-align:center"><span class="pageNumber"></span> / <span class="totalPages"></span></div>',
+      generateDocumentOutline: true,
+    });
+    await fs.promises.writeFile(file, buffer);
+  } finally {
+    if (printWindow && !printWindow.isDestroyed()) printWindow.destroy();
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 function renderText(n: any, rows: any[], p: any, md: boolean) {
   const out: string[] = [];
   if (p.includeTitle !== false) out.push(md ? `# ${n.title}` : n.title);

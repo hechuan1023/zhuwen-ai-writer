@@ -1184,11 +1184,22 @@ button.danger-text:not(:disabled):hover {
 }
 .io-export-actions {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
   gap: 8px;
+}
+.io-export-standard-formats,
+.io-export-reading-formats {
+  display: grid;
+  gap: 8px;
+}
+.io-export-standard-formats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.io-export-reading-formats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .io-export-actions button {
   min-height: 36px;
+  white-space: nowrap;
 }
 .epub-custom-layout {
   display: grid;
@@ -1481,6 +1492,10 @@ button.danger-text:not(:disabled):hover {
   gap: 8px;
 }
 @media (max-width: 560px) {
+  .io-export-standard-formats,
+  .io-export-reading-formats {
+    grid-template-columns: 1fr;
+  }
   .epub-custom-layout {
     grid-template-columns: 1fr;
   }

@@ -15,6 +15,12 @@ const DEFAULT_EPUB_CUSTOM_LAYOUT: EpubCustomLayout = {
   paragraphGapEm: 0.65,
   indentEm: 2,
 };
+const DEFAULT_PDF_CUSTOM_LAYOUT: EpubCustomLayout = {
+  lineHeight: 1.85,
+  marginPercent: 7,
+  paragraphGapEm: 0.7,
+  indentEm: 2,
+};
 
 const EPUB_READER_VIEWPORTS = {
   phone: { width: 390, height: 844 },
@@ -33,6 +39,19 @@ function normalizeEpubCustomLayout(value: any): EpubCustomLayout {
     lineHeight: bounded(value?.lineHeight, 1.8, 1.4, 2.4),
     marginPercent: bounded(value?.marginPercent, 5, 3, 12),
     paragraphGapEm: bounded(value?.paragraphGapEm, 0.65, 0, 1.5),
+    indentEm: bounded(value?.indentEm, 2, 0, 3),
+  };
+}
+
+function normalizePdfCustomLayout(value: any): EpubCustomLayout {
+  const bounded = (input: unknown, fallback: number, min: number, max: number) => {
+    const parsed = Number(input);
+    return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+  };
+  return {
+    lineHeight: bounded(value?.lineHeight, 1.85, 1.4, 2.4),
+    marginPercent: bounded(value?.marginPercent, 7, 3, 12),
+    paragraphGapEm: bounded(value?.paragraphGapEm, 0.7, 0, 1.5),
     indentEm: bounded(value?.indentEm, 2, 0, 3),
   };
 }
@@ -120,6 +139,8 @@ export function IoPanel({
     ),
     [epubLayout, setEpubLayout] = useState<"standard" | "compact" | "no-indent" | "custom">("standard"),
     [epubCustomLayout, setEpubCustomLayout] = useState<EpubCustomLayout>(DEFAULT_EPUB_CUSTOM_LAYOUT),
+    [pdfLayout, setPdfLayout] = useState<"standard" | "compact" | "no-indent" | "custom">("standard"),
+    [pdfCustomLayout, setPdfCustomLayout] = useState<EpubCustomLayout>(DEFAULT_PDF_CUSTOM_LAYOUT),
     [autoCfg, setAutoCfg] = useState<any>({
       enabled: false,
       directory: "",
@@ -169,6 +190,13 @@ export function IoPanel({
     });
     api<any>("preferences:get", "epubCustomLayout").then((r) => {
       if (r.ok && r.data) setEpubCustomLayout(normalizeEpubCustomLayout(r.data));
+    });
+    api<any>("preferences:get", "pdfLayout").then((r) => {
+      if (r.ok && ["standard", "compact", "no-indent", "custom"].includes(r.data))
+        setPdfLayout(r.data);
+    });
+    api<any>("preferences:get", "pdfCustomLayout").then((r) => {
+      if (r.ok && r.data) setPdfCustomLayout(normalizePdfCustomLayout(r.data));
     });
     api<any>("preferences:get", "autoBackup").then((r) => {
       if (r.ok && r.data) setAutoCfg((c: any) => ({ ...c, ...r.data }));
@@ -220,6 +248,20 @@ export function IoPanel({
     if (!result.ok)
       notify(result.error || tr("自定义 EPUB 排版保存失败", "Could not save custom EPUB layout"));
   }
+  async function changePdfLayout(next: "standard" | "compact" | "no-indent" | "custom") {
+    const previous = pdfLayout;
+    setPdfLayout(next);
+    const result = await api("preferences:set", { key: "pdfLayout", value: next });
+    if (!result.ok) {
+      setPdfLayout(previous);
+      notify(result.error || tr("PDF 排版偏好保存失败", "Could not save PDF layout preference"));
+    }
+  }
+  async function savePdfCustomLayout(next: EpubCustomLayout) {
+    const result = await api("preferences:set", { key: "pdfCustomLayout", value: next });
+    if (!result.ok)
+      notify(result.error || tr("自定义 PDF 排版保存失败", "Could not save custom PDF layout"));
+  }
   async function exp(format: string) {
     if (operationBusy) return;
     let chapterIds: string[] | undefined;
@@ -242,6 +284,8 @@ export function IoPanel({
       encoding: "utf8",
       epubLayout,
       epubCustomLayout,
+      pdfLayout,
+      pdfCustomLayout,
       chapterIds,
     });
     setOperationBusy("");
@@ -269,6 +313,9 @@ export function IoPanel({
         </p>
         <p className="hint">
           {tr("EPUB 包含目录与章节导航；有作品封面时会嵌入封面页，正文插图也会随章节导出。", "EPUB includes a table of contents and chapter navigation. The novel cover and supported inline illustrations are included when available.")}
+        </p>
+        <p className="hint">
+          {tr("PDF 使用 A4 页面，生成目录和页码；支持的正文图片会随稿件导出。", "PDF uses A4 pages with a table of contents and page numbers. Supported inline images are included.")}
         </p>
         <label>
           {tr("导出范围", "Export scope")}
@@ -353,28 +400,90 @@ export function IoPanel({
             </div>
           </div>
         )}
-        <div className="row io-export-actions" data-fd-id="manuscript-export-formats">
-          <button disabled={Boolean(operationBusy)} onClick={() => exp("txt")}>
-            {operationBusy === "export:txt" ? tr("正在导出…", "Exporting…") : tr("导出 TXT", "Export TXT")}
-          </button>
-          <button disabled={Boolean(operationBusy)} onClick={() => exp("md")}>
-            {operationBusy === "export:md" ? tr("正在导出…", "Exporting…") : tr("导出 Markdown", "Export Markdown")}
-          </button>
-          <button disabled={Boolean(operationBusy)} onClick={() => exp("docx")}>
-            {operationBusy === "export:docx" ? tr("正在导出…", "Exporting…") : tr("导出 DOCX", "Export DOCX")}
-          </button>
-          <button
-            disabled={Boolean(operationBusy) || !scopedChapters.length}
-            onClick={() => {
-              if (!scopedChapters.length) return notify(tr("当前范围没有可预览的章节", "No chapters are available in this export scope"));
-              setEpubPreviewChapterId(scopedChapters[0].id);
-              setEpubPreviewPage("cover");
-              setEpubTocPage(0);
-              setEpubPreviewOpen(true);
-            }}
-          >
-            {tr("预览并导出 EPUB", "Preview & export EPUB")}
-          </button>
+        <label>
+          {tr("PDF 排版", "PDF layout")}
+          <Select
+            language={language}
+            value={pdfLayout}
+            aria-label={tr("PDF 排版", "PDF layout")}
+            onValueChange={(value) => void changePdfLayout(value as typeof pdfLayout)}
+            options={[
+              { value: "standard", label: tr("标准稿件", "Standard manuscript"), hint: tr("适中行距与首行缩进", "Balanced spacing with first-line indents") },
+              { value: "compact", label: tr("紧凑稿件", "Compact manuscript"), hint: tr("节省页数，适合长篇阅读", "Fewer pages for long manuscripts") },
+              { value: "no-indent", label: tr("舒展无缩进", "Open, no indent"), hint: tr("较宽行距与段落间距", "More line and paragraph spacing") },
+              { value: "custom", label: tr("自定义版式", "Custom layout"), hint: tr("调整行距、页边距和段落格式", "Tune line spacing, margins, and paragraphs") },
+            ]}
+          />
+        </label>
+        {pdfLayout === "custom" && (
+          <div className="epub-custom-layout pdf-custom-layout" data-fd-id="pdf-custom-layout">
+            {([
+              ["lineHeight", tr("行距", "Line spacing"), 1.4, 2.4, 0.1, `${pdfCustomLayout.lineHeight.toFixed(1)}×`],
+              ["marginPercent", tr("左右页边距", "Side margins"), 3, 12, 1, `${pdfCustomLayout.marginPercent}%`],
+              ["paragraphGapEm", tr("段落间距", "Paragraph spacing"), 0, 1.5, 0.1, `${pdfCustomLayout.paragraphGapEm.toFixed(1)}em`],
+              ["indentEm", tr("首行缩进", "First-line indent"), 0, 3, 0.5, `${pdfCustomLayout.indentEm.toFixed(1)}em`],
+            ] as const).map(([key, label, min, max, step, value]) => (
+              <label className="epub-layout-control" key={key}>
+                <span>{label}<output>{value}</output></span>
+                <input
+                  type="range"
+                  min={min}
+                  max={max}
+                  step={step}
+                  value={pdfCustomLayout[key]}
+                  aria-label={label}
+                  onChange={(event) => setPdfCustomLayout((current) => normalizePdfCustomLayout({ ...current, [key]: Number(event.target.value) }))}
+                  onPointerUp={() => void savePdfCustomLayout(pdfCustomLayout)}
+                  onKeyUp={() => void savePdfCustomLayout(pdfCustomLayout)}
+                />
+              </label>
+            ))}
+            <div
+              className="epub-layout-preview pdf-layout-preview"
+              style={{
+                lineHeight: pdfCustomLayout.lineHeight,
+                paddingInline: `${pdfCustomLayout.marginPercent}%`,
+              }}
+            >
+              <strong>{tr("PDF 样段预览", "PDF sample preview")}</strong>
+              <p style={{ marginBottom: `${pdfCustomLayout.paragraphGapEm}em`, textIndent: `${pdfCustomLayout.indentEm}em` }}>
+                {tr("夜雨落在旧城的瓦檐上。她把信折好，收进袖中，决定天亮前离开。", "Rain tapped the old rooftops. She folded the letter, slipped it into her sleeve, and decided to leave before dawn.")}
+              </p>
+              <p style={{ marginBottom: 0, textIndent: `${pdfCustomLayout.indentEm}em` }}>
+                {tr("样段随参数变化；正式导出将采用相同排版设置。", "This sample follows the settings used by PDF export.")}
+              </p>
+            </div>
+          </div>
+        )}
+        <div className="io-export-actions" data-fd-id="manuscript-export-formats">
+          <div className="io-export-standard-formats">
+            <button disabled={Boolean(operationBusy)} onClick={() => exp("txt")}>
+              {operationBusy === "export:txt" ? tr("正在导出…", "Exporting…") : tr("导出 TXT", "Export TXT")}
+            </button>
+            <button disabled={Boolean(operationBusy)} onClick={() => exp("md")}>
+              {operationBusy === "export:md" ? tr("正在导出…", "Exporting…") : tr("导出 Markdown", "Export Markdown")}
+            </button>
+            <button disabled={Boolean(operationBusy)} onClick={() => exp("docx")}>
+              {operationBusy === "export:docx" ? tr("正在导出…", "Exporting…") : tr("导出 DOCX", "Export DOCX")}
+            </button>
+          </div>
+          <div className="io-export-reading-formats">
+            <button disabled={Boolean(operationBusy) || !scopedChapters.length} onClick={() => exp("pdf")}>
+              {operationBusy === "export:pdf" ? tr("正在生成…", "Generating…") : tr("导出 PDF", "Export PDF")}
+            </button>
+            <button
+              disabled={Boolean(operationBusy) || !scopedChapters.length}
+              onClick={() => {
+                if (!scopedChapters.length) return notify(tr("当前范围没有可预览的章节", "No chapters are available in this export scope"));
+                setEpubPreviewChapterId(scopedChapters[0].id);
+                setEpubPreviewPage("cover");
+                setEpubTocPage(0);
+                setEpubPreviewOpen(true);
+              }}
+            >
+              {tr("预览并导出 EPUB", "Preview & export EPUB")}
+            </button>
+          </div>
         </div>
       </section>
       <section>
