@@ -39,7 +39,7 @@
 .scene-planner-summary b { color: var(--ink); font-family: var(--font-num); font-size: 13px; }
 .scene-planner-summary small { margin-left: auto; font-size: 10px; }
 .scene-planner-view-switch { display: inline-flex; flex: none; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--panel); }
-.scene-planner-view-switch button { min-height: 27px; padding: 3px 10px; border: 0; border-radius: calc(var(--r-sm) - 2px); background: transparent; color: var(--muted); font-size: 10px; }
+.scene-planner-view-switch button { min-height: 32px; padding: 4px 11px; border: 0; border-radius: calc(var(--r-sm) - 2px); background: transparent; color: var(--muted); font-size: 11px; }
 .scene-planner-view-switch button.active { background: var(--paper); color: var(--accent); box-shadow: var(--shadow-sm); }
 .scene-planner-view-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .scene-archive-scroll { flex: 1; min-height: 0; overflow: auto; padding: 22px clamp(16px, 3vw, 38px) 32px; }
