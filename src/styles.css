@@ -1842,9 +1842,19 @@ button.danger-text:not(:disabled):hover {
 .book-search > .row input {
   flex: 1;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md, 10px);
   padding: 9px 11px;
-  background: #fffcf7;
+  background: var(--paper);
+  color: var(--ink);
+  transition: border-color var(--dur, 180ms) var(--ease, ease), box-shadow var(--dur, 180ms) var(--ease, ease);
+}
+.book-search > .row input::placeholder {
+  color: var(--muted);
+}
+.book-search > .row input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus);
 }
 .search-results {
   display: flex;
