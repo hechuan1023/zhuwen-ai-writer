@@ -26,6 +26,7 @@ function styleLabel(card: StyleCard, language: string) {
     "style-resource-management-loop": ["Resource & settlement loop", "Connect investment, work, visible gains, costs, and the next bottleneck."],
     "style-relationship-progression": ["Relationship progression", "Use goals, boundaries, choices, and concrete actions to move relationships."],
     "style-rule-instance-progression": ["Rule-based instances", "Use verifiable rules, active testing, staged payoffs, and a persistent arc."],
+    "style-short-form-closure": ["Short-form closure & pacing", "Focus causal progression and a satisfying resolution within a bounded length."],
   };
   const [name, description] = labels[card.id] || [card.name, card.description];
   return { name, description };
@@ -36,6 +37,12 @@ function taskLabel(task: string, language: string) {
 }
 
 const TECHNIQUE_PRESETS = [
+  {
+    id: "genre-short-form-closure",
+    name: ["中短篇现实题材", "Short-form grounded story"],
+    description: ["篇幅收束 + 现实肌理 + 人物关系", "Bounded arc + lived detail + character relationships"],
+    cardIds: ["style-short-form-closure", "style-lived-realism", "style-character-voice-tension"],
+  },
   {
     id: "genre-cultural-growth",
     name: ["国风成长连载", "Guofeng growth serial"],

@@ -1,5 +1,5 @@
 import { parseJson, parseTags } from "./shared";
-import { normalizeSceneCustomFields, normalizeSceneTargetWords, normalizeSceneWritingStatus } from "../scene-fields";
+import { normalizeSceneCustomFields, normalizeSceneManuscriptLink, normalizeSceneTargetWords, normalizeSceneWritingStatus } from "../scene-fields";
 
 /** DB content_json → 编辑模型 */
 export function libraryContentToEditor(row: {
@@ -28,6 +28,7 @@ export function libraryContentToEditor(row: {
   if (kind === "scene") {
     next.plotlinesText = Array.isArray(c.plotlines) ? c.plotlines.join("，") : String(c.plotlines || "");
     next.customFields = normalizeSceneCustomFields(c.customFields);
+    next.manuscriptLink = normalizeSceneManuscriptLink(c.manuscriptLink);
     next.targetWords = normalizeSceneTargetWords(c.targetWords) ?? "";
     next.writingStatus = normalizeSceneWritingStatus(c.writingStatus);
   }
@@ -65,6 +66,7 @@ export function editorToLibraryContent(kind: string, editing: any): any {
         .filter(Boolean))]
         .slice(0, 20),
       customFields: normalizeSceneCustomFields(editing.customFields),
+      manuscriptLink: normalizeSceneManuscriptLink(editing.manuscriptLink),
       targetWords: normalizeSceneTargetWords(editing.targetWords),
       writingStatus: normalizeSceneWritingStatus(editing.writingStatus),
       when: editing.when || "",

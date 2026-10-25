@@ -480,6 +480,7 @@ export function Workspace({
       async () => false,
     );
   const [today, setToday] = useState(0);
+  const [manuscriptSelection, setManuscriptSelection] = useState({ text: "", start: -1, end: -1 });
   const loadSeq = useRef(0);
   const load = useCallback(
     async (selectId?: string) => {
@@ -696,11 +697,27 @@ export function Workspace({
         }
       },
       onSelectionUpdate: ({ editor }) => {
+        const { from, to } = editor.state.selection;
         const selected = editor.state.doc.textBetween(
-          editor.state.selection.from,
-          editor.state.selection.to,
+          from,
+          to,
           "\n",
         );
+        if (!selected) {
+          setManuscriptSelection((previous) => previous.text || previous.start >= 0 ? { text: "", start: -1, end: -1 } : previous);
+          pushSelectionRef.current(selected);
+          centerLineRef.current();
+          return;
+        }
+        const wholeText = editor.getText({ blockSeparator: "\n" });
+        const start = selected ? editor.state.doc.textBetween(0, from, "\n").length : -1;
+        const positionMatches = start >= 0 && wholeText.slice(start, start + selected.length) === selected;
+        const nextSelection = {
+          text: Array.from(selected).slice(0, 40_001).join(""),
+          start: positionMatches ? start : -1,
+          end: positionMatches ? start + selected.length : -1,
+        };
+        setManuscriptSelection((previous) => previous.text === nextSelection.text && previous.start === nextSelection.start && previous.end === nextSelection.end ? previous : nextSelection);
         pushSelectionRef.current(selected);
         centerLineRef.current();
       },
@@ -725,6 +742,7 @@ export function Workspace({
   };
   useEffect(() => {
     if (!editor || !chapter) return;
+    setManuscriptSelection({ text: "", start: -1, end: -1 });
     let json = emptyDoc;
     try {
       json = JSON.parse(chapter.content_json);
@@ -764,7 +782,8 @@ export function Workspace({
       if (composing.current && !force) return false;
       const target = chapterRef.current,
         targetId = target.id,
-        version = editVersion.current;
+        version = editVersion.current,
+        plainText = editor.getText({ blockSeparator: "\n" });
       setSaveState("saving");
       const el = document.querySelector(".editor-scroll");
       const task = (async () => {
@@ -772,13 +791,14 @@ export function Workspace({
           id: targetId,
           baseRevision: target.revision,
           content: editor.getJSON(),
-          plainText: editor.getText({ blockSeparator: "\n" }),
+          plainText,
           cursorPos: editor.state.selection.anchor,
           scrollPos: el?.scrollTop || 0,
           countPunctuation: true,
         });
         if (r.ok) {
           target.revision = r.data.revision;
+          target.plain_text = plainText;
           target.word_count = r.data.wordCount;
           target.updated_at = r.data.updatedAt;
           const unchanged =
@@ -790,6 +810,7 @@ export function Workspace({
           setChapters((xs) =>
             xs.map((x) => (x.id === targetId ? { ...x, ...target } : x)),
           );
+          setChapter((current) => current?.id === targetId ? { ...target } : current);
           api<number>("writing:today", novel.id).then(
             (x) => x.ok && setToday(x.data),
           );
@@ -1752,6 +1773,8 @@ export function Workspace({
                   <LibraryPanel
                     novel={novel}
                     chapter={chapter}
+                    chapterSaved={saveState === "saved"}
+                    selectedText={manuscriptSelection}
                     chapters={chapters}
                     volumes={volumes}
                     onSelectChapter={(targetChapter) => void switchChapter(targetChapter)}

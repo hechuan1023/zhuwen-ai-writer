@@ -9,7 +9,7 @@ import {
   scanLibraryHealth,
 } from "./library-model";
 import { Select } from "./select";
-import { SCENE_WRITING_STATUSES, normalizeSceneWritingStatus } from "../scene-fields";
+import { normalizeSceneManuscriptLink, sceneExcerptFingerprint, sceneManuscriptExcerptWords, SCENE_WRITING_STATUSES, normalizeSceneWritingStatus, verifySceneManuscriptLink } from "../scene-fields";
 import { ScenePlanner } from "./scene-planner";
 
 function formatSceneRevision(row: AnyRow, language: UiLanguage) {
@@ -27,6 +27,7 @@ function formatSceneRevision(row: AnyRow, language: UiLanguage) {
     [tr("标签", "Tags"), parseTags(row.tags_json || "[]")],
     [tr("写作进度", "Writing status"), normalizeSceneWritingStatus(content.writingStatus)],
     [tr("自定义属性", "Custom properties"), Array.isArray(content.customFields) ? content.customFields.map((field: AnyRow) => `${field.key}：${field.value}`).join("\n") : ""],
+    [tr("关联正文", "Linked manuscript excerpt"), content.manuscriptLink ? `${content.manuscriptLink.chapterTitle || content.manuscriptLink.chapterId} · ${sceneManuscriptExcerptWords(content.manuscriptLink)} ${tr("字", "words")}` : ""],
   ].filter(([, value]) => String(value || "").trim());
   return `${tr("场景：", "Scene: ")}${row.title || tr("未命名场景", "Untitled scene")}\n\n${sections.map(([label, value]) => `${label}\n${value}`).join("\n\n")}`;
 }
@@ -125,6 +126,8 @@ function ProgressionsEditor({
 export function LibraryPanel({
   novel,
   chapter,
+  chapterSaved = true,
+  selectedText = { text: "", start: -1, end: -1 },
   chapters = [],
   volumes = [],
   onSelectChapter,
@@ -139,6 +142,8 @@ export function LibraryPanel({
 }: {
   novel: AnyRow;
   chapter: AnyRow | null;
+  chapterSaved?: boolean;
+  selectedText?: { text: string; start: number; end: number };
   chapters?: AnyRow[];
   volumes?: AnyRow[];
   onSelectChapter?: (chapter: AnyRow) => void;
@@ -205,6 +210,17 @@ export function LibraryPanel({
         tags_json: JSON.stringify(String(editing.tagsText ?? parseTags(editing.tags_json) ?? "").split(/[,，]/).map((tag) => tag.trim()).filter(Boolean)),
       }, language)
     : "";
+  const manuscriptLink = editing && kind === "scene"
+    ? normalizeSceneManuscriptLink(editing.manuscriptLink)
+    : null;
+  const manuscriptLinkState = manuscriptLink && chapter?.id === manuscriptLink.chapterId && !chapterSaved
+    ? "unsaved"
+    : manuscriptLink && chapter?.id === manuscriptLink.chapterId
+    ? (() => {
+        const state = verifySceneManuscriptLink(chapter.plain_text, manuscriptLink);
+        return state === "missing" && Number(chapter.revision || 0) <= manuscriptLink.chapterRevision ? "pending" : state;
+      })()
+    : manuscriptLink ? "other_chapter" : null;
   const sceneHistoryPreviewText = sceneHistoryPreview
     ? formatSceneRevision(sceneHistoryPreview, language)
     : "";
@@ -920,6 +936,49 @@ export function LibraryPanel({
                   })),
                 ]}
               />
+              <section className="scene-manuscript-link" data-fd-id="scene-manuscript-link">
+                <header>
+                  <b>{tr("正文片段", "Manuscript excerpt")}</b>
+                  <small>{tr("选中章节正文后，可把该片段关联到此细纲；只保存正文位置与校验指纹，不复制或改写正文。", "Select text in the chapter and link it here. Only its position and verification fingerprint are saved; the manuscript is not copied or changed.")}</small>
+                </header>
+                {manuscriptLink ? (
+                  <div className={`scene-manuscript-link-state state-${manuscriptLinkState}`}>
+                    <span>{manuscriptLinkState === "matched"
+                      ? tr(`已在《${manuscriptLink.chapterTitle || "当前章节"}》核对 · ${sceneManuscriptExcerptWords(manuscriptLink)} 字`, `Verified in ${manuscriptLink.chapterTitle || "chapter"} · ${sceneManuscriptExcerptWords(manuscriptLink)} words`)
+                      : manuscriptLinkState === "pending"
+                        ? tr("选区已关联；保存章节正文后即可核对实写进度。", "Selection linked; save the chapter to verify writing progress.")
+                        : manuscriptLinkState === "unsaved"
+                          ? tr("章节有未保存修改；保存后再核对实写进度。", "The chapter has unsaved changes; save it to verify writing progress.")
+                        : manuscriptLinkState === "missing"
+                          ? tr("正文片段位置已变化或内容已修改，请重新选择该片段关联。", "The excerpt moved or changed; select it again to relink.")
+                          : tr(`已关联《${manuscriptLink.chapterTitle || "其他章节"}》的片段；切换到该章可核对。`, `Linked to ${manuscriptLink.chapterTitle || "another chapter"}; open it to verify.`)}</span>
+                    <button type="button" className="icon" aria-label={tr("移除正文关联", "Remove manuscript link")} title={tr("移除关联", "Remove link")} onClick={() => updateEditing({ manuscriptLink: null })}>×</button>
+                  </div>
+                ) : <p className="scene-manuscript-link-empty">{tr("尚未关联正文片段。", "No manuscript excerpt linked.")}</p>}
+                <button
+                  type="button"
+                  className="secondary scene-manuscript-link-action"
+                  disabled={!chapter?.id || !selectedText.text.trim() || selectedText.start < 0 || selectedText.end - selectedText.start !== selectedText.text.length || Array.from(selectedText.text.trim()).length > 40_000}
+                  title={!selectedText.text.trim() ? tr("先在正文中选中一个片段", "Select a passage in the manuscript first") : selectedText.start < 0 || selectedText.end - selectedText.start !== selectedText.text.length ? tr("无法定位该选区，请重新选择正文片段", "Could not locate this selection; select the passage again") : Array.from(selectedText.text.trim()).length > 40_000 ? tr("片段过长，请选取不超过 40,000 字的范围", "Excerpt is too long; select up to 40,000 characters") : tr("将当前选区关联到当前章节", "Link the current selection to the open chapter")}
+                  onClick={() => {
+                    if (!chapter?.id) return;
+                    const excerpt = selectedText.text;
+                    if (!excerpt.trim() || selectedText.start < 0 || Array.from(excerpt).length > 40_000 || selectedText.end - selectedText.start !== excerpt.length) return;
+                    updateEditing({
+                      chapter_id: chapter.id,
+                      manuscriptLink: {
+                        start: selectedText.start,
+                        end: selectedText.end,
+                        characterCount: sceneManuscriptExcerptWords(excerpt),
+                        fingerprint: sceneExcerptFingerprint(excerpt),
+                        chapterId: chapter.id,
+                        chapterTitle: chapter.title || "",
+                        chapterRevision: chapter.revision || 0,
+                      },
+                    });
+                  }}
+                >{selectedText.text.trim() ? tr(`关联当前选区 · ${sceneManuscriptExcerptWords(selectedText.text)} 字`, `Link selection · ${sceneManuscriptExcerptWords(selectedText.text)} words`) : tr("关联正文选区", "Link manuscript selection")}</button>
+              </section>
               <input
                 placeholder={tr("剧情作用", "Plot role")}
                 value={editing.plotRole || ""}
@@ -1283,6 +1342,7 @@ export function LibraryPanel({
           chapters={chapters}
           volumes={volumes}
           currentChapter={chapter}
+          chapterSaved={chapterSaved}
           language={language}
           onClose={() => setPlannerOpen(false)}
           onOpenScene={(scene) => openEditor(scene)}

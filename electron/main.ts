@@ -138,6 +138,7 @@ type AiSession = {
   generating: boolean;
   requestId: string;
   generatingConversationId?: string;
+  messageWindow?: { hasEarlier: boolean; beforeMessageId: string | null };
   /** AI 草稿持久化状态：渲染层据此区分保存中/已保存/失败 */
   draftState?: {
     status: "idle" | "saving" | "saved" | "error";
@@ -161,8 +162,20 @@ const aiSession: AiSession = {
   requestId: "",
   generatingConversationId: "",
 };
+const AI_SESSION_MESSAGE_WINDOW = 80;
 function aiSessionSnapshot() {
-  return JSON.parse(JSON.stringify(aiSession));
+  const start = Math.max(0, aiSession.messages.length - AI_SESSION_MESSAGE_WINDOW);
+  let messages = aiSession.messages.slice(start);
+  if (start > 0 && messages[0]?.role === "assistant" && aiSession.messages[start - 1]?.role === "user")
+    messages = [aiSession.messages[start - 1], ...messages];
+  return JSON.parse(JSON.stringify({
+    ...aiSession,
+    messages,
+    messageWindow: {
+      hasEarlier: start > 0,
+      beforeMessageId: start > 0 ? String(messages[0]?.id || "") || null : null,
+    },
+  }));
 }
 /** 会话草稿：按 novelId + convId 隔离 */
 const conversationDrafts: Record<string, DraftRecord> = {};
@@ -3767,6 +3780,83 @@ function registerIpc(userDir: string) {
     broadcastSession();
     return ok(true);
   });
+  ipcMain.handle("ai:conversation:messages:before", (_, p) => {
+    const conversationId = String(p?.conversationId || "").trim();
+    const novelId = String(p?.novelId || "").trim();
+    const beforeMessageId = String(p?.beforeMessageId || "").trim();
+    const limit = Math.min(100, Math.max(1, Math.floor(Number(p?.limit) || AI_SESSION_MESSAGE_WINDOW)));
+    const conversation: any = get(
+      "SELECT id FROM ai_conversations WHERE id=? AND novel_id=? AND deleted_at IS NULL",
+      conversationId,
+      novelId,
+    );
+    if (!conversation || novelId !== String(aiSession.novelId || ""))
+      return fail("对话不存在或不属于当前作品");
+    const cursor: any = get(
+      "SELECT id,created_at,rowid AS row_order FROM ai_messages WHERE id=? AND conversation_id=?",
+      beforeMessageId,
+      conversationId,
+    );
+    if (!cursor) return fail("历史消息游标无效，请重新打开对话");
+    const descending: any[] = all(
+      "SELECT m.*,m.rowid AS _row_order FROM ai_messages m WHERE m.conversation_id=? AND (m.created_at<? OR (m.created_at=? AND m.rowid<?)) ORDER BY m.created_at DESC,m.rowid DESC LIMIT ?",
+      conversationId,
+      cursor.created_at,
+      cursor.created_at,
+      cursor.row_order,
+      limit + 1,
+    );
+    const hasEarlier = descending.length > limit;
+    let rows: any[] = descending.slice(0, limit).reverse();
+    if (rows[0]?.role === "assistant") {
+      const first = rows[0];
+      const previousUser: any = get(
+        "SELECT m.*,m.rowid AS _row_order FROM ai_messages m WHERE m.conversation_id=? AND m.role='user' AND (m.created_at<? OR (m.created_at=? AND m.rowid<?)) ORDER BY m.created_at DESC,m.rowid DESC LIMIT 1",
+        conversationId,
+        first.created_at,
+        first.created_at,
+        first._row_order,
+      );
+      if (previousUser) rows.unshift(previousUser);
+    }
+    const userIds = [...new Set(rows.filter((row) => row.role === "user").map((row) => String(row.id)))];
+    const snapshots: any[] = userIds.length
+      ? all(
+          `SELECT message_id,label,kind,source_id,source_data_version FROM message_context_snapshots WHERE message_id IN (${userIds.map(() => "?").join(",")}) ORDER BY created_at,rowid`,
+          ...userIds,
+        )
+      : [];
+    const refsByMessage = new Map<string, any[]>();
+    for (const snapshot of snapshots) {
+      refsByMessage.set(snapshot.message_id, [
+        ...(refsByMessage.get(snapshot.message_id) || []),
+        ((source) => ({
+          label: source.label,
+          kind: source.kind,
+          source_id: source.source_id,
+          source_status: source.source_status,
+          current_data_version: source.current_data_version,
+          current_title: source.current_title,
+        }))(sourceState(snapshot, novelId)),
+      ]);
+    }
+    let lastSourceMessageId = "";
+    let lastSourceRefs: any[] = [];
+    const hydrated = rows.map((row) => {
+      const { _row_order, ...message } = row;
+      if (row.role === "user") {
+        lastSourceMessageId = row.id;
+        lastSourceRefs = refsByMessage.get(row.id) || [];
+        return { ...message, source_message_id: row.id, source_refs: lastSourceRefs };
+      }
+      return {
+        ...message,
+        source_message_id: row.role === "assistant" ? lastSourceMessageId : "",
+        source_refs: row.role === "assistant" ? lastSourceRefs : [],
+      };
+    });
+    return ok({ rows: hydrated, hasEarlier });
+  });
   ipcMain.handle("ai:message:contexts", (_, messageId) => {
     const row: any = get(
       "SELECT m.id,c.novel_id FROM ai_messages m JOIN ai_conversations c ON c.id=m.conversation_id WHERE m.id=? AND m.role='user'",
@@ -4359,6 +4449,10 @@ function buildBackup(novelId: string) {
       novelId,
     ),
     library: all("SELECT * FROM library_items WHERE novel_id=?", novelId),
+    libraryItemRevisions: all(
+      "SELECT r.* FROM library_item_revisions r JOIN library_items i ON i.id=r.item_id WHERE i.novel_id=? AND i.kind='scene' ORDER BY r.created_at,r.id",
+      novelId,
+    ),
     conversations: all(
       "SELECT * FROM ai_conversations WHERE novel_id=?",
       novelId,
@@ -4421,6 +4515,7 @@ function verifyBackup(b: any) {
     "chapters",
     "revisions",
     "library",
+    "libraryItemRevisions",
     "conversations",
     "messages",
     "contexts",
@@ -4430,6 +4525,25 @@ function verifyBackup(b: any) {
       throw new Error(`备份字段 ${key} 格式不正确`);
     if (Array.isArray(value) && value.length > MAX_BACKUP_ITEMS)
       throw new Error(`备份字段 ${key} 的记录数量超过安全限制`);
+  }
+  if (Array.isArray(b.libraryItemRevisions)) {
+    const sceneIds = new Set(
+      b.library.filter((item: any) => item?.kind === "scene").map((item: any) => item.id),
+    );
+    for (const revision of b.libraryItemRevisions) {
+      if (
+        !revision ||
+        typeof revision.item_id !== "string" ||
+        !sceneIds.has(revision.item_id) ||
+        typeof revision.title !== "string" ||
+        typeof revision.content_json !== "string" ||
+        typeof revision.tags_json !== "string" ||
+        typeof revision.status !== "string" ||
+        typeof revision.source !== "string" ||
+        typeof revision.created_at !== "string"
+      )
+        throw new Error("备份中的场景细纲历史格式不正确");
+    }
   }
   const hash = b.checksum,
     copy = { ...b };
@@ -4519,6 +4633,22 @@ function restoreBackupAsCopy(b: any) {
         x.deleted_at || null,
         t,
         t,
+      );
+    }
+    for (const revision of b.libraryItemRevisions || []) {
+      const itemId = libraryMap.get(revision.item_id);
+      if (!itemId) continue;
+      db.prepare(
+        "INSERT INTO library_item_revisions(id,item_id,title,content_json,tags_json,status,source,created_at) VALUES(?,?,?,?,?,?,?,?)",
+      ).run(
+        newId(),
+        itemId,
+        revision.title,
+        revision.content_json,
+        revision.tags_json,
+        revision.status,
+        revision.source || "before_edit",
+        revision.created_at || t,
       );
     }
     for (const revision of b.revisions || []) {

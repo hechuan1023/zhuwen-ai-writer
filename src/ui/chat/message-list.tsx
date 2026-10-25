@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
 import { AnyRow } from "../shared";
 import { ChatMenu, type MenuItem } from "./menu";
@@ -281,6 +281,13 @@ export type MessageListProps = {
   emptyState?: ReactNode;
   /** 会话切换时用于恢复各自阅读位置 */
   conversationId: string;
+  hasEarlierMessages?: boolean;
+  onLoadEarlier?: (beforeMessageId: string) => Promise<{
+    ok: boolean;
+    rows?: AnyRow[];
+    hasEarlier?: boolean;
+    error?: string;
+  }>;
   onRetry?: () => void;
   retryLabel?: string;
   errorMessage?: string | null;
@@ -296,6 +303,8 @@ export function MessageList({
   actionsFor,
   emptyState,
   conversationId,
+  hasEarlierMessages = false,
+  onLoadEarlier,
   errorMessage,
   onRetry,
   retryLabel,
@@ -304,20 +313,86 @@ export function MessageList({
   onRegeneratePrompt,
 }: MessageListProps) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
+  const PAGE_SIZE = 80;
   const containerRef = useRef<HTMLDivElement>(null);
   const lastConv = useRef(conversationId);
+  const loadSequence = useRef(0);
+  const [earlierMessages, setEarlierMessages] = useState<AnyRow[]>([]);
+  const [hasEarlier, setHasEarlier] = useState(hasEarlierMessages);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [loadEarlierError, setLoadEarlierError] = useState("");
+  const prependScroll = useRef<{ height: number; top: number } | null>(null);
+
+  async function loadEarlier() {
+    if (loadingEarlier || !hasEarlier || !onLoadEarlier) return;
+    const beforeMessageId = [...earlierMessages, ...messages].find((message) => message.id)?.id;
+    if (!beforeMessageId) return;
+    const el = containerRef.current?.querySelector<HTMLElement>(".zchat-scroll");
+    if (!el) return;
+    const sequence = ++loadSequence.current;
+    prependScroll.current = { height: el.scrollHeight, top: el.scrollTop };
+    setLoadingEarlier(true);
+    setLoadEarlierError("");
+    const result = await onLoadEarlier(String(beforeMessageId));
+    if (sequence !== loadSequence.current) return;
+    setLoadingEarlier(false);
+    if (!result.ok) {
+      prependScroll.current = null;
+      setLoadEarlierError(result.error || tr("读取更早消息失败", "Could not load earlier messages"));
+      return;
+    }
+    const rows = result.rows || [];
+    if (!rows.length) prependScroll.current = null;
+    setEarlierMessages((current) => {
+      const ids = new Set([...current, ...messages].map((message) => String(message.id || "")).filter(Boolean));
+      return [...current, ...rows.filter((message) => !message.id || !ids.has(String(message.id)))];
+    });
+    setHasEarlier(Boolean(result.hasEarlier && rows.length));
+  }
+
+  useLayoutEffect(() => {
+    const pending = prependScroll.current;
+    if (!pending) return;
+    prependScroll.current = null;
+    const el = containerRef.current?.querySelector<HTMLElement>(".zchat-scroll");
+    if (el) el.scrollTop = pending.top + (el.scrollHeight - pending.height);
+  }, [earlierMessages]);
 
   // 切换会话：先记录位置，再在下一帧恢复到该会话的合理位置（底部）
   useEffect(() => {
     if (lastConv.current === conversationId) return;
     lastConv.current = conversationId;
+    loadSequence.current += 1;
+    prependScroll.current = null;
+    setEarlierMessages([]);
+    setHasEarlier(hasEarlierMessages);
+    setLoadingEarlier(false);
+    setLoadEarlierError("");
     const el = containerRef.current?.querySelector<HTMLElement>(".zchat-scroll");
     if (el) el.scrollTop = 0;
   }, [conversationId]);
 
+  useEffect(() => {
+    if (hasEarlierMessages) setHasEarlier(true);
+  }, [hasEarlierMessages]);
+
+  const allMessages = useMemo(
+    () => {
+      const seen = new Set<string>();
+      return [...earlierMessages, ...messages].filter((message) => {
+        if (!message.id) return true;
+        const id = String(message.id);
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+    },
+    [earlierMessages, messages],
+  );
+
   const memoMessages = useMemo(
     () =>
-      messages.map((m, i) => {
+      allMessages.map((m, i) => {
         const isUser = m.role === "user";
         const key = m.id || `local-${i}`;
         return (
@@ -408,7 +483,7 @@ export function MessageList({
                   content={String(m.content || "")}
                   language={language}
                   actions={actionsFor(m)}
-                  sourcePrompt={findSourcePrompt(messages, m)}
+                  sourcePrompt={findSourcePrompt(allMessages, m)}
                   onRetryPrompt={onReusePrompt}
                   onRegeneratePrompt={onRegeneratePrompt}
                 />
@@ -435,7 +510,7 @@ export function MessageList({
         );
       }),
     // 依赖消息数组与语言：内容变化（流式）时只重渲染列表，不重建结构
-    [messages, language, actionsFor, renderMarkdown, onOpenSource, onReusePrompt, onRegeneratePrompt],
+    [allMessages, language, actionsFor, renderMarkdown, onOpenSource, onReusePrompt, onRegeneratePrompt],
   );
 
   return (
@@ -449,8 +524,22 @@ export function MessageList({
         aria-label={tr("消息记录", "Message history")}
       >
         <StickToBottom.Content className="zchat-scroll-inner">
-          {messages.length ? (
-            memoMessages
+          {allMessages.length ? (
+            <>
+              {hasEarlier && (
+                <button
+                  type="button"
+                  className="zchat-load-earlier"
+                  data-fd-id="ai-load-earlier"
+                  onClick={loadEarlier}
+                  disabled={loadingEarlier}
+                >
+                  {tr(loadingEarlier ? "正在加载…" : `加载更早的 ${PAGE_SIZE} 条消息`, loadingEarlier ? "Loading…" : `Load ${PAGE_SIZE} earlier messages`)}
+                </button>
+              )}
+              {loadEarlierError && <div className="zchat-load-earlier-error" role="alert">{loadEarlierError}</div>}
+              {memoMessages}
+            </>
           ) : (
             <div className="zchat-empty">{emptyState}</div>
           )}

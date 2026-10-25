@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, parseJson, UiLanguage } from "./shared";
 import { Select, type SelectOption } from "./select";
-import { normalizeSceneTargetWords, normalizeSceneWritingStatus, SCENE_WRITING_STATUSES } from "../scene-fields";
+import { normalizeSceneManuscriptLink, normalizeSceneTargetWords, normalizeSceneWritingStatus, sceneManuscriptExcerptWords, SCENE_WRITING_STATUSES, verifySceneManuscriptLink } from "../scene-fields";
 import { buildPlotlineMatrix, filterScenesByPov, filterScenesByTrack, groupScenesForTimeline, sceneCustomFields, scenePlotlines, scenePovOptions, sceneTags, sceneTrackOptions } from "./scene-planner-model";
 
 type SceneRow = Record<string, any>;
@@ -11,6 +11,7 @@ export function ScenePlanner({
   chapters,
   volumes,
   currentChapter,
+  chapterSaved,
   language,
   onClose,
   onOpenScene,
@@ -27,6 +28,7 @@ export function ScenePlanner({
   chapters: SceneRow[];
   volumes: SceneRow[];
   currentChapter: SceneRow | null;
+  chapterSaved: boolean;
   language: UiLanguage;
   onClose: () => void;
   onOpenScene: (scene: SceneRow) => void;
@@ -54,6 +56,17 @@ export function ScenePlanner({
       setVolumeFilter("all");
   }, [volumeFilter, volumes]);
   const dataFor = (scene: SceneRow) => ({ ...parseJson(scene.content_json), ...scene });
+  const manuscriptMetricFor = (scene: SceneRow) => {
+    const link = normalizeSceneManuscriptLink(dataFor(scene).manuscriptLink);
+    if (!link) return null;
+    const words = sceneManuscriptExcerptWords(link);
+    if (String(scene.chapter_id || "") !== link.chapterId) return { state: "moved", words, chapterTitle: link.chapterTitle };
+    if (currentChapter?.id !== link.chapterId) return { state: "other_chapter", words, chapterTitle: link.chapterTitle };
+    if (!chapterSaved) return { state: "unsaved", words, chapterTitle: link.chapterTitle };
+    const match = verifySceneManuscriptLink(currentChapter.plain_text, link);
+    const state = match === "missing" && Number(currentChapter.revision || 0) <= link.chapterRevision ? "pending" : match;
+    return { state, words, chapterTitle: link.chapterTitle };
+  };
   const orderedScenes = useMemo(
     () => [...scenes].sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)),
     [scenes],
@@ -240,7 +253,7 @@ export function ScenePlanner({
               <span className="scene-lane-count">{unassigned.length}</span>
             </header>
             <div className="scene-lane-cards">
-                  {unassigned.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} writingStatusOptions={writingStatusOptions} targetShare={null} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft={false} writingStatusBusy={Boolean(sceneStatusBusyId)} onWritingStatusChange={(status) => void updateSceneStatus(scene, status)} language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, null, scene.id)} />)}
+                  {unassigned.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} writingStatusOptions={writingStatusOptions} targetShare={null} manuscriptMetric={manuscriptMetricFor(scene)} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft={false} writingStatusBusy={Boolean(sceneStatusBusyId)} onWritingStatusChange={(status) => void updateSceneStatus(scene, status)} language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, null, scene.id)} />)}
               {!unassigned.length && <div className="scene-lane-empty">{canReorderVisible ? tr("把未安排的场景拖到这里", "Drop unassigned scenes here") : tr("当前筛选下没有待安排场景", "No unassigned scenes match these filters")}</div>}
             </div>
             <button className="scene-lane-add" onClick={() => onCreateScene()}>{tr("＋ 添加场景", "+ Add scene")}</button>
@@ -278,7 +291,7 @@ export function ScenePlanner({
                   />
                 </div>
                 <div className="scene-lane-cards">
-                  {laneScenes.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} writingStatusOptions={writingStatusOptions} targetShare={targetShare(scene)} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft writingStatusBusy={Boolean(sceneStatusBusyId)} onWritingStatusChange={(status) => void updateSceneStatus(scene, status)} language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, chapter.id, scene.id)} />)}
+                  {laneScenes.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} writingStatusOptions={writingStatusOptions} targetShare={targetShare(scene)} manuscriptMetric={manuscriptMetricFor(scene)} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft writingStatusBusy={Boolean(sceneStatusBusyId)} onWritingStatusChange={(status) => void updateSceneStatus(scene, status)} language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, chapter.id, scene.id)} />)}
                   {!laneScenes.length && <div className="scene-lane-empty">{povFilter === "all" && trackFilter === "all" ? tr("拖入一个场景，开始拆解本章推进", "Drop a scene here to plan this chapter") : tr("当前筛选下暂无场景", "No scenes match these filters")}</div>}
                 </div>
                 <button className="scene-lane-add" onClick={() => onCreateScene(chapter)}>{tr("＋ 添加到本章", "+ Add to chapter")}</button>
@@ -353,6 +366,7 @@ function SceneCard({
   scene,
   writingStatusOptions,
   targetShare,
+  manuscriptMetric,
   dragging,
   canReorder,
   language,
@@ -368,6 +382,7 @@ function SceneCard({
   scene: SceneRow;
   writingStatusOptions: SelectOption[];
   targetShare: number | null;
+  manuscriptMetric: { state: string; words: number; chapterTitle: string } | null;
   dragging: boolean;
   canReorder: boolean;
   language: UiLanguage;
@@ -385,6 +400,7 @@ function SceneCard({
   const writingStatus = normalizeSceneWritingStatus(scene.writingStatus);
   const writingStatusTone = SCENE_WRITING_STATUSES.includes(writingStatus as typeof SCENE_WRITING_STATUSES[number]) ? writingStatus : "custom";
   const formattedTarget = targetWords == null ? "" : new Intl.NumberFormat(language === "en" ? "en-US" : "zh-CN").format(targetWords);
+  const formatSceneWords = (value: number) => new Intl.NumberFormat(language === "en" ? "en-US" : "zh-CN").format(value);
   return (
     <article
       className={`scene-card ${dragging ? "dragging" : ""}`}
@@ -417,6 +433,12 @@ function SceneCard({
         />
       </div>
       {targetWords != null && <div className="scene-card-target" title={tr("相对条表示该场景目标字数占本章所有已规划场景目标字数的比例，不是写作进度", "The bar shows this scene's share of all planned scene targets in this chapter, not writing progress")}><span>{tr("目标", "Target")} {formattedTarget} {tr("字", "words")}</span>{targetShare != null && <><small>{targetShare}%</small><i aria-hidden="true"><b style={{ width: `${targetShare}%` }} /></i></>}</div>}
+      {manuscriptMetric && <div className={`scene-card-manuscript state-${manuscriptMetric.state}`} title={tr("仅当关联位置与正文校验指纹一致时，才按该片段计算实写进度；正文编辑导致失配时需重新关联。", "Actual progress appears only while the linked position and manuscript fingerprint match; relink after edits make the anchor stale.")}>
+        {manuscriptMetric.state === "matched" ? <>
+          <span>{targetWords != null ? tr(`正文 ${formatSceneWords(manuscriptMetric.words)} / ${formattedTarget} 字`, `Text ${formatSceneWords(manuscriptMetric.words)} / ${formattedTarget} words`) : tr(`正文已核对 · ${formatSceneWords(manuscriptMetric.words)} 字`, `Text verified · ${formatSceneWords(manuscriptMetric.words)} words`)}</span>
+          {targetWords != null && <><small>{Math.min(100, Math.round(manuscriptMetric.words / targetWords * 100))}%</small><i aria-hidden="true"><b style={{ width: `${Math.min(100, Math.round(manuscriptMetric.words / targetWords * 100))}%` }} /></i></>}
+        </> : <span>{manuscriptMetric.state === "missing" ? tr("正文位置或内容已变化 · 请重新关联", "Excerpt moved or changed · relink") : manuscriptMetric.state === "pending" ? tr("选区已关联 · 保存正文后核对", "Selection linked · save the manuscript to verify") : manuscriptMetric.state === "unsaved" ? tr("正文有未保存修改 · 保存后核对进度", "Manuscript has unsaved edits · save to verify progress") : manuscriptMetric.state === "moved" ? tr(`场景已换章 · 正文关联仍在《${manuscriptMetric.chapterTitle || "原章节"}》`, `Scene moved · excerpt remains in ${manuscriptMetric.chapterTitle || "source chapter"}`) : tr(`正文片段关联 · ${formatSceneWords(manuscriptMetric.words)} 字 · 打开《${manuscriptMetric.chapterTitle || "来源章节"}》核对`, `Excerpt linked · ${formatSceneWords(manuscriptMetric.words)} words · open ${manuscriptMetric.chapterTitle || "source chapter"} to verify`)}</span>}
+      </div>}
       {scene.plotRole && <p className="scene-card-role">{scene.plotRole}</p>}
       {scene.body && <p className="scene-card-body">{scene.body}</p>}
       {(scene.coolPoint || scene.hook) && <div className="scene-card-payoff">{scene.coolPoint && <span><i>✦</i>{scene.coolPoint}</span>}{scene.hook && <span><i>↗</i>{scene.hook}</span>}</div>}

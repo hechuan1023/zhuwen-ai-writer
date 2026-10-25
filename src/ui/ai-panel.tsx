@@ -217,6 +217,7 @@ export function AiPanel({
     ? session.draftStyleIds
     : styleIds;
   const messages: AnyRow[] = session?.messages || [];
+  const messageWindow = session?.messageWindow || { hasEarlier: false, beforeMessageId: null };
   const generating: boolean = Boolean(session?.generating);
   const requestId: string = session?.requestId || "";
   const selectionText: string = session?.selectionText || "";
@@ -955,8 +956,7 @@ export function AiPanel({
     hasChapterText: Boolean(chapterText().trim()),
   });
   const sourceRevisionNow = Number(session?.chapter?.revision ?? chapter?.revision ?? -1);
-  const messagesForUi = useMemo(
-    () => messages.map((message: AnyRow) => {
+  const decorateMessage = useCallback((message: AnyRow) => {
       const messageChapterId = String(message.chapter_id || "");
       const messageRevision = message.source_revision == null ? null : Number(message.source_revision);
       return {
@@ -971,9 +971,24 @@ export function AiPanel({
           ["changed", "deleted", "missing"].includes(String(source.source_status || "")),
         ),
       };
-    }),
-    [messages, chapterId, sourceRevisionNow, bookChapters],
+    },
+    [chapterId, sourceRevisionNow, bookChapters],
   );
+  const messagesForUi = useMemo(() => messages.map(decorateMessage), [messages, decorateMessage]);
+  const loadEarlierMessages = useCallback(async (beforeMessageId: string) => {
+    const result = await api<{ rows: AnyRow[]; hasEarlier: boolean }>("ai:conversation:messages:before", {
+      novelId,
+      conversationId: conversation,
+      beforeMessageId,
+      limit: 80,
+    });
+    if (!result.ok) return { ok: false, error: result.error || tr("读取更早消息失败", "Could not load earlier messages") };
+    return {
+      ok: true,
+      rows: (result.data?.rows || []).map(decorateMessage),
+      hasEarlier: Boolean(result.data?.hasEarlier),
+    };
+  }, [novelId, conversation, decorateMessage, language]);
   const breakdown = contextBreakdown(
     contexts,
     messages.filter((m) => !m.streaming).length,
@@ -1451,6 +1466,8 @@ export function AiPanel({
       )}
       <MessageList
         messages={messagesForUi}
+        hasEarlierMessages={Boolean(messageWindow.hasEarlier)}
+        onLoadEarlier={loadEarlierMessages}
         language={language}
         conversationId={conversation}
         renderMarkdown={renderMarkdown}

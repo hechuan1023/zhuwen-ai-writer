@@ -219,6 +219,20 @@
   padding: 14px 12px 8px;
   min-width: 0;
 }
+.zchat-load-earlier {
+  align-self: center;
+  min-height: 30px;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 74%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+}
+.zchat-load-earlier:hover { border-color: color-mix(in srgb, var(--accent) 48%, var(--line)); background: var(--accent-soft); color: var(--accent); }
+.zchat-load-earlier:focus-visible { outline: none; box-shadow: var(--focus); }
+.zchat-load-earlier:disabled { cursor: progress; opacity: .68; }
+.zchat-load-earlier-error { align-self: center; color: var(--danger); font-size: 10px; }
 .zchat-msg {
   display: flex;
   gap: 8px;

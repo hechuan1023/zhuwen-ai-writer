@@ -102,6 +102,13 @@
 .scene-card-target i,.scene-timeline-target > i { grid-column: 1 / -1; display: block; height: 4px; overflow: hidden; border-radius: 99px; background: var(--panel-2); }
 .scene-card-target i b,.scene-timeline-target > i b { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .scene-card-target small { color: var(--accent); font-size: 9px; }
+.scene-card-manuscript { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 8px; margin-top: 7px; color: var(--success); font-size: 9px; font-variant-numeric: tabular-nums; }
+.scene-card-manuscript small { color: var(--success); font-size: 9px; }
+.scene-card-manuscript > span { grid-column: 1 / -1; line-height: 1.45; }
+.scene-card-manuscript:has(small) > span { grid-column: 1; }
+.scene-card-manuscript > i { grid-column: 1 / -1; display: block; height: 4px; overflow: hidden; border-radius: 99px; background: var(--panel-2); }
+.scene-card-manuscript > i b { display: block; height: 100%; border-radius: inherit; background: var(--success); }
+.scene-card-manuscript.state-missing,.scene-card-manuscript.state-pending,.scene-card-manuscript.state-unsaved,.scene-card-manuscript.state-moved,.scene-card-manuscript.state-other_chapter { color: var(--warning); }
 .scene-timeline-target { grid-template-columns: 1fr auto; max-width: 300px; margin-top: 8px; }
 .scene-card-role { margin: 4px 0 0; color: var(--accent); font-size: 10px; }
 .scene-card-body { display: -webkit-box; overflow: hidden; margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
