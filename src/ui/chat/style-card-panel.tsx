@@ -21,6 +21,7 @@ function styleLabel(card: StyleCard, language: string) {
     "style-cultural-modernization": ["Cultural translation", "Put traditional culture into character action and modern emotional stakes."],
     "style-urban-workplace-agency": ["Urban work & lived detail", "Ground urban stories in concrete work processes, interests, and life choices."],
     "style-fantasy-social-fusion": ["Fantasy & social systems", "Make institutions, resources, and social pressures part of a coherent fantasy world."],
+    "style-high-stakes-game-theory": ["High-stakes strategy & limited agency", "Build tense choices from scarce resources, harsh rules, uncertain allies, and consequences that carry forward."],
     "style-system-agency-gameplay": ["System strategy & agency", "Let characters understand, negotiate with, exploit, or resist rules—and bear the consequences."],
     "style-lived-realism": ["Everyday realism & lived texture", "Use small, observable details to ground characters without turning themes into slogans."],
     "style-resource-management-loop": ["Resource & settlement loop", "Connect investment, work, visible gains, costs, and the next bottleneck."],
@@ -86,6 +87,12 @@ const TECHNIQUE_PRESETS = [
     name: ["现实机制幻想连载", "Social-systems fantasy serial"],
     description: ["世界规则 + 成长代价 + 求生行动 + 阶段回报", "World rules + growth costs + survival actions + staged payoff"],
     cardIds: ["style-fantasy-social-fusion", "style-growth-progression", "style-close-survival", "style-serial-hook-payoff"],
+  },
+  {
+    id: "genre-high-stakes-survival",
+    name: ["高压博弈生存连载", "High-stakes survival serial"],
+    description: ["有限资源 + 规则博弈 + 信息差 + 连载回报", "Scarce resources + rule-bound strategy + information gaps + serial payoff"],
+    cardIds: ["style-high-stakes-game-theory", "style-close-survival", "style-suspense-information-control", "style-serial-hook-payoff"],
   },
   {
     id: "genre-system-agency",
