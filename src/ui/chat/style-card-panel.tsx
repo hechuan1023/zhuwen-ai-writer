@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnyRow, Modal, ConfirmDialog, api } from "../shared";
 import { ChatMenu, type MenuItem } from "./menu";
-import { IconChevronDown, IconCopy, IconDownload, IconSparkle, IconUpload } from "./icons";
+import { IconCheck, IconChevronDown, IconCopy, IconDoc, IconDownload, IconRename, IconSparkle, IconTrash, IconUpload } from "./icons";
 
 export type StyleCard = AnyRow & { tasks: string[]; version: number };
 type StyleComposition = { id: string; name: string; description: string; styleIds: string[]; updatedAt?: string };
@@ -256,8 +256,8 @@ export function StyleCardPanel({
                         setExportingComposition("");
                         if (!result.ok) setError(result.error || tr("导出组合失败", "Could not export set"));
                       }}><IconDownload /></button>
-                      <button type="button" title={tr("编辑组合", "Edit set")} aria-label={tr(`编辑组合 ${composition.name}`, `Edit set ${composition.name}`)} onClick={() => setCompositionEditor({ ...composition, styleIds: [...composition.styleIds] })}>✎</button>
-                      <button type="button" className="danger-text" title={tr("删除组合", "Delete set")} aria-label={tr(`删除组合 ${composition.name}`, `Delete set ${composition.name}`)} onClick={() => setDeleteComposition(composition)}>×</button>
+                      <button type="button" className="zchat-style-icon-action" title={tr("编辑组合", "Edit set")} aria-label={tr(`编辑组合 ${composition.name}`, `Edit set ${composition.name}`)} onClick={() => setCompositionEditor({ ...composition, styleIds: [...composition.styleIds] })}><IconRename /></button>
+                      <button type="button" className="zchat-style-icon-action danger-text" title={tr("删除组合", "Delete set")} aria-label={tr(`删除组合 ${composition.name}`, `Delete set ${composition.name}`)} onClick={() => setDeleteComposition(composition)}><IconTrash /></button>
                     </div>
                   </article>;
                 })}
@@ -281,17 +281,17 @@ export function StyleCardPanel({
             {cards.map((card) => (
               <div className={`zchat-style-row ${selectedIds.includes(card.id) ? "active" : ""}`} key={card.id}>
                 <button type="button" className="zchat-style-select" aria-pressed={selectedIds.includes(card.id)} onClick={() => onSelectionChange(selectedIds.includes(card.id) ? selectedIds.filter((id) => id !== card.id) : [...selectedIds, card.id])}>
-                  <span className="zchat-style-check" aria-hidden="true">{selectedIds.includes(card.id) ? "✓" : "○"}</span>
+                  <span className={`zchat-style-check ${selectedIds.includes(card.id) ? "selected" : ""}`} aria-hidden="true">{selectedIds.includes(card.id) ? <IconCheck size={13} /> : null}</span>
                   <span className="zchat-style-copy"><b>{styleLabel(card, language).name}</b><small>{styleLabel(card, language).description}</small><small className="zchat-style-tasks">{tr("适用：", "Tasks: ")}{card.tasks.map((x) => taskLabel(x, language)).join(language === "en" ? ", " : "、")}{!appliesToTask(card) ? ` · ${tr("当前任务不生效", "inactive for this task")}` : ` · ${tr("当前任务生效", "active for this task")}`}</small></span>
                 </button>
                 <div className="zchat-style-row-actions">
-                  <button type="button" title={tr("查看规则", "View rules")} onClick={() => setDetail(card)}>⌄</button>
-                  <button type="button" title={tr("复制为自定义", "Copy as custom")} onClick={() => setEdit({ ...card, id: "", name: `${styleLabel(card, language).name}${tr("（自定义）", " (custom)")}`, builtin: 0 })}><IconCopy /></button>
+                  <button type="button" className="zchat-style-icon-action" title={tr("查看规则", "View rules")} aria-label={tr(`查看「${styleLabel(card, language).name}」规则`, `View rules for ${styleLabel(card, language).name}`)} onClick={() => setDetail(card)}><IconDoc /></button>
+                  <button type="button" className="zchat-style-icon-action" title={tr("复制为自定义", "Copy as custom")} aria-label={tr(`复制「${styleLabel(card, language).name}」为自定义`, `Copy ${styleLabel(card, language).name} as custom`)} onClick={() => setEdit({ ...card, id: "", name: `${styleLabel(card, language).name}${tr("（自定义）", " (custom)")}`, builtin: 0 })}><IconCopy /></button>
                   {!card.builtin && <>
-                    <button type="button" title={tr("导出技法卡", "Export technique card")} aria-label={tr("导出技法卡", "Export technique card")} data-fd-id="ai-style-export" onClick={async () => { const result = await api<any>("ai:style:export", card.id); if (!result.ok) setError(result.error || tr("导出失败", "Export failed")); }}><IconDownload /></button>
-                    <button type="button" title={tr("编辑", "Edit")} onClick={() => setEdit(card)}>✎</button>
+                    <button type="button" className="zchat-style-icon-action" title={tr("导出技法卡", "Export technique card")} aria-label={tr(`导出「${styleLabel(card, language).name}」`, `Export ${styleLabel(card, language).name}`)} data-fd-id="ai-style-export" onClick={async () => { const result = await api<any>("ai:style:export", card.id); if (!result.ok) setError(result.error || tr("导出失败", "Export failed")); }}><IconDownload /></button>
+                    <button type="button" className="zchat-style-icon-action" title={tr("编辑", "Edit")} aria-label={tr(`编辑「${styleLabel(card, language).name}」`, `Edit ${styleLabel(card, language).name}`)} onClick={() => setEdit(card)}><IconRename /></button>
                   </>}
-                  {!card.builtin && <button type="button" className="danger-text" title={tr("删除", "Delete")} onClick={() => setDeleteCard(card)}>×</button>}
+                  {!card.builtin && <button type="button" className="zchat-style-icon-action danger-text" title={tr("删除", "Delete")} aria-label={tr(`删除「${styleLabel(card, language).name}」`, `Delete ${styleLabel(card, language).name}`)} onClick={() => setDeleteCard(card)}><IconTrash /></button>}
                 </div>
               </div>
             ))}

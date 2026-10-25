@@ -265,14 +265,28 @@ export function Settings({
             <h3>{tr("AI API 连接", "AI API connections")}</h3>
             <p className="hint">
               {tr(
-                "铸文 AI 服务已启用。服务地址、模型和密钥由软件统一管理，用户无需选择连接；下面仅可调整思考深度、输出上限和流式体验。",
-                "Zhuwen AI is enabled. The service, model, and credentials are managed by the app; only reasoning, output, and streaming settings can be adjusted.",
+                "铸文 AI 服务已启用。服务地址、模型和密钥由软件统一管理，无需选择连接；下方可调整思考深度、随机程度、输出上限、超时和流式回复。",
+                "Zhuwen AI is enabled. The service, model, and credentials are managed by the app; adjust reasoning depth, temperature, output limit, timeout, and streaming below.",
               )}
             </p>
-            <div className="connection-list">
-              {connections.map((c) => (
+            <div className="connection-list" data-fd-id="settings-connection-list">
+              {connections.map((c) => c.locked ? (
+                <div className="connection-managed" key={c.id} role="status" data-fd-id="settings-managed-ai">
+                  <span className="connection-managed-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" /></svg>
+                  </span>
+                  <span className="connection-managed-copy">
+                    <b>{tr("铸文 AI 服务", "Zhuwen AI service")}</b>
+                    <small>{tr("服务器托管 · 模型与密钥由服务端管理", "Server managed · model and credentials stay on the server")}</small>
+                  </span>
+                  <span className="connection-managed-badge">{tr("已托管", "Managed")}</span>
+                </div>
+              ) : (
                 <button
                   key={c.id}
+                  type="button"
+                  className={edit.id === c.id ? "connection-option active" : "connection-option"}
+                  aria-pressed={edit.id === c.id}
                   onClick={() =>
                     setEdit({
                       id: c.id,
@@ -285,15 +299,16 @@ export function Settings({
                       streaming: Boolean(c.streaming),
                       reasoningEffort: c.reasoning_effort || "",
                       apiKey: "",
-                      locked: Boolean(c.locked),
+                      locked: false,
                     })
                   }
                 >
-                  {c.name}
+                  <b>{c.name}</b>
                   <small>{c.model}</small>
                 </button>
               ))}
               {!connections.some((c) => c.locked) && <button
+                type="button"
                 onClick={() =>
                   setEdit({
                     name: "",
@@ -310,70 +325,55 @@ export function Settings({
                 {tr("＋ 新连接", "+ New connection")}
               </button>}
             </div>
-            {edit.locked && (
-              <div className="data-health">
-                <div>
-                  <b>{tr("服务器模型已锁定", "Managed model locked")}</b>
-                  <small>{tr("由铸文服务器统一调用，客户端不保存供应商密钥。", "Routed through Zhuwen servers; provider credentials never reach the client.")}</small>
+            {!edit.locked && (
+              <div className="settings-provider-fields" data-fd-id="settings-provider-fields">
+                <label>
+                  {tr("连接名称", "Connection name")}
+                  <input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
+                </label>
+                <label>
+                  {tr("API 基础地址", "API base URL")}
+                  <input value={edit.baseUrl} onChange={(e) => setEdit({ ...edit, baseUrl: e.target.value })} />
+                </label>
+                <label>
+                  API Key
+                  <input
+                    type="password"
+                    placeholder={edit.id ? tr("留空则保留现有密钥", "Leave blank to keep the saved key") : tr("不会写入数据库或日志", "Never stored in the database or logs")}
+                    value={edit.apiKey}
+                    onChange={(e) => setEdit({ ...edit, apiKey: e.target.value })}
+                  />
+                </label>
+                <label>
+                  {tr("模型 ID", "Model ID")}
+                  <Combobox
+                    value={edit.model}
+                    aria-label={tr("模型 ID", "Model ID")}
+                    placeholder="gpt-4.1-mini"
+                    onValueChange={(v) => setEdit({ ...edit, model: v })}
+                    suggestions={modelOptions.map((m) => ({ value: m, label: m }))}
+                  />
+                </label>
+                <div className="row">
+                  <button type="button" onClick={fetchModels} disabled={loadingModels}>
+                    {loadingModels ? tr("获取中…", "Loading…") : tr("从服务获取模型列表", "Load models from service")}
+                  </button>
+                  {modelOptions.length > 0 && (
+                    <small className="hint">
+                      {tr(`已获取 ${modelOptions.length} 个模型，输入框可下拉选择`, `${modelOptions.length} models loaded; choose one from the input list`)}
+                    </small>
+                  )}
                 </div>
-                <span className="status-dot online" aria-label="online" />
               </div>
             )}
-            <label>
-              {tr("连接名称", "Connection name")}
-              <input
-                disabled={Boolean(edit.locked)}
-                value={edit.name}
-                onChange={(e) => setEdit({ ...edit, name: e.target.value })}
-              />
-            </label>
-            <label>
-              {tr("API 基础地址", "API base URL")}
-              <input
-                disabled={Boolean(edit.locked)}
-                value={edit.baseUrl}
-                onChange={(e) => setEdit({ ...edit, baseUrl: e.target.value })}
-              />
-            </label>
-            <label>
-              API Key
-              <input
-                disabled={Boolean(edit.locked)}
-                type="password"
-                placeholder={
-                  edit.id
-                    ? tr("留空则保留现有密钥", "Leave blank to keep the saved key")
-                    : tr("不会写入数据库或日志", "Never stored in the database or logs")
-                }
-                value={edit.apiKey}
-                onChange={(e) => setEdit({ ...edit, apiKey: e.target.value })}
-              />
-            </label>
-            <label>
-              {tr("模型 ID", "Model ID")}
-              <Combobox
-                disabled={Boolean(edit.locked)}
-                value={edit.model}
-                aria-label={tr("模型 ID", "Model ID")}
-                placeholder="gpt-4.1-mini"
-                onValueChange={(v) => setEdit({ ...edit, model: v })}
-                suggestions={modelOptions.map((m) => ({ value: m, label: m }))}
-              />
-            </label>
-            <div className="row">
-              <button onClick={fetchModels} disabled={loadingModels || Boolean(edit.locked)}>
-                {loadingModels ? tr("获取中…", "Loading…") : tr("从服务获取模型列表", "Load models from service")}
-              </button>
-              {modelOptions.length > 0 && (
-                <small className="hint">
-                  {tr(
-                    `已获取 ${modelOptions.length} 个模型，输入框可下拉选择`,
-                    `${modelOptions.length} models loaded; choose one from the input list`,
-                  )}
-                </small>
-              )}
+            <div className="settings-generation-heading" data-fd-id="settings-generation-heading">
+              <div>
+                <b>{tr("生成参数", "Generation settings")}</b>
+                <small>{edit.locked ? tr("仅影响写作生成体验，不会更换服务器模型。", "Adjusts generation behavior without changing the server-managed model.") : tr("控制本连接的生成行为。", "Controls generation behavior for this connection.")}</small>
+              </div>
+              {edit.locked && <span>{tr("服务器托管", "Server managed")}</span>}
             </div>
-            <div className="grid2">
+            <div className="grid2 settings-generation-options" data-fd-id="settings-generation-options">
               <label>
                 {tr("随机程度", "Temperature")}
                 <input

@@ -1275,17 +1275,22 @@
 .zchat-style-toolbar > span { color: var(--muted); font-size: 11px; line-height: 1.45; }
 .zchat-style-toolbar button { flex: none; display: inline-flex; align-items: center; gap: 6px; }
 .zchat-style-list { display: grid; gap: 6px; margin: 12px 0; max-height: 48vh; overflow: auto; }
-.zchat-style-list > button, .zchat-style-row { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); text-align: left; }
+.zchat-style-list > button, .zchat-style-row { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); text-align: left; transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.zchat-style-list > button:hover:not(:disabled), .zchat-style-row:hover { border-color: color-mix(in srgb, var(--accent) 32%, var(--line)); }
 .zchat-style-list > button.active, .zchat-style-row.active { border-color: var(--accent); background: var(--accent-2); }
 .zchat-style-list > button { flex-direction: column; align-items: flex-start; }
 .zchat-style-list b, .zchat-style-list small { min-width: 0; }
 .zchat-style-list small { color: var(--muted); line-height: 1.45; }
-.zchat-style-row > .zchat-style-select { min-width: 0; flex: 1; display: flex; align-items: flex-start; gap: 8px; text-align: left; background: transparent; border: 0; }
+.zchat-style-row > .zchat-style-select { min-width: 0; flex: 1; display: flex; align-items: flex-start; gap: 8px; padding: 0; min-height: 0; border-radius: 7px; text-align: left; background: transparent; border: 0; }
 .zchat-style-copy { min-width: 0; flex: 1; display: grid; gap: 3px; }
-.zchat-style-check { flex: none; width: 18px; color: var(--accent); font-weight: 700; }
+.zchat-style-check { flex: none; width: 18px; height: 18px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 6px; color: transparent; background: var(--paper); transition: color var(--dur) var(--ease), background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+.zchat-style-check.selected { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); box-shadow: 0 1px 3px color-mix(in srgb, var(--accent) 24%, transparent); }
 .zchat-style-tasks { font-size: 10px; }
 .zchat-style-row-actions { display: flex; gap: 3px; flex: none; }
-.zchat-style-row-actions button { width: 28px; min-width: 28px; height: 28px; padding: 0; display: grid; place-items: center; }
+.zchat-style-row-actions button { width: 30px; min-width: 30px; height: 30px; min-height: 30px; padding: 0; display: grid; place-items: center; color: var(--muted); border-color: transparent; background: transparent; border-radius: 8px; }
+.zchat-style-row-actions button:hover:not(:disabled) { color: var(--ink); border-color: var(--line); background: color-mix(in srgb, var(--panel) 68%, var(--paper)); }
+.zchat-style-row-actions button.danger-text:hover:not(:disabled) { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 22%, var(--line)); background: var(--danger-soft); }
+.zchat-style-icon-action svg { width: 15px; height: 15px; }
 .zchat-style-rules { max-height: 48vh; overflow: auto; padding: 10px; border: 1px solid var(--line); border-radius: 8px; white-space: pre-wrap; font: inherit; line-height: 1.6; background: var(--panel); }
 .zchat-style-preview { margin: 12px 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--panel) 55%, var(--paper)); }
 .zchat-style-preview header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; font-size: 12px; }
@@ -1304,12 +1309,13 @@
 .zchat-style-presets-grid button:disabled { opacity: .5; cursor: not-allowed; }
 .zchat-style-presets-grid b { font-size: 11px; }
 .zchat-style-presets-grid small { color: var(--muted); font-size: 10px; line-height: 1.4; }
-.zchat-style-saved > header { align-items: center; }
+.zchat-style-saved > header { align-items: center; flex-wrap: wrap; }
 .zchat-style-saved > header button { min-height: 28px; padding: 4px 9px; font-size: 10px; }
 .zchat-style-composition-actions { display: flex; flex: none; gap: 5px; }
 .zchat-style-composition-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
 .zchat-style-saved-list { display: grid; gap: 6px; }
-.zchat-style-saved-list article { min-width: 0; display: flex; align-items: center; gap: 6px; padding: 6px 7px 6px 10px; border: 1px solid var(--line); border-radius: var(--r-md, 10px); background: var(--paper); }
+.zchat-style-saved-list article { min-width: 0; display: flex; align-items: center; gap: 6px; padding: 6px 7px 6px 10px; border: 1px solid var(--line); border-radius: var(--r-md, 10px); background: var(--paper); transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease); }
+.zchat-style-saved-list article:hover { border-color: color-mix(in srgb, var(--accent) 32%, var(--line)); }
 .zchat-style-saved-list article.active { border-color: var(--accent); background: var(--accent-soft); }
 .zchat-style-saved-apply { min-width: 0; flex: 1; display: grid; gap: 3px; padding: 2px; border: 0; background: transparent; text-align: left; }
 button.zchat-style-saved-apply:not(.primary):not(.danger):not(.danger-text):not(:disabled):hover { background: transparent; }
@@ -1326,4 +1332,24 @@ button.zchat-style-saved-apply:not(.primary):not(.danger):not(.danger-text):not(
 .zchat-style-task-options { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 0; padding: 8px 10px 10px; border: 1px solid var(--line); border-radius: 9px; }
 .zchat-style-task-options legend { padding: 0 5px; color: var(--muted); font-size: 11px; }
 .zchat-style-task-options label { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }
-@media (max-width: 600px) { .zchat-style-presets-grid { grid-template-columns: 1fr; } }
+.modal-content:has(.zchat-style-list) { container-name: zchat-style-manager; container-type: inline-size; }
+@container zchat-style-manager (max-width: 460px) {
+  .zchat-style-row { flex-wrap: wrap; }
+  .zchat-style-row > .zchat-style-select { flex: 1 0 100%; }
+  .zchat-style-row-actions { margin-left: 26px; margin-top: -4px; }
+  .zchat-style-saved-list article { flex-wrap: wrap; }
+  .zchat-style-saved-apply { flex: 1 0 100%; }
+  .zchat-style-saved-list .zchat-style-row-actions { margin: -4px 0 0 26px; }
+}
+@media (max-width: 760px) {
+  .zchat-style-presets-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .zchat-style-saved > header { align-items: flex-start; }
+  .zchat-style-composition-actions { flex-wrap: wrap; }
+  .zchat-style-toolbar { align-items: flex-start; }
+}
+@media (max-width: 480px) {
+  .zchat-style-presets-grid { grid-template-columns: 1fr; }
+  .zchat-style-row { align-items: flex-start; }
+  .zchat-style-row-actions { gap: 1px; }
+  .zchat-style-row-actions button { width: 28px; min-width: 28px; height: 28px; min-height: 28px; }
+}

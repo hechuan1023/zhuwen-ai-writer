@@ -561,6 +561,21 @@ function createMainWindow() {
         const aiOk = await js(
           `Boolean(document.querySelector('.zchat [data-fd-id="ai-composer"]')&&document.querySelector('[data-fd-id="ai-toolbar"]'))`,
         );
+        await js(`document.querySelector('[data-fd-id="ai-style-menu"]')?.click()`);
+        await wait(100);
+        await js(`([...document.querySelectorAll('.zchat-menu-item')].find(button=>/查看与管理风格卡|View and manage style cards/.test(button.textContent))?.click())`);
+        await wait(180);
+        await js(`document.querySelector('.zchat-style-select')?.click()`);
+        await wait(80);
+        const aiStyleManagerOk = await js(
+          `(()=>{const list=document.querySelector('.zchat-style-list');const actions=[...document.querySelectorAll('.zchat-style-row-actions button')];return Boolean(document.querySelector('[data-fd-id="ai-style-presets"]')&&list?.querySelector('.zchat-style-check.selected svg')&&actions.length>=2&&actions.every(button=>button.querySelector('svg')&&(button.getAttribute('aria-label')||button.title)))})()`,
+        );
+        await shot("03-ai-style-manager");
+        await js(`document.querySelector('.zchat-style-list')?.scrollIntoView({block:'center'})`);
+        await wait(100);
+        await shot("03a-ai-style-card-actions");
+        await js(`document.querySelector('.modal > header button')?.click()`);
+        await wait(120);
         await js(
           `document.querySelector('[data-fd-id="ai-add-ref"]')?.click()`,
         );
@@ -871,6 +886,7 @@ function createMainWindow() {
           typewriterOk,
           zoomOk,
           aiOk,
+          aiStyleManagerOk,
           pickerOk,
           historyDrawerOk,
           historyArchiveScopeOk,
@@ -937,7 +953,7 @@ function createMainWindow() {
         if (shotsFailed.length)
           console.log(`UI_SHOTS_FAIL ${shotsFailed.join(",")}`);
         console.log(
-          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n reference_picker typography_settings daily_goal database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared history_drawer history_archive_scope ai_dock_left ai_dock_restore summary_modal library_kinds relation_graph relation_expand library_detail library_trash ${status} ${out}`,
+          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n reference_picker typography_settings daily_goal database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared ai_style_manager_action_icons history_drawer history_archive_scope ai_dock_left ai_dock_restore summary_modal library_kinds relation_graph relation_expand library_detail library_trash ${status} ${out}`,
         );
         app.exit(0);
       } catch (e) {
