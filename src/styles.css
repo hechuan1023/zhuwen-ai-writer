@@ -2360,6 +2360,17 @@ button.danger-text:not(:disabled):hover {
 .focus-session-goals em { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width var(--dur-slow) var(--ease); }
 .focus-session-note { margin: 0; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line)); border-radius: var(--r-md); background: color-mix(in srgb, var(--accent-soft) 52%, var(--paper)); color: var(--muted); font-size: 11px; line-height: 1.55; }
 .focus-session-actions { gap: 8px; }
+.focus-session-history { min-width: 0; border-top: 1px solid var(--line); padding-top: 10px; }
+.focus-session-history > summary { color: var(--muted); font-size: 11px; cursor: pointer; }
+.focus-session-history ol { display: grid; gap: 6px; max-height: 220px; overflow: auto; margin: 9px 0 0; padding: 0 4px 0 0; list-style: none; }
+.focus-session-history li { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r-md); background: color-mix(in srgb, var(--panel) 42%, var(--paper)); }
+.focus-session-history-main { min-width: 0; display: grid; gap: 2px; }
+.focus-session-history-main b { overflow: hidden; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.focus-session-history-main small,.focus-session-history-result,.focus-session-history-words { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.focus-session-history-result { display: flex; align-items: flex-start; gap: 7px; }
+.focus-session-history-outcome { color: var(--muted); }
+.focus-session-history-outcome.completed { color: var(--success); }
+.focus-session-history-words { grid-column: 1 / -1; }
 @media (max-width: 560px) {
   .focus-session-overview { align-items: flex-start; gap: 12px; }
   .focus-session-ring { width: 96px; height: 96px; }

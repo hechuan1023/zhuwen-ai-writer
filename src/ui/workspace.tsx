@@ -19,7 +19,7 @@ import { NovelEdit } from "./novel-edit";
 import { DailyGoalMeter } from "./daily-goal";
 import { WritingStatsCenter } from "./stats-center";
 import { FocusSessionDialog } from "./focus-session-dialog";
-import { FocusSession, FocusSessionMode, focusElapsedMs, isFocusSessionComplete, normalizeFocusSession } from "./focus-session";
+import { FocusSession, FocusSessionMode, FocusSessionRecord, focusElapsedMs, focusWordsWritten, isFocusSessionComplete, normalizeFocusSession, normalizeFocusSessionHistory } from "./focus-session";
 import { Select } from "./select";
 import { applyReduceMotion } from "./motion";
 import { findRepeatedPhrases } from "./repetition-audit";
@@ -228,8 +228,10 @@ export function Workspace({
   const [aiSceneDraftRequest, setAiSceneDraftRequest] = useState<AiSceneDraftRequest | null>(null);
   const [sourceNavigationRequest, setSourceNavigationRequest] = useState<SourceNavigationRequest | null>(null);
   const [focusSession, setFocusSession] = useState<FocusSession | null>(null);
+  const [focusSessionHistory, setFocusSessionHistory] = useState<FocusSessionRecord[]>([]);
   const [focusSessionOpen, setFocusSessionOpen] = useState(false);
   const [focusNow, setFocusNow] = useState(() => Date.now());
+  const focusFinishGuard = useRef("");
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const languageRef = useRef(language);
   languageRef.current = language;
@@ -560,6 +562,7 @@ export function Workspace({
         if (typeof r.data.dailyGoal === "number")
           setDailyGoal(Math.floor(bounded(r.data.dailyGoal, 0, 1000000, 0)));
         setFocusSession(normalizeFocusSession(r.data.focusSession));
+        setFocusSessionHistory(normalizeFocusSessionHistory(r.data.focusSessionHistory));
       }
     });
   }, []);
@@ -1243,10 +1246,10 @@ export function Workspace({
   }
   const modKey = window.zhuwen.platform === "darwin" ? "⌘" : "Ctrl";
   const total = chapters.reduce((n, c) => n + (c.word_count || 0), 0);
-  function persistFocusSession(session: FocusSession | null) {
+  function persistFocusSession(session: FocusSession | null, history?: FocusSessionRecord[]) {
     api("preferences:set", {
       key: "writing",
-      value: { focusSession: session },
+      value: { focusSession: session, ...(history ? { focusSessionHistory: history } : {}) },
       merge: true,
     });
   }
@@ -1255,6 +1258,7 @@ export function Workspace({
     const session = normalizeFocusSession({
       version: 1,
       novelId: novel.id,
+      novelTitle: novel.title || "",
       mode,
       targetMinutes,
       targetWords,
@@ -1264,6 +1268,7 @@ export function Workspace({
       createdAt: now,
     });
     if (!session) return;
+    focusFinishGuard.current = "";
     setFocusSession(session);
     setFocusNow(now);
     persistFocusSession(session);
@@ -1282,9 +1287,29 @@ export function Workspace({
     persistFocusSession(session);
   }
   function finishFocusSession(completed = false) {
+    if (!focusSession) return;
+    const sessionKey = `${focusSession.novelId}:${focusSession.createdAt}`;
+    if (focusFinishGuard.current === sessionKey) return;
+    focusFinishGuard.current = sessionKey;
+    const completedAt = Date.now();
+    const wordsWritten = focusSession.novelId === novel.id ? focusWordsWritten(focusSession, total) : 0;
+    const record = normalizeFocusSessionHistory([{
+      id: `${sessionKey}:${completedAt}`,
+      novelId: focusSession.novelId,
+      novelTitle: focusSession.novelTitle || (focusSession.novelId === novel.id ? novel.title : ""),
+      mode: focusSession.mode,
+      targetMinutes: focusSession.targetMinutes,
+      targetWords: focusSession.targetWords,
+      elapsedMs: focusElapsedMs(focusSession, completedAt),
+      wordsWritten,
+      outcome: completed ? "completed" : "ended",
+      createdAt: focusSession.createdAt,
+      completedAt,
+    }, ...focusSessionHistory]);
+    setFocusSessionHistory(record);
+    persistFocusSession(null, record);
     setFocusSession(null);
     setFocusSessionOpen(false);
-    persistFocusSession(null);
     notify(completed ? tr("专注目标已达成", "Focus goal completed") : tr("专注会话已结束", "Focus session ended"));
   }
   useEffect(() => {
@@ -2406,6 +2431,7 @@ export function Workspace({
         <FocusSessionDialog
           language={language}
           session={focusSession}
+          history={focusSessionHistory}
           currentNovelId={novel.id}
           currentWords={total}
           now={focusNow}

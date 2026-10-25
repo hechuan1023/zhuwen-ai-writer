@@ -1,4 +1,4 @@
-import { FocusSession, FocusSessionMode, focusElapsedMs, focusSessionProgress, focusWordsWritten } from "./focus-session";
+import { FocusSession, FocusSessionMode, FocusSessionRecord, focusElapsedMs, focusSessionProgress, focusWordsWritten } from "./focus-session";
 import { fmt, Modal, UiLanguage } from "./shared";
 import { useEffect, useState } from "react";
 
@@ -10,6 +10,7 @@ const formatClock = (ms: number) => {
 export function FocusSessionDialog({
   language,
   session,
+  history,
   currentNovelId,
   currentWords,
   now,
@@ -21,6 +22,7 @@ export function FocusSessionDialog({
 }: {
   language: UiLanguage;
   session: FocusSession | null;
+  history: FocusSessionRecord[];
   currentNovelId: string;
   currentWords: number;
   now: number;
@@ -91,6 +93,18 @@ export function FocusSessionDialog({
           {(mode === "time" || mode === "combined") && <fieldset className="focus-session-field"><legend>{tr("专注时长", "Focus duration")}</legend><div className="focus-session-presets">{[15, 25, 45, 60].map((value) => <button type="button" key={value} className={minutes === value ? "active" : ""} onClick={() => setMinutes(value)}>{value} {tr("分钟", "min")}</button>)}</div></fieldset>}
           {(mode === "words" || mode === "combined") && <label className="focus-session-field">{tr("新增字数目标", "Words to add")}<div className="focus-session-word-input"><input type="number" min={1} max={100000} step={100} value={words} onChange={(event) => setWords(Math.min(100000, Math.max(1, Number(event.target.value) || 1)))} /><span>{tr("字", "words")}</span></div></label>}
           <button type="button" className="primary focus-session-start" onClick={() => onStart(mode, minutes, words)}>{tr("开始专注", "Start focus")}</button>
+          {history.length > 0 && <details className="focus-session-history" data-fd-id="focus-session-history">
+            <summary>{tr(`最近专注记录 · ${history.length}`, `Focus history · ${history.length}`)}</summary>
+            <ol>{history.map((record) => {
+              const date = new Intl.DateTimeFormat(language === "en" ? "en-US" : "zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(record.completedAt);
+              const modeLabel = record.mode === "time" ? tr("时间", "Time") : record.mode === "words" ? tr("字数", "Words") : tr("混合", "Combined");
+              return <li key={record.id}>
+                <div className="focus-session-history-main"><b>{record.novelTitle || tr("未命名作品", "Untitled novel")}</b><small>{date}</small></div>
+                <div className="focus-session-history-result"><span className={`focus-session-history-outcome ${record.outcome}`}>{record.outcome === "completed" ? tr("达标", "Completed") : tr("已结束", "Ended")}</span><span>{modeLabel} · {formatClock(record.elapsedMs)}</span></div>
+                {record.mode !== "time" && <small className="focus-session-history-words">{tr("新增", "Added")} {fmt(record.wordsWritten)} / {fmt(record.targetWords)} {tr("字", "words")}</small>}
+              </li>;
+            })}</ol>
+          </details>}
         </section>
       )}
     </Modal>
