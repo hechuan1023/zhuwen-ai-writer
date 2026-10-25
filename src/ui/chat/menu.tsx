@@ -63,7 +63,6 @@ export function ChatMenu({
   }, []);
 
   const enabled = items.map((it, i) => (it.disabled ? -1 : i)).filter((i) => i >= 0);
-  const selectionMenu = items.some((it) => typeof it.selected === "boolean");
 
   const close = useCallback(
     (restoreFocus = true) => {
@@ -235,11 +234,12 @@ export function ChatMenu({
                   itemRefs.current[i] = el;
                 }}
                 type="button"
-                role={selectionMenu ? "menuitemradio" : "menuitem"}
+                role={typeof it.selected === "boolean" ? "menuitemradio" : "menuitem"}
                 tabIndex={i === active ? 0 : -1}
                 className={`zchat-menu-item ${it.danger ? "danger" : ""} ${it.disabled ? "disabled" : ""} ${it.selected ? "selected" : ""}`}
-                aria-checked={selectionMenu ? Boolean(it.selected) : undefined}
+                aria-checked={typeof it.selected === "boolean" ? it.selected : undefined}
                 aria-disabled={it.disabled || undefined}
+                title={it.label}
                 disabled={it.disabled}
                 data-fd-id={it.id}
                 onMouseEnter={() => !it.disabled && setActive(i)}
@@ -252,7 +252,7 @@ export function ChatMenu({
                 {it.icon ? <span className="zchat-menu-icon">{it.icon}</span> : null}
                 <span className="zchat-menu-label">{it.label}</span>
                 {it.hint ? <small className="zchat-menu-hint">{it.hint}</small> : null}
-                {selectionMenu ? <span className="zchat-menu-check" aria-hidden="true">{it.selected ? "✓" : ""}</span> : null}
+                {typeof it.selected === "boolean" ? <span className="zchat-menu-check" aria-hidden="true">{it.selected ? "✓" : ""}</span> : null}
               </button>
             </Fragment>
           ))}

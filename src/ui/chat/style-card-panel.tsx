@@ -202,6 +202,7 @@ export function StyleCardPanel({
     id: `style-${card.id}`,
     label: styleLabel(card, language).name,
     hint: card.builtin ? tr("内置", "Built-in") : tr("自定义", "Custom"),
+    group: tr("技法卡", "Techniques"),
     icon: <IconSparkle />,
     selected: selectedIds.includes(card.id),
     onSelect: () => {
@@ -215,7 +216,7 @@ export function StyleCardPanel({
       <ChatMenu
         ariaLabel={tr("写作风格", "Writing style")}
         dataFdId="ai-style-menu"
-        menuClassName="open-up"
+        menuClassName="open-up style-technique-menu"
         trigger={
           <>
             <IconSparkle />
@@ -235,8 +236,8 @@ export function StyleCardPanel({
         triggerClassName="zchat-pill wide"
         items={[
           { id: "style-none", label: tr("不使用风格卡", "No style card"), selected: selectedIds.length === 0, onSelect: () => onSelectionChange([]) },
+          { id: "style-details", label: tr("查看与管理风格卡", "Manage writing styles"), hint: tr("管理", "Manage"), group: tr("风格设置", "Style settings"), icon: <IconDoc />, onSelect: () => setOpen(true) },
           ...items,
-          { id: "style-details", label: tr("查看与管理风格卡", "View and manage style cards"), onSelect: () => setOpen(true) },
         ]}
       />
       {open && (
