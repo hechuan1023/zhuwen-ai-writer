@@ -5,6 +5,7 @@ const allowedChannels = new Set([
   'ai:cancel',
   'ai:conversation:branch',
   'ai:conversation:messages:before',
+  'ai:conversation:read',
   'ai:conversation:messages:stats',
   'ai:conversation:export',
   'ai:conversation:pin',

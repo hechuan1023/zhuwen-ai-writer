@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnyRow } from "../shared";
-import { IconArchive, IconClose, IconPin, IconPlus, IconRetry, IconRestore, IconSearch } from "./icons";
+import { IconArchive, IconClose, IconDoc, IconPin, IconPlus, IconRetry, IconRestore, IconSearch } from "./icons";
 import { filterConversations, groupConversations, partitionPinnedConversations } from "./chat-model";
 
 /** 历史对话抽屉：浮层覆盖，不挤压消息区；Esc 关闭并归还焦点。 */
@@ -16,6 +16,7 @@ export function HistoryDrawer({
   onQuery,
   onNew,
   onSelect,
+  onCompare,
   onTogglePinned,
   onToggleArchived,
   archivedMode,
@@ -35,6 +36,7 @@ export function HistoryDrawer({
   onQuery: (q: string) => void;
   onNew: () => void;
   onSelect: (id: string) => void;
+  onCompare: (id: string) => void;
   onTogglePinned: (id: string, pinned: boolean) => Promise<boolean>;
   onToggleArchived: (id: string, archived: boolean) => Promise<boolean>;
   archivedMode: boolean;
@@ -107,6 +109,15 @@ export function HistoryDrawer({
             <b className="zchat-ellipsis" title={title}>{title || tr("未命名对话", "Untitled")}</b>
           </span>
           <small className="zchat-ellipsis">{String(conversation.last_snippet || "").trim() || tr("（暂无内容摘要）", "(no summary)")}</small>
+        </button>
+        <button
+          type="button"
+          className="zchat-conv-pin zchat-conv-compare"
+          aria-label={tr(`对照阅读：${title}`, `Compare conversation: ${title}`)}
+          title={tr("对照阅读", "Read side by side")}
+          onClick={() => onCompare(id)}
+        >
+          <IconDoc size={14} />
         </button>
         {!archivedMode && <button
           type="button"

@@ -229,6 +229,9 @@ export function AiPanel({
   const requestId: string = session?.requestId || "";
   const selectionText: string = session?.selectionText || "";
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [compareConversation, setCompareConversation] = useState<AnyRow | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const compareRequestSeq = useRef(0);
   const [historyQuery, setHistoryQuery] = useState("");
   const [historyArchived, setHistoryArchived] = useState(false);
   const [currentArchived, setCurrentArchived] = useState(false);
@@ -1686,6 +1689,23 @@ export function AiPanel({
             selectConversation(id);
             setHistoryOpen(false);
           }}
+          onCompare={(id) => {
+            const sequence = ++compareRequestSeq.current;
+            setHistoryOpen(false);
+            setCompareLoading(true);
+            void api<{ conversation: AnyRow; rows: AnyRow[] }>("ai:conversation:read", { novelId, conversationId: id })
+              .then((result) => {
+                if (sequence !== compareRequestSeq.current) return;
+                if (!result.ok || !result.data) {
+                  notify(result.error || tr("读取对照会话失败", "Could not load comparison conversation"));
+                  return;
+                }
+                setCompareConversation({ ...result.data.conversation, messages: result.data.rows });
+              })
+              .finally(() => {
+                if (sequence === compareRequestSeq.current) setCompareLoading(false);
+              });
+          }}
           onTogglePinned={toggleConversationPinned}
           onToggleArchived={toggleConversationArchived}
           onLoadMore={() =>
@@ -1699,6 +1719,36 @@ export function AiPanel({
           onRetry={() => loadConversations({ search: historyQuery, offset: 0, archived: historyArchived })}
           onClose={() => setHistoryOpen(false)}
         />
+      )}
+      {(compareLoading || compareConversation) && (
+        <Modal
+          title={tr("对话对照阅读", "Conversation comparison")}
+          close={() => {
+            compareRequestSeq.current += 1;
+            setCompareConversation(null);
+            setCompareLoading(false);
+          }}
+        >
+          {compareLoading ? (
+            <p className="zchat-compare-state" role="status">{tr("正在读取对话…", "Loading conversation…")}</p>
+          ) : compareConversation ? (
+            <div className="zchat-compare-view">
+              <header className="zchat-compare-head">
+                <strong title={String(compareConversation.title || "")}>{String(compareConversation.title || tr("未命名对话", "Untitled conversation"))}</strong>
+                <span>{tr("只读 · 最近 120 条消息", "Read only · latest 120 messages")}</span>
+              </header>
+              <div className="zchat-compare-transcript">
+                {(compareConversation.messages || []).map((message: AnyRow) => (
+                  <article className={`zchat-compare-message ${message.role === "user" ? "user" : "assistant"}`} key={String(message.id)}>
+                    <small>{message.role === "user" ? tr("你", "You") : tr("AI", "AI")}</small>
+                    <MdView text={String(message.content || "")} />
+                  </article>
+                ))}
+                {!compareConversation.messages?.length && <p className="zchat-compare-state">{tr("此对话还没有消息。", "This conversation has no messages yet.")}</p>}
+              </div>
+            </div>
+          ) : null}
+        </Modal>
       )}
       {contextOpen && (
         <ContextDialog

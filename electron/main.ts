@@ -4008,6 +4008,22 @@ function registerIpc(userDir: string) {
     });
     return ok({ rows: hydrated, hasEarlier });
   });
+  ipcMain.handle("ai:conversation:read", (_, p) => {
+    const conversationId = String(p?.conversationId || "").trim();
+    const novelId = String(p?.novelId || "").trim();
+    const conversation: any = get(
+      "SELECT id,title FROM ai_conversations WHERE id=? AND novel_id=? AND deleted_at IS NULL",
+      conversationId,
+      novelId,
+    );
+    if (!conversation || novelId !== String(aiSession.novelId || ""))
+      return fail("对话不存在或不属于当前作品");
+    const rows: any[] = all(
+      "SELECT id,role,content,created_at,incomplete FROM ai_messages WHERE conversation_id=? ORDER BY created_at DESC,rowid DESC LIMIT 120",
+      conversationId,
+    ).reverse();
+    return ok({ conversation, rows });
+  });
   ipcMain.handle("ai:conversation:messages:stats", (_, p) => {
     const conversationId = String(p?.conversationId || "").trim();
     const novelId = String(p?.novelId || "").trim();
