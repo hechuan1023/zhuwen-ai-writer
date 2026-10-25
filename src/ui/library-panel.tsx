@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { api, time, parseJson, parseTags, Empty, ConfirmDialog, Modal, kinds, AnyRow, UiLanguage } from "./shared";
+import { api, time, parseJson, parseTags, Empty, ConfirmDialog, DiffModal, Modal, kinds, AnyRow, UiLanguage } from "./shared";
 import {
   editorToLibraryContent,
   libraryContentToEditor,
@@ -9,7 +9,27 @@ import {
   scanLibraryHealth,
 } from "./library-model";
 import { Select } from "./select";
+import { SCENE_WRITING_STATUSES, normalizeSceneWritingStatus } from "../scene-fields";
 import { ScenePlanner } from "./scene-planner";
+
+function formatSceneRevision(row: AnyRow, language: UiLanguage) {
+  const tr = (zh: string, en: string) => language === "en" ? en : zh;
+  const content = parseJson(row.content_json || "{}");
+  const sections = [
+    [tr("时间 / 地点", "When / where"), content.when],
+    [tr("视角人物", "Point of view"), content.pov],
+    [tr("剧情作用", "Plot role"), content.plotRole],
+    [tr("场景细纲", "Scene outline"), content.body],
+    [tr("爽点 / 回报", "Payoff"), content.coolPoint],
+    [tr("钩子", "Hook"), content.hook],
+    [tr("出场人物", "Cast"), content.cast],
+    [tr("剧情线", "Plotlines"), Array.isArray(content.plotlines) ? content.plotlines.join("、") : content.plotlines],
+    [tr("标签", "Tags"), parseTags(row.tags_json || "[]")],
+    [tr("写作进度", "Writing status"), normalizeSceneWritingStatus(content.writingStatus)],
+    [tr("自定义属性", "Custom properties"), Array.isArray(content.customFields) ? content.customFields.map((field: AnyRow) => `${field.key}：${field.value}`).join("\n") : ""],
+  ].filter(([, value]) => String(value || "").trim());
+  return `${tr("场景：", "Scene: ")}${row.title || tr("未命名场景", "Untitled scene")}\n\n${sections.map(([label, value]) => `${label}\n${value}`).join("\n\n")}`;
+}
 
 export type LibraryLeaveControls = {
   isDirty: () => boolean;
@@ -160,6 +180,12 @@ export function LibraryPanel({
     [leavePrompt, setLeavePrompt] = useState<
       null | { resolve: (ok: boolean) => void }
     >(null);
+  const [sceneHistoryOpen, setSceneHistoryOpen] = useState(false);
+  const [sceneHistoryRows, setSceneHistoryRows] = useState<AnyRow[]>([]);
+  const [sceneHistoryPreview, setSceneHistoryPreview] = useState<AnyRow | null>(null);
+  const [sceneHistoryBusy, setSceneHistoryBusy] = useState(false);
+  const [sceneHistoryCompareOpen, setSceneHistoryCompareOpen] = useState(false);
+  const [sceneRestoreOpen, setSceneRestoreOpen] = useState(false);
   const draftVersion = useRef(0);
   const listSeq = useRef(0);
   const presenceDetailSeq = useRef(0);
@@ -172,6 +198,16 @@ export function LibraryPanel({
   const dirty =
     Boolean(editing) &&
     normalizeDraft(editing) !== normalizeDraft(baseline);
+  const sceneHistoryCurrentText = editing && kind === "scene"
+    ? formatSceneRevision({
+        ...editing,
+        content_json: JSON.stringify(editorToLibraryContent("scene", editing)),
+        tags_json: JSON.stringify(String(editing.tagsText ?? parseTags(editing.tags_json) ?? "").split(/[,，]/).map((tag) => tag.trim()).filter(Boolean)),
+      }, language)
+    : "";
+  const sceneHistoryPreviewText = sceneHistoryPreview
+    ? formatSceneRevision(sceneHistoryPreview, language)
+    : "";
 
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -352,6 +388,90 @@ export function LibraryPanel({
   useEffect(() => {
     load();
   }, [load]);
+  async function saveSceneWritingStatus(scene: AnyRow, writingStatus: string) {
+    let tags: string[] = [];
+    try {
+      const parsed = JSON.parse(String(scene.tags_json || "[]"));
+      if (Array.isArray(parsed)) tags = parsed.map((tag) => String(tag));
+    } catch {}
+    const result = await api("library:save", {
+      id: scene.id,
+      novelId: novel.id,
+      kind: "scene",
+      title: scene.title,
+      content: {
+        ...parseJson(scene.content_json),
+        writingStatus: normalizeSceneWritingStatus(writingStatus),
+      },
+      tags,
+      status: scene.status || "idea",
+      chapterId: scene.chapter_id || null,
+    });
+    if (!result.ok) {
+      notify(result.error || tr("场景进度保存失败", "Could not save scene progress"));
+      return false;
+    }
+    load();
+    return true;
+  }
+  async function openSceneHistory() {
+    if (!editing?.id || kind !== "scene" || dirty || saveBusy) return;
+    const result = await api<AnyRow[]>("library:revisions:list", { novelId: novel.id, itemId: editing.id });
+    if (!result.ok) {
+      notify(result.error || tr("读取细纲历史失败", "Could not load scene history"));
+      return;
+    }
+    setSceneHistoryRows(result.data || []);
+    setSceneHistoryPreview(null);
+    setSceneHistoryOpen(true);
+  }
+  async function createSceneHistorySnapshot() {
+    if (!editing?.id) return;
+    setSceneHistoryBusy(true);
+    const result = await api("library:revisions:create", { novelId: novel.id, itemId: editing.id });
+    setSceneHistoryBusy(false);
+    if (!result.ok) {
+      notify(result.error || tr("创建细纲快照失败", "Could not create a scene snapshot"));
+      return;
+    }
+    const list = await api<AnyRow[]>("library:revisions:list", { novelId: novel.id, itemId: editing.id });
+    if (list.ok) setSceneHistoryRows(list.data || []);
+    notify(tr("细纲快照已创建", "Scene snapshot created"));
+  }
+  async function previewSceneHistory(row: AnyRow) {
+    if (!editing?.id) return;
+    const result = await api<AnyRow>("library:revisions:preview", { novelId: novel.id, itemId: editing.id, revisionId: row.id });
+    if (!result.ok) {
+      notify(result.error || tr("读取细纲版本失败", "Could not load scene revision"));
+      return;
+    }
+    setSceneHistoryPreview(result.data);
+  }
+  async function restoreSceneHistory() {
+    const revision = sceneHistoryPreview;
+    if (!editing?.id || !revision) return;
+    setSceneHistoryBusy(true);
+    const result = await api("library:revisions:restore", { novelId: novel.id, itemId: editing.id, revisionId: revision.id });
+    setSceneHistoryBusy(false);
+    setSceneRestoreOpen(false);
+    if (!result.ok) {
+      notify(result.error || tr("恢复细纲版本失败", "Could not restore scene revision"));
+      return;
+    }
+    const restored = libraryContentToEditor({
+      ...revision,
+      id: editing.id,
+      kind: "scene",
+      chapter_id: editing.chapter_id || null,
+    });
+    setEditing(restored);
+    setBaseline(restored);
+    draftVersion.current += 1;
+    setSceneHistoryOpen(false);
+    setSceneHistoryPreview(null);
+    load();
+    notify(tr("细纲版本已恢复；恢复前内容已另存为快照", "Scene revision restored; the previous outline was saved as a snapshot"));
+  }
   // 全量资料仅在切换作品时拉取，搜索不触发
   useEffect(() => {
     let live = true;
@@ -705,6 +825,41 @@ export function LibraryPanel({
                 value={editing.plotlinesText || ""}
                 onChange={(e) => updateEditing({ plotlinesText: e.target.value })}
               />
+              <label className="scene-writing-status-field">
+                <span>{tr("场景写作进度", "Scene writing status")}</span>
+                <Select
+                  searchable
+                  size="compact"
+                  value={String(editing.writingStatus || "planned")}
+                  missingLabel={normalizeSceneWritingStatus(editing.writingStatus)}
+                  aria-label={tr("场景写作进度", "Scene writing status")}
+                  onValueChange={(writingStatus) => updateEditing({ writingStatus })}
+                  options={[
+                    { value: "planned", label: tr("计划中", "Planned") },
+                    { value: "drafting", label: tr("写作中", "Drafting") },
+                    { value: "revision", label: tr("待修订", "Needs revision") },
+                    { value: "final", label: tr("已定稿", "Final") },
+                    ...[...new Set(allItems.filter((item) => item.kind === "scene")
+                      .map((item) => normalizeSceneWritingStatus(parseJson(item.content_json).writingStatus))
+                      .filter((status) => !SCENE_WRITING_STATUSES.includes(status as typeof SCENE_WRITING_STATUSES[number])))]
+                      .map((status) => ({ value: status, label: status })),
+                  ]}
+                />
+                <input
+                  list="scene-writing-status-labels"
+                  maxLength={40}
+                  aria-label={tr("自定义场景进度标签", "Custom scene status label")}
+                  placeholder={tr("或输入自定义标签（最多 40 字）", "Or enter a custom label (up to 40 characters)")}
+                  value={SCENE_WRITING_STATUSES.includes(normalizeSceneWritingStatus(editing.writingStatus) as typeof SCENE_WRITING_STATUSES[number]) ? "" : normalizeSceneWritingStatus(editing.writingStatus)}
+                  onChange={(event) => updateEditing({ writingStatus: normalizeSceneWritingStatus(event.target.value) })}
+                />
+                <datalist id="scene-writing-status-labels">
+                  {[...new Set(allItems.filter((item) => item.kind === "scene")
+                    .map((item) => normalizeSceneWritingStatus(parseJson(item.content_json).writingStatus))
+                    .filter((status) => !SCENE_WRITING_STATUSES.includes(status as typeof SCENE_WRITING_STATUSES[number])))]
+                    .map((status) => <option key={status} value={status} />)}
+                </datalist>
+              </label>
               <label className="scene-target-words-field">
                 <span>{tr("场景目标字数（可选）", "Scene word target (optional)")}</span>
                 <input
@@ -1042,6 +1197,17 @@ export function LibraryPanel({
                 {tr("移入回收站", "Move to trash")}
               </button>
             )}
+            {kind === "scene" && editing.id && (
+              <button
+                type="button"
+                data-fd-id="scene-history-open"
+                disabled={dirty || saveBusy}
+                title={dirty ? tr("请先保存或放弃未保存修改，再查看历史版本", "Save or discard edits before opening history") : tr("查看、对比或恢复细纲历史版本", "Review, compare, or restore scene revisions")}
+                onClick={() => void openSceneHistory()}
+              >
+                {tr("版本历史", "History")}
+              </button>
+            )}
             <span className="spacer" />
             <button onClick={() => setEditing(null)}>{tr("取消", "Cancel")}</button>
             <button className="primary" disabled={saveBusy} onClick={() => saveThenMaybe()}>
@@ -1051,6 +1217,65 @@ export function LibraryPanel({
           </div>
         </section>,
         detailTarget,
+      )}
+      {sceneHistoryOpen && editing?.id && (
+        <Modal title={tr("场景细纲历史版本", "Scene outline history")} close={() => setSceneHistoryOpen(false)}>
+          <div className="scene-history-dialog" data-fd-id="scene-history-dialog">
+            <aside className="scene-history-list">
+              <div className="scene-history-list-head">
+                <b>{tr(`${sceneHistoryRows.length} 个版本`, `${sceneHistoryRows.length} revisions`)}</b>
+                <button type="button" disabled={sceneHistoryBusy} onClick={() => void createSceneHistorySnapshot()}>{sceneHistoryBusy ? tr("保存中…", "Saving…") : tr("创建快照", "Create snapshot")}</button>
+              </div>
+              {sceneHistoryRows.map((row) => (
+                <button
+                  type="button"
+                  key={row.id}
+                  className={`scene-history-row ${sceneHistoryPreview?.id === row.id ? "active" : ""}`}
+                  aria-pressed={sceneHistoryPreview?.id === row.id}
+                  onClick={() => void previewSceneHistory(row)}
+                >
+                  <b>{row.title || tr("未命名场景", "Untitled scene")}</b>
+                  <small>{row.source === "manual" ? tr("手动快照", "Manual snapshot") : row.source === "before_restore" ? tr("恢复前快照", "Before restore") : tr("修改前快照", "Before edit")} · {time(row.created_at, language)}</small>
+                </button>
+              ))}
+              {!sceneHistoryRows.length && <Empty title={tr("暂无细纲历史", "No scene history yet")} text={tr("保存细纲修改会自动留下前一版本；也可以手动创建快照。", "Saving outline edits preserves the previous version. You can also create a manual snapshot.")} />}
+            </aside>
+            <section className="scene-history-preview">
+              {sceneHistoryPreview ? (
+                <>
+                  <header><b>{sceneHistoryPreview.title || tr("未命名场景", "Untitled scene")}</b><small>{time(sceneHistoryPreview.created_at, language)}</small></header>
+                  <pre>{sceneHistoryPreviewText}</pre>
+                  <div className="row end">
+                    <button type="button" onClick={() => setSceneHistoryCompareOpen(true)}>{tr("与当前版本对比", "Compare with current")}</button>
+                    <button type="button" className="primary" disabled={sceneHistoryBusy} onClick={() => setSceneRestoreOpen(true)}>{tr("恢复此版本", "Restore this version")}</button>
+                  </div>
+                </>
+              ) : (
+                <Empty title={tr("选择一个历史版本", "Select a revision")} text={tr("查看快照内容、与当前版本对比，或恢复细纲。", "Preview, compare, or restore a scene outline.")} />
+              )}
+            </section>
+          </div>
+          {sceneHistoryCompareOpen && sceneHistoryPreview && (
+            <DiffModal
+              title={tr("细纲版本对比", "Compare scene revisions")}
+              beforeLabel={tr("历史版本", "Revision")}
+              afterLabel={tr("当前版本", "Current")}
+              before={sceneHistoryPreviewText}
+              after={sceneHistoryCurrentText}
+              close={() => setSceneHistoryCompareOpen(false)}
+            />
+          )}
+          {sceneRestoreOpen && sceneHistoryPreview && (
+            <ConfirmDialog
+              title={tr("恢复场景细纲", "Restore scene outline")}
+              message={tr("当前已保存的细纲会先另存为快照，再恢复所选版本。继续？", "The current saved outline will be snapshotted before restoring this revision. Continue?")}
+              confirmLabel={tr("恢复此版本", "Restore revision")}
+              cancelLabel={tr("取消", "Cancel")}
+              onCancel={() => setSceneRestoreOpen(false)}
+              onConfirm={() => void restoreSceneHistory()}
+            />
+          )}
+        </Modal>
       )}
       {plannerOpen && detailTarget && createPortal(
         <ScenePlanner
@@ -1071,6 +1296,7 @@ export function LibraryPanel({
           onCreateScene={(targetChapter) => openEditor(null, targetChapter ? { chapter_id: targetChapter.id } : {})}
           onOpenChapter={(targetChapter) => onSelectChapter?.(targetChapter)}
           onChapterStatusChange={(chapterId, status) => onChapterStatusChange?.(chapterId, status)}
+          onSceneWritingStatusChange={saveSceneWritingStatus}
           onMoveScene={(sceneId, chapterId, beforeId) => void moveScene(sceneId, chapterId, beforeId)}
           notify={notify}
           canReorder={!search.trim()}

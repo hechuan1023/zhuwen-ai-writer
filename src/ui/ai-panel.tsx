@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { marked } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { joinSegments, splitSegments } from "../segments";
@@ -98,12 +99,17 @@ export function AiPanel({
   const [styleIds, setStyleIds] = useState<string[]>([]);
   const [styleRuleChars, setStyleRuleChars] = useState(0);
   const [stylePreviewRules, setStylePreviewRules] = useState("");
+  const [projectInstructions, setProjectInstructions] = useState("");
+  const [projectInstructionsDraft, setProjectInstructionsDraft] = useState("");
+  const [projectInstructionsOpen, setProjectInstructionsOpen] = useState(false);
+  const [projectInstructionsSaving, setProjectInstructionsSaving] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [previewMessages, setPreviewMessages] = useState<AnyRow[]>([]);
   const [payloadChars, setPayloadChars] = useState<number | null>(null);
   const [payloadPreviewStatus, setPayloadPreviewStatus] = useState<"idle" | "pending" | "checking" | "ready" | "error">("pending");
   const payloadSeq = useRef(0);
+  const projectInstructionLoadSeq = useRef(0);
   const [continuationId, setContinuationId] = useState<string | null>(null);
   const [pendingRegenerateConversation, setPendingRegenerateConversation] = useState<string | null>(null);
   const prevGenerating = useRef(false);
@@ -277,7 +283,13 @@ export function AiPanel({
     return () => { live = false; };
   }, [conversation, novelId]);
   useEffect(() => {
+    const loadSeq = ++projectInstructionLoadSeq.current;
+    setProjectInstructions("");
     if (!novelId) return;
+    api<{ instructions: string }>("ai:project-instructions:get", novelId).then((r) => {
+      if (loadSeq === projectInstructionLoadSeq.current && r.ok)
+        setProjectInstructions(String(r.data?.instructions || ""));
+    });
     loadConversations();
     api("connections:list").then((r) => r.ok && setConnections(r.data));
     api("prompts:list").then((r) => r.ok && setPrompts(r.data));
@@ -287,6 +299,10 @@ export function AiPanel({
       (r) => r.ok && setBookChapters(r.data.chapters),
     );
     api("library:listAll", novelId).then((r) => r.ok && setLibraryAll(r.data));
+    return () => {
+      if (projectInstructionLoadSeq.current === loadSeq)
+        projectInstructionLoadSeq.current += 1;
+    };
   }, [novelId]);
   async function reloadStyleCards() {
     const r = await api<StyleCard[]>("ai:styles:list");
@@ -649,6 +665,7 @@ export function AiPanel({
   function requestPayloadPreview(plan: { contexts: AnyRow[]; prompt: string }) {
     return api<AnyRow[]>("ai:previewRequest", {
       conversationId: conversation,
+      novelId,
       contexts: plan.contexts,
       prompt: plan.prompt,
       styleIds: activeStyleIds,
@@ -708,6 +725,7 @@ export function AiPanel({
     selectionText,
     messages.length,
     styleRuleChars,
+    projectInstructions,
   ]);
 
   async function send() {
@@ -1030,6 +1048,21 @@ export function AiPanel({
     const payload = result.ok ? result.data || [] : [];
     setPreviewMessages(payload);
     setPayloadChars(result.ok ? payloadCharCount(payload) : null);
+  }
+  async function saveProjectInstructions() {
+    setProjectInstructionsSaving(true);
+    const result = await api<{ instructions: string }>("ai:project-instructions:set", {
+      novelId,
+      instructions: projectInstructionsDraft,
+    });
+    setProjectInstructionsSaving(false);
+    if (!result.ok) {
+      notify(result.error || tr("作品指令保存失败", "Could not save project instructions"));
+      return;
+    }
+    setProjectInstructions(String(result.data?.instructions || ""));
+    setProjectInstructionsOpen(false);
+    notify(tr("作品 AI 指令已保存，将用于本作品后续请求。", "Project AI instructions saved. They will be used for future requests in this novel."));
   }
   function handleAddFromPicker(item: {
     label: string;
@@ -1372,6 +1405,11 @@ export function AiPanel({
         canArchive={Boolean(conversation && !generating && archiveStatusReady)}
         archived={currentArchived}
         dockSide={dockSide}
+        hasProjectInstructions={Boolean(projectInstructions.trim())}
+        onOpenProjectInstructions={() => {
+          setProjectInstructionsDraft(projectInstructions);
+          setProjectInstructionsOpen(true);
+        }}
         generatingLabel={
           generating
             ? tr(
@@ -1599,12 +1637,46 @@ export function AiPanel({
           draftChars={draftChars}
           historyCount={historyCount}
           ruleChars={styleRuleChars}
+          projectInstructionChars={Array.from(projectInstructions).length}
           estimateTokens={Math.ceil(displayedPayloadChars / 2)}
           payloadChars={payloadChars}
           contextLimitChars={contextLimitChars}
           previewMessages={previewMessages.length ? previewMessages : null}
           onClose={() => setContextOpen(false)}
         />
+      )}
+      {projectInstructionsOpen && createPortal(
+        <Modal title={tr("作品 AI 指令", "Project AI instructions")} close={() => setProjectInstructionsOpen(false)}>
+          <div className="zchat-project-instructions">
+            <p className="hint">
+              {tr(
+                "这些要求会自动用于本作品后续 AI 请求，适合填写长期有效的设定边界、叙述视角、语言偏好和协作方式。单次任务和已确认作品事实优先。",
+                "These instructions are added to future AI requests for this novel. Use them for lasting canon boundaries, point of view, voice, or collaboration preferences. The current task and confirmed story facts take priority.",
+              )}
+            </p>
+            <textarea
+              autoFocus
+              data-fd-id="ai-project-instructions-input"
+              aria-label={tr("作品 AI 指令", "Project AI instructions")}
+              placeholder={tr("例如：采用第三人称限知视角；所有关键情节必须由人物行动推动；不替作者决定主线结局。", "Example: Use close third person; let character actions drive major plot turns; do not decide the main ending for the author.")}
+              value={projectInstructionsDraft}
+              maxLength={8000}
+              rows={12}
+              onChange={(event) => setProjectInstructionsDraft(event.target.value)}
+            />
+            <div className="zchat-project-instructions-foot">
+              <small>{Array.from(projectInstructionsDraft).length.toLocaleString(language === "en" ? "en-US" : "zh-CN")} / 8,000</small>
+              <span className="hint">{projectInstructions ? tr("已设置作品固定指令", "Project instructions are active") : tr("尚未设置作品固定指令", "No project instructions set")}</span>
+            </div>
+            <div className="row end">
+              <button type="button" onClick={() => setProjectInstructionsOpen(false)} disabled={projectInstructionsSaving}>{tr("取消", "Cancel")}</button>
+              <button type="button" className="primary" onClick={() => void saveProjectInstructions()} disabled={projectInstructionsSaving || Array.from(projectInstructionsDraft).length > 8000}>
+                {projectInstructionsSaving ? tr("保存中…", "Saving…") : tr("保存指令", "Save instructions")}
+              </button>
+            </div>
+          </div>
+        </Modal>,
+        document.body,
       )}
       {refPreview && (
         <Modal

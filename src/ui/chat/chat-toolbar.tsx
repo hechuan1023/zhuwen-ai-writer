@@ -1,4 +1,4 @@
-import { IconArchive, IconCollapse, IconDockLeft, IconDockRight, IconDownload, IconExpand, IconFloat, IconHistory, IconMore, IconPlus, IconRename, IconRestore, IconTrash } from "./icons";
+import { IconArchive, IconCollapse, IconDockLeft, IconDockRight, IconDoc, IconDownload, IconExpand, IconFloat, IconHistory, IconMore, IconPlus, IconRename, IconRestore, IconTrash } from "./icons";
 import { ChatMenu, type MenuItem } from "./menu";
 
 /**
@@ -16,6 +16,7 @@ export function ChatToolbar({
   canArchive,
   archived,
   dockSide,
+  hasProjectInstructions,
   generatingLabel,
   onNew,
   onToggleHistory,
@@ -24,6 +25,7 @@ export function ChatToolbar({
   onRename,
   onExport,
   onToggleArchive,
+  onOpenProjectInstructions,
   onDockSideChange,
   onDelete,
   onOpenFloat,
@@ -39,6 +41,7 @@ export function ChatToolbar({
   canArchive: boolean;
   archived: boolean;
   dockSide: "left" | "right";
+  hasProjectInstructions: boolean;
   generatingLabel?: string | null;
   onNew: () => void;
   onToggleHistory: () => void;
@@ -47,6 +50,7 @@ export function ChatToolbar({
   onRename: () => void;
   onExport: () => void;
   onToggleArchive: () => void;
+  onOpenProjectInstructions: () => void;
   onDockSideChange: (side: "left" | "right") => void;
   onDelete: () => void;
   onOpenFloat?: () => void;
@@ -54,6 +58,14 @@ export function ChatToolbar({
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const items: MenuItem[] = [
+    {
+      id: "ai-menu-project-instructions",
+      label: tr("作品 AI 指令", "Project AI instructions"),
+      icon: <IconDoc />,
+      hint: hasProjectInstructions ? tr("每轮生效", "Active") : tr("未设置", "Not set"),
+      group: tr("作品", "Project"),
+      onSelect: onOpenProjectInstructions,
+    },
     {
       id: "ai-menu-rename",
       label: tr("重命名对话", "Rename conversation"),

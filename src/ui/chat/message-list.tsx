@@ -340,6 +340,29 @@ export function MessageList({
                 {renderMarkdown(m.content)}
                 {m.streaming && <i className="zchat-cursor" aria-hidden="true" />}
               </div>
+              {isUser && String(m.style_rules || "").trim() && (
+                <details className="zchat-msg-instruction-snapshot zchat-msg-style-snapshot">
+                  <summary title={m.style_name ? `${m.style_name}${m.style_version ? ` · v${m.style_version}` : ""}` : undefined}>
+                    <IconDoc />
+                    <span>{tr("本次写作规则", "Writing rules used")}</span>
+                    <small>
+                      {m.style_name ? `${m.style_name} · ` : ""}
+                      {Array.from(String(m.style_rules)).length} {tr("字", "chars")}
+                    </small>
+                  </summary>
+                  <pre>{String(m.style_rules)}</pre>
+                </details>
+              )}
+              {isUser && String(m.project_instructions || "").trim() && (
+                <details className="zchat-msg-instruction-snapshot">
+                  <summary>
+                    <IconDoc />
+                    <span>{tr("作品指令快照", "Project instructions")}</span>
+                    <small>{Array.from(String(m.project_instructions)).length} {tr("字", "chars")}</small>
+                  </summary>
+                  <pre>{String(m.project_instructions)}</pre>
+                </details>
+              )}
               {!isUser && Array.isArray(m.source_refs) && m.source_refs.length > 0 && (
                 <div className="zchat-msg-sources" aria-label={tr("本次回复引用来源", "Sources used for this reply")}>
                   <span>{tr("依据", "Sources")}</span>

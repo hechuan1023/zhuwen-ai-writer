@@ -5,6 +5,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -118,6 +119,7 @@ export function Workspace({
   registerCloseGuard: (guard: () => Promise<boolean>) => void;
   onLanguageChange: (language: UiLanguage) => void;
 }) {
+  const ctxMenuRef = useRef<HTMLDivElement>(null);
   const [novel, setNovel] = useState(initial),
     [volumes, setVolumes] = useState<AnyRow[]>([]),
     [chapters, setChapters] = useState<AnyRow[]>([]),
@@ -178,6 +180,24 @@ export function Workspace({
       | { kind: "chapters"; ids: string[] }
       | null
     >(null);
+  useLayoutEffect(() => {
+    if (!ctxMenu) return;
+    const placeInsideViewport = () => {
+      const menu = ctxMenuRef.current;
+      if (!menu) return;
+      const margin = 8;
+      const maxX = Math.max(margin, window.innerWidth - menu.offsetWidth - margin);
+      const maxY = Math.max(margin, window.innerHeight - menu.offsetHeight - margin);
+      const x = Math.min(Math.max(ctxMenu.x, margin), maxX);
+      const y = Math.min(Math.max(ctxMenu.y, margin), maxY);
+      setCtxMenu((current) => current && current.x === x && current.y === y
+        ? current
+        : current ? { ...current, x, y } : null);
+    };
+    placeInsideViewport();
+    window.addEventListener("resize", placeInsideViewport);
+    return () => window.removeEventListener("resize", placeInsideViewport);
+  }, [ctxMenu?.id, ctxMenu?.type, ctxMenu?.x, ctxMenu?.y]);
   const [theme, setTheme] = useState<"light" | "warm" | "dark">("warm"),
     [uiDensity, setUiDensity] = useState<"compact" | "comfortable">("compact"),
     [focusZen, setFocusZen] = useState(false),
@@ -2033,7 +2053,7 @@ export function Workspace({
       {ctxMenu && (
         <>
           <div className="menu-overlay" onMouseDown={() => setCtxMenu(null)} />
-          <div className="ctx-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }}>
+          <div ref={ctxMenuRef} className="ctx-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }}>
             <button onClick={() => menuAction("rename")}>{tr("重命名", "Rename")}</button>
             {ctxMenu.type === "chapter" && (
               <button onClick={() => menuAction("duplicate")}>{tr("复制章节", "Duplicate chapter")}</button>

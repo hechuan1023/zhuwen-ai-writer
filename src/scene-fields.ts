@@ -1,4 +1,12 @@
 export type SceneCustomField = { key: string; value: string };
+export const SCENE_WRITING_STATUSES = ["planned", "drafting", "revision", "final"] as const;
+export type SceneWritingStatus = (typeof SCENE_WRITING_STATUSES)[number];
+
+export function normalizeSceneWritingStatus(value: unknown): string {
+  if (typeof value !== "string" && typeof value !== "number") return "planned";
+  const normalized = Array.from(String(value ?? "").replace(/\s+/gu, " ").trim()).slice(0, 40).join("");
+  return normalized || "planned";
+}
 
 /** Optional author-planned word target; keep legacy scene JSON without a value unchanged. */
 export function normalizeSceneTargetWords(value: unknown): number | null {

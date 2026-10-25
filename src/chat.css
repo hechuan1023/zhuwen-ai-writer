@@ -350,6 +350,15 @@
 .zchat-msg-sources button:focus-visible { outline: 2px solid var(--accent, #4d7a68); outline-offset: 1px; }
 .zchat-msg-sources button svg { width: 12px; height: 12px; flex: none; }
 .zchat-msg-sources button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zchat-msg-instruction-snapshot { margin-top: 8px; color: var(--muted, #8a8577); font-size: 10px; }
+.zchat-msg-instruction-snapshot summary { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 4px 8px; border: 1px solid var(--line, #e2ddd2); border-radius: 999px; background: color-mix(in srgb, var(--panel) 42%, transparent); cursor: pointer; list-style: none; }
+.zchat-msg-instruction-snapshot summary::-webkit-details-marker { display: none; }
+.zchat-msg-instruction-snapshot summary:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--accent, #4d7a68); }
+.zchat-msg-instruction-snapshot summary:focus-visible { outline: 2px solid var(--accent, #4d7a68); outline-offset: 2px; }
+.zchat-msg-instruction-snapshot summary svg { width: 12px; height: 12px; flex: none; }
+.zchat-msg-instruction-snapshot summary span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zchat-msg-instruction-snapshot summary small { opacity: .75; white-space: nowrap; }
+.zchat-msg-instruction-snapshot pre { max-height: 220px; overflow: auto; margin: 6px 0 0; padding: 9px 10px; border: 1px solid var(--line, #e2ddd2); border-radius: 8px; background: color-mix(in srgb, var(--panel) 68%, transparent); color: var(--text, #332f28); font: inherit; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .zchat-source-stale { display: inline-flex; margin-top: 7px; padding: 3px 7px; border: 1px solid color-mix(in srgb, var(--warning, #a67c3a) 30%, var(--line)); border-radius: 6px; background: color-mix(in srgb, var(--warning, #a67c3a) 9%, var(--paper)); color: var(--warning, #a67c3a); font-size: 10px; }
 .zchat-source-origin { display: inline-flex; margin-top: 7px; padding: 3px 7px; border: 1px solid var(--line, #e2ddd2); border-radius: 6px; color: var(--muted, #8a8577); font-size: 10px; }
 .zchat-act {
@@ -1353,6 +1362,12 @@ button.zchat-style-saved-apply:not(.primary):not(.danger):not(.danger-text):not(
 .zchat-style-task-options { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 0; padding: 8px 10px 10px; border: 1px solid var(--line); border-radius: 9px; }
 .zchat-style-task-options legend { padding: 0 5px; color: var(--muted); font-size: 11px; }
 .zchat-style-task-options label { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }
+.zchat-project-instructions { display: grid; gap: 11px; }
+.zchat-project-instructions > .hint { margin: 0; line-height: 1.55; }
+.zchat-project-instructions textarea { min-height: 220px; resize: vertical; line-height: 1.6; }
+.zchat-project-instructions-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; }
+.zchat-project-instructions-foot small { font-variant-numeric: tabular-nums; }
+.zchat-project-instructions-foot .hint { margin: 0; font-size: 10px; text-align: right; }
 .modal-content:has(.zchat-style-list) { container-name: zchat-style-manager; container-type: inline-size; }
 @container zchat-style-manager (max-width: 460px) {
   .zchat-style-row { flex-wrap: wrap; }

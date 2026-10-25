@@ -1296,6 +1296,22 @@ function withWriterPersona(messages: any[]) {
   list.unshift({ role: "system", content: ZHUWEN_WRITER_PERSONA });
   return list;
 }
+function readProjectInstructions(novelId: string) {
+  const row: any = get(
+    "SELECT instructions FROM novel_ai_instructions WHERE novel_id=?",
+    String(novelId || ""),
+  );
+  return String(row?.instructions || "").trim();
+}
+function projectInstructionPrompt(instructions: string) {
+  const text = String(instructions || "").trim();
+  return text
+    ? `【当前作品固定指令】这些要求适用于本作品的每次请求；与本轮用户明确任务或已确认作品事实冲突时，以本轮任务和已确认事实为准。\n${text}`
+    : "";
+}
+function addProjectInstructions(messages: any[], systemText: string) {
+  if (systemText) messages.splice(1, 0, { role: "system", content: systemText });
+}
 function styleCardRow(id: string) {
   const row: any = id ? get("SELECT * FROM ai_style_cards WHERE id=?", id) : null;
   if (!row) return null;
@@ -2524,14 +2540,26 @@ function registerIpc(userDir: string) {
   ipcMain.handle("library:save", (_, p) => {
     const t = timestamp();
     if (p.id) {
+      const current: any = get("SELECT * FROM library_items WHERE id=? AND deleted_at IS NULL", String(p.id));
+      if (!current) return fail("资料不存在或已移入回收站");
+      const contentJson = JSON.stringify(p.content || {});
+      const tagsJson = JSON.stringify(p.tags || []);
+      const status = p.status || "idea";
+      const chapterId = p.chapterId || null;
+      if (current.kind === "scene" && (
+        current.title !== p.title ||
+        current.content_json !== contentJson ||
+        current.tags_json !== tagsJson ||
+        current.status !== status
+      )) saveLibraryItemRevision(current, "before_edit");
       db.prepare(
         "UPDATE library_items SET title=?,content_json=?,tags_json=?,status=?,chapter_id=?,updated_at=?,data_version=data_version+1 WHERE id=?",
       ).run(
         p.title,
-        JSON.stringify(p.content || {}),
-        JSON.stringify(p.tags || []),
-        p.status || "idea",
-        p.chapterId || null,
+        contentJson,
+        tagsJson,
+        status,
+        chapterId,
         t,
         p.id,
       );
@@ -2557,6 +2585,52 @@ function registerIpc(userDir: string) {
       t,
     );
     return ok({ id });
+  });
+  ipcMain.handle("library:revisions:list", (_, p) => {
+    const itemId = String(p?.itemId || "");
+    const novelId = String(p?.novelId || "");
+    if (!get("SELECT id FROM library_items WHERE id=? AND novel_id=? AND kind='scene'", itemId, novelId))
+      return fail("场景不存在");
+    return ok(all(
+      "SELECT id,item_id,title,status,source,created_at FROM library_item_revisions WHERE item_id=? ORDER BY created_at DESC,rowid DESC LIMIT 100",
+      itemId,
+    ));
+  });
+  ipcMain.handle("library:revisions:create", (_, p) => {
+    const itemId = String(p?.itemId || "");
+    const novelId = String(p?.novelId || "");
+    const item: any = get("SELECT * FROM library_items WHERE id=? AND novel_id=? AND kind='scene' AND deleted_at IS NULL", itemId, novelId);
+    if (!item) return fail("场景不存在或已移入回收站");
+    return saveLibraryItemRevision(item, "manual");
+  });
+  ipcMain.handle("library:revisions:preview", (_, p) => {
+    const itemId = String(p?.itemId || "");
+    const novelId = String(p?.novelId || "");
+    const revisionId = String(p?.revisionId || "");
+    const row = get(
+      "SELECT r.* FROM library_item_revisions r JOIN library_items i ON i.id=r.item_id WHERE r.id=? AND r.item_id=? AND i.novel_id=? AND i.kind='scene'",
+      revisionId, itemId, novelId,
+    );
+    return row ? ok(row) : fail("细纲版本不存在");
+  });
+  ipcMain.handle("library:revisions:restore", (_, p) => {
+    const itemId = String(p?.itemId || "");
+    const novelId = String(p?.novelId || "");
+    const revisionId = String(p?.revisionId || "");
+    return db.transaction(() => {
+      const current: any = get("SELECT * FROM library_items WHERE id=? AND novel_id=? AND kind='scene' AND deleted_at IS NULL", itemId, novelId);
+      const revision: any = get(
+        "SELECT r.* FROM library_item_revisions r JOIN library_items i ON i.id=r.item_id WHERE r.id=? AND r.item_id=? AND i.novel_id=? AND i.kind='scene'",
+        revisionId, itemId, novelId,
+      );
+      if (!current) return fail("场景不存在或已移入回收站");
+      if (!revision) return fail("细纲版本不存在");
+      saveLibraryItemRevision(current, "before_restore");
+      db.prepare(
+        "UPDATE library_items SET title=?,content_json=?,tags_json=?,status=?,updated_at=?,data_version=data_version+1 WHERE id=? AND novel_id=?",
+      ).run(revision.title, revision.content_json, revision.tags_json, revision.status, timestamp(), itemId, novelId);
+      return ok({ id: itemId });
+    })();
   });
   ipcMain.handle("library:reorderScenes", (_, p) => {
     const novelId = String(p?.novelId || "");
@@ -2868,6 +2942,29 @@ function registerIpc(userDir: string) {
     if (!styleIds.length && row?.style_id) styleIds = [String(row.style_id)];
     const cards = [...new Set(styleIds)].map(styleCardRow).filter(Boolean);
     return ok({ styleIds: cards.map((card: any) => card.id), cards });
+  });
+  ipcMain.handle("ai:project-instructions:get", (_, novelId) => {
+    const id = String(novelId || "");
+    if (!get("SELECT id FROM novels WHERE id=? AND deleted_at IS NULL", id))
+      return fail("作品不存在");
+    const row: any = get(
+      "SELECT instructions,updated_at FROM novel_ai_instructions WHERE novel_id=?",
+      id,
+    );
+    return ok({ instructions: String(row?.instructions || ""), updatedAt: row?.updated_at || null });
+  });
+  ipcMain.handle("ai:project-instructions:set", (_, p) => {
+    const novelId = String(p?.novelId || "");
+    if (!get("SELECT id FROM novels WHERE id=? AND deleted_at IS NULL", novelId))
+      return fail("作品不存在");
+    const instructions = String(p?.instructions || "").trim();
+    if (Array.from(instructions).length > 8000)
+      return fail("作品指令最多 8000 个字符");
+    const updatedAt = timestamp();
+    db.prepare(
+      "INSERT INTO novel_ai_instructions(novel_id,instructions,updated_at) VALUES(?,?,?) ON CONFLICT(novel_id) DO UPDATE SET instructions=excluded.instructions,updated_at=excluded.updated_at,data_version=data_version+1",
+    ).run(novelId, instructions, updatedAt);
+    return ok({ instructions, updatedAt });
   });
   ipcMain.handle("ai:style-selection:set", (_, p) => {
     const novelId = String(p?.novelId || "");
@@ -3233,6 +3330,10 @@ function registerIpc(userDir: string) {
   });
   ipcMain.handle("ai:previewRequest", (_, p) => {
     const history = withWriterPersona(conversationHistory(String(p?.conversationId || "")));
+    addProjectInstructions(
+      history,
+      projectInstructionPrompt(readProjectInstructions(String(p?.novelId || ""))),
+    );
     const prefix = contextText(p?.contexts || []);
     const style = requestStyle(p);
     if (style.instruction) history.splice(1, 0, { role: "system", content: style.instruction });
@@ -3248,6 +3349,7 @@ function registerIpc(userDir: string) {
     let conv = String(p.conversationId || "");
     let content = "";
     let connection: any = null;
+    let projectInstructionSnapshot = "";
     const style = requestStyle(p);
     let assistantSaved = false;
     requests.set(requestId, controller);
@@ -3275,10 +3377,13 @@ function registerIpc(userDir: string) {
           broadcastConversations(String(existing.novel_id));
         }
       }
+      projectInstructionSnapshot = projectInstructionPrompt(
+        readProjectInstructions(String(p.novelId || "")),
+      );
       const uid = newId(),
         t = timestamp();
       db.prepare(
-        "INSERT INTO ai_messages(id,conversation_id,role,content,model,connection_id,chapter_id,source_revision,selection_text,selection_from,selection_to,task_kind,style_id,style_name,style_version,style_rules,style_ids_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO ai_messages(id,conversation_id,role,content,model,connection_id,chapter_id,source_revision,selection_text,selection_from,selection_to,task_kind,style_id,style_name,style_version,style_rules,style_ids_json,project_instructions,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       ).run(
         uid,
         conv,
@@ -3297,6 +3402,7 @@ function registerIpc(userDir: string) {
         style.card?.version || null,
         style.instruction || null,
         JSON.stringify(style.cards.map((card: any) => String(card.id))),
+        projectInstructionSnapshot,
         t,
       );
       aiSession.novelId = p.novelId ?? aiSession.novelId;
@@ -3313,6 +3419,7 @@ function registerIpc(userDir: string) {
           role: "user",
           content: p.prompt,
           chapter_id: p.chapterId ?? null,
+          project_instructions: projectInstructionSnapshot,
           source_revision: p.sourceRevision ?? null,
           source_message_id: uid,
           source_refs: (p.contexts || []).map((x: any) => ({
@@ -3371,6 +3478,7 @@ function registerIpc(userDir: string) {
       for (const message of aiSession.messages.slice(-2)) message.source_refs = liveRefs;
       // 规则只在本次请求的内存快照中加入一次，不写入对话历史，避免逐轮累积。
       const history = withWriterPersona(conversationHistory(conv));
+      addProjectInstructions(history, projectInstructionSnapshot);
       if (style.instruction) history.splice(1, 0, { role: "system", content: style.instruction });
       const useUiSmokeEcho =
         process.env.ZHUWEN_UI_SMOKE === "1" &&
@@ -3945,6 +4053,30 @@ function pruneRevisions(chapterId: string) {
        ORDER BY created_at DESC, rowid DESC LIMIT 100)`,
   ).run(chapterId, chapterId);
 }
+function saveLibraryItemRevision(item: any, source: string) {
+  const id = newId();
+  db.prepare(
+    "INSERT INTO library_item_revisions(id,item_id,title,content_json,tags_json,status,source,created_at) VALUES(?,?,?,?,?,?,?,?)",
+  ).run(
+    id,
+    String(item.id),
+    String(item.title || ""),
+    String(item.content_json || "{}"),
+    String(item.tags_json || "[]"),
+    String(item.status || "idea"),
+    source,
+    timestamp(),
+  );
+  pruneLibraryItemRevisions(String(item.id));
+  return ok({ id });
+}
+function pruneLibraryItemRevisions(itemId: string) {
+  db.prepare(
+    `DELETE FROM library_item_revisions WHERE item_id=? AND id NOT IN (
+       SELECT id FROM library_item_revisions WHERE item_id=?
+       ORDER BY created_at DESC,rowid DESC LIMIT 100)`,
+  ).run(itemId, itemId);
+}
 function validateBaseUrl(raw: string) {
   const u = new URL(raw);
   if (u.username || u.password)
@@ -4231,6 +4363,12 @@ function buildBackup(novelId: string) {
       "SELECT * FROM ai_conversations WHERE novel_id=?",
       novelId,
     ),
+    projectInstructions: String(
+      (get(
+        "SELECT instructions FROM novel_ai_instructions WHERE novel_id=?",
+        novelId,
+      ) as any)?.instructions || "",
+    ),
   };
   const convIds = bundle.conversations.map((x: any) => x.id);
   bundle.messages = convIds.length
@@ -4272,6 +4410,9 @@ function verifyBackup(b: any) {
     !Array.isArray(b.conversations) ||
     !Array.isArray(b.messages) ||
     !Array.isArray(b.contexts) ||
+    (b.projectInstructions !== undefined &&
+      (typeof b.projectInstructions !== "string" ||
+        Array.from(b.projectInstructions).length > 8000)) ||
     (b.styleCards !== undefined && !Array.isArray(b.styleCards))
   )
     throw new Error("备份格式或版本不受支持");
@@ -4316,6 +4457,12 @@ function restoreBackupAsCopy(b: any) {
       t,
       t,
     );
+    const projectInstructions = String(b.projectInstructions || "").trim();
+    if (projectInstructions) {
+      db.prepare(
+        "INSERT INTO novel_ai_instructions(novel_id,instructions,updated_at) VALUES(?,?,?)",
+      ).run(novelId, projectInstructions, t);
+    }
     for (const v of b.volumes) {
       const id = newId();
       idMap.set(v.id, id);
@@ -4408,7 +4555,7 @@ function restoreBackupAsCopy(b: any) {
       const id = newId();
       messageMap.set(m.id, id);
       db.prepare(
-        "INSERT INTO ai_messages(id,conversation_id,role,content,model,connection_id,chapter_id,source_revision,selection_text,incomplete,task_kind,style_id,style_name,style_version,style_rules,selection_from,selection_to,style_ids_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO ai_messages(id,conversation_id,role,content,model,connection_id,chapter_id,source_revision,selection_text,incomplete,task_kind,style_id,style_name,style_version,style_rules,selection_from,selection_to,style_ids_json,project_instructions,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       ).run(
         id,
         convMap.get(m.conversation_id)!,
@@ -4428,6 +4575,7 @@ function restoreBackupAsCopy(b: any) {
         m.selection_from ?? null,
         m.selection_to ?? null,
         m.style_ids_json || JSON.stringify(m.style_id ? [m.style_id] : []),
+        m.project_instructions || "",
         m.created_at || t,
       );
     }

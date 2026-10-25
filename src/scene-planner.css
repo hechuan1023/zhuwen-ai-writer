@@ -30,6 +30,7 @@
 .scene-planner-actions { display: flex; align-items: flex-end; justify-content: flex-end; gap: 9px; flex: none; flex-wrap: wrap; }
 .scene-planner-filter { display: grid; gap: 5px; min-width: 155px; }
 .scene-planner-status-filter { min-width: 145px; }
+.scene-planner-writing-status-filter { min-width: 140px; }
 .scene-planner-tag-filter { min-width: 155px; }
 .scene-planner-filter label { color: var(--muted); font-size: 10px; }
 .scene-planner-filter .zw-select-trigger { width: 100%; }
@@ -77,6 +78,26 @@
 .scene-card-sort { margin-left: auto; font-size: 12px; }
 .scene-card-title { display: block; width: 100%; margin: 7px 0 0; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: left; font-size: 12px; font-weight: 650; line-height: 1.5; }
 .scene-card-title:hover { color: var(--accent); }
+.scene-card-writing-state { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 7px; padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--r-sm); background: color-mix(in srgb, var(--panel) 45%, var(--paper)); }
+.scene-card-writing-state > span { color: var(--muted); font-size: 9px; }
+.scene-card-writing-state .zw-select { min-width: 92px; }
+.scene-card-writing-state .zw-select-trigger { min-height: 25px; padding: 2px 5px; border-color: transparent; background: transparent; font-size: 10px; }
+.scene-card-writing-state.state-drafting .zw-select-trigger { color: var(--accent); }
+.scene-card-writing-state.state-revision .zw-select-trigger { color: var(--warning); }
+.scene-card-writing-state.state-final .zw-select-trigger { color: var(--success); }
+.scene-card-writing-state.state-custom .zw-select-trigger { color: var(--ink); }
+.scene-timeline-writing-status { padding: 2px 6px; border: 1px solid var(--line); border-radius: 99px; background: var(--panel); color: var(--muted); font-size: 9px; white-space: nowrap; }
+.scene-timeline-writing-status.status-drafting { border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); background: var(--accent-soft); color: var(--accent); }
+.scene-timeline-writing-status.status-revision { border-color: color-mix(in srgb, var(--warning) 28%, var(--line)); background: color-mix(in srgb, var(--warning) 10%, var(--paper)); color: var(--warning); }
+.scene-timeline-writing-status.status-final { border-color: color-mix(in srgb, var(--success) 26%, var(--line)); background: color-mix(in srgb, var(--success) 9%, var(--paper)); color: var(--success); }
+.scene-timeline-writing-status.status-custom { border-color: color-mix(in srgb, var(--accent) 20%, var(--line)); color: var(--ink); }
+.scene-timeline-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; max-width: 310px; margin-top: 9px; padding: 5px 7px; border: 1px solid var(--line); border-radius: var(--r-sm); background: color-mix(in srgb, var(--panel) 45%, var(--paper)); }
+.scene-timeline-status > span { color: var(--muted); font-size: 10px; }
+.scene-timeline-status .zw-select { min-width: 125px; }
+.scene-timeline-status.state-drafting .zw-select-trigger { color: var(--accent); }
+.scene-timeline-status.state-revision .zw-select-trigger { color: var(--warning); }
+.scene-timeline-status.state-final .zw-select-trigger { color: var(--success); }
+.scene-timeline-status.state-custom .zw-select-trigger { color: var(--ink); }
 .scene-card-target,.scene-timeline-target { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 8px; margin-top: 7px; color: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; }
 .scene-card-target i,.scene-timeline-target > i { grid-column: 1 / -1; display: block; height: 4px; overflow: hidden; border-radius: 99px; background: var(--panel-2); }
 .scene-card-target i b,.scene-timeline-target > i b { display: block; height: 100%; border-radius: inherit; background: var(--accent); }

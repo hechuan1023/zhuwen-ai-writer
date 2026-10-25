@@ -1,5 +1,5 @@
 import { parseJson, parseTags } from "./shared";
-import { normalizeSceneCustomFields, normalizeSceneTargetWords } from "../scene-fields";
+import { normalizeSceneCustomFields, normalizeSceneTargetWords, normalizeSceneWritingStatus } from "../scene-fields";
 
 /** DB content_json → 编辑模型 */
 export function libraryContentToEditor(row: {
@@ -29,6 +29,7 @@ export function libraryContentToEditor(row: {
     next.plotlinesText = Array.isArray(c.plotlines) ? c.plotlines.join("，") : String(c.plotlines || "");
     next.customFields = normalizeSceneCustomFields(c.customFields);
     next.targetWords = normalizeSceneTargetWords(c.targetWords) ?? "";
+    next.writingStatus = normalizeSceneWritingStatus(c.writingStatus);
   }
   if (!next.tagsText) next.tagsText = parseTags(row.tags_json || "[]");
   return next;
@@ -65,6 +66,7 @@ export function editorToLibraryContent(kind: string, editing: any): any {
         .slice(0, 20),
       customFields: normalizeSceneCustomFields(editing.customFields),
       targetWords: normalizeSceneTargetWords(editing.targetWords),
+      writingStatus: normalizeSceneWritingStatus(editing.writingStatus),
       when: editing.when || "",
     };
   if (kind === "relation")

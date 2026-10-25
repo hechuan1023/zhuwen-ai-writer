@@ -11,6 +11,7 @@ export function ContextDialog({
   historyCount,
   estimateTokens,
   ruleChars = 0,
+  projectInstructionChars = 0,
   payloadChars,
   contextLimitChars = 300000,
   previewMessages,
@@ -24,6 +25,7 @@ export function ContextDialog({
   historyCount: number;
   estimateTokens: number;
   ruleChars?: number;
+  projectInstructionChars?: number;
   payloadChars?: number | null;
   contextLimitChars?: number;
   previewMessages: AnyRow[] | null;
@@ -55,6 +57,11 @@ export function ContextDialog({
       label: tr("写作规则", "Writing rules"),
       value: `${ruleChars} ${tr("字", "chars")}`,
       chars: ruleChars,
+    },
+    {
+      label: tr("作品固定指令", "Project instructions"),
+      value: `${projectInstructionChars} ${tr("字", "chars")}`,
+      chars: projectInstructionChars,
     },
   ];
   const total = rows.reduce((n, r) => n + r.chars, 0) || 1;

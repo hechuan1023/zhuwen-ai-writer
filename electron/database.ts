@@ -268,6 +268,38 @@ function migrate(db: Db) {
     `)
     db.prepare('INSERT INTO schema_migrations VALUES(18,?)').run(now())
   })()
+  if (version < 19) db.transaction(() => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS novel_ai_instructions(
+        novel_id TEXT PRIMARY KEY REFERENCES novels(id) ON DELETE CASCADE,
+        instructions TEXT NOT NULL DEFAULT '',
+        updated_at TEXT NOT NULL,
+        data_version INTEGER NOT NULL DEFAULT 1
+      );
+    `)
+    db.prepare('INSERT INTO schema_migrations VALUES(19,?)').run(now())
+  })()
+  if (version < 20) db.transaction(() => {
+    db.exec(`ALTER TABLE ai_messages ADD COLUMN project_instructions TEXT NOT NULL DEFAULT '';`)
+    db.prepare('INSERT INTO schema_migrations VALUES(20,?)').run(now())
+  })()
+  if (version < 21) db.transaction(() => {
+    db.exec(`
+      CREATE TABLE library_item_revisions(
+        id TEXT PRIMARY KEY,
+        item_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        content_json TEXT NOT NULL,
+        tags_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        source TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        data_version INTEGER NOT NULL DEFAULT 1
+      );
+      CREATE INDEX idx_library_item_revisions_item ON library_item_revisions(item_id,created_at DESC,id);
+    `)
+    db.prepare('INSERT INTO schema_migrations VALUES(21,?)').run(now())
+  })()
   // 已完成迁移的数据库也要能补齐或升级内置卡；不覆盖用户自定义记录。
   {
     const insert = db.prepare('INSERT OR IGNORE INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')

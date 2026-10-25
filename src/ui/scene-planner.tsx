@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, parseJson, UiLanguage } from "./shared";
-import { Select } from "./select";
-import { normalizeSceneTargetWords } from "../scene-fields";
+import { Select, type SelectOption } from "./select";
+import { normalizeSceneTargetWords, normalizeSceneWritingStatus, SCENE_WRITING_STATUSES } from "../scene-fields";
 import { buildPlotlineMatrix, filterScenesByPov, filterScenesByTrack, groupScenesForTimeline, sceneCustomFields, scenePlotlines, scenePovOptions, sceneTags, sceneTrackOptions } from "./scene-planner-model";
 
 type SceneRow = Record<string, any>;
@@ -18,6 +18,7 @@ export function ScenePlanner({
   onCreateScene,
   onOpenChapter,
   onChapterStatusChange,
+  onSceneWritingStatusChange,
   onMoveScene,
   notify,
   canReorder,
@@ -33,6 +34,7 @@ export function ScenePlanner({
   onCreateScene: (chapter?: SceneRow) => void;
   onOpenChapter: (chapter: SceneRow) => void;
   onChapterStatusChange: (chapterId: string, status: string) => void;
+  onSceneWritingStatusChange: (scene: SceneRow, status: string) => Promise<boolean>;
   onMoveScene: (sceneId: string, chapterId: string | null, beforeId?: string) => void;
   notify: (message: string) => void;
   canReorder: boolean;
@@ -40,11 +42,13 @@ export function ScenePlanner({
   const tr = (zh: string, en: string) => language === "en" ? en : zh;
   const [volumeFilter, setVolumeFilter] = useState(currentChapter?.volume_id || "all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [sceneStatusFilter, setSceneStatusFilter] = useState("all");
   const [povFilter, setPovFilter] = useState("all");
   const [trackFilter, setTrackFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"board" | "timeline" | "matrix">("board");
   const [draggingId, setDraggingId] = useState("");
   const [statusBusyId, setStatusBusyId] = useState("");
+  const [sceneStatusBusyId, setSceneStatusBusyId] = useState("");
   useEffect(() => {
     if (volumeFilter !== "all" && volumeFilter !== "unvolumed" && !volumes.some((volume) => volume.id === volumeFilter))
       setVolumeFilter("all");
@@ -89,6 +93,24 @@ export function ScenePlanner({
     { value: "done", label: tr("已完成", "Complete") },
   ];
   const statusName = (status: string) => statusOptions.find((option) => option.value === status)?.label || tr("草稿", "Draft");
+  const writingStatusOptions: SelectOption[] = [
+    { value: "planned", label: tr("计划中", "Planned") },
+    { value: "drafting", label: tr("写作中", "Drafting") },
+    { value: "revision", label: tr("待修订", "Needs revision") },
+    { value: "final", label: tr("已定稿", "Final") },
+    ...[...new Set(orderedScenes.map((scene) => normalizeSceneWritingStatus(dataFor(scene).writingStatus)))]
+      .filter((status) => !SCENE_WRITING_STATUSES.includes(status as typeof SCENE_WRITING_STATUSES[number]))
+      .map((status) => ({ value: status, label: status })),
+  ];
+  const sceneStatusOptions = [
+    { value: "all", label: tr("全部进度", "All progress") },
+    ...writingStatusOptions,
+  ];
+  const sceneStatusName = (status: unknown) => writingStatusOptions.find((option) => option.value === normalizeSceneWritingStatus(status))?.label || normalizeSceneWritingStatus(status);
+  const sceneStatusTone = (status: unknown) => {
+    const normalized = normalizeSceneWritingStatus(status);
+    return SCENE_WRITING_STATUSES.includes(normalized as typeof SCENE_WRITING_STATUSES[number]) ? normalized : "custom";
+  };
   const povs = scenePovOptions(orderedScenes);
   const povOptions = [
     { value: "all", label: tr("全部视角（" + orderedScenes.length + "）", "All POVs (" + orderedScenes.length + ")") },
@@ -117,10 +139,23 @@ export function ScenePlanner({
     if (result.ok) onChapterStatusChange(chapter.id, status);
     else notify(result.error || tr("章节状态保存失败", "Could not save chapter status"));
   };
+  const updateSceneStatus = async (scene: SceneRow, status: string) => {
+    const next = normalizeSceneWritingStatus(status);
+    if (sceneStatusBusyId || next === normalizeSceneWritingStatus(dataFor(scene).writingStatus)) return;
+    setSceneStatusBusyId(scene.id);
+    try {
+      await onSceneWritingStatusChange(scene, next);
+    } catch {
+      notify(tr("场景进度保存失败", "Could not save scene progress"));
+    } finally {
+      setSceneStatusBusyId("");
+    }
+  };
   const knownChapterIds = new Set(chapters.map((chapter) => chapter.id));
   const visibleScenes = useMemo(
-    () => filterScenesByTrack(filterScenesByPov(orderedScenes, povFilter), trackFilter),
-    [orderedScenes, povFilter, trackFilter],
+    () => filterScenesByTrack(filterScenesByPov(orderedScenes, povFilter), trackFilter)
+      .filter((scene) => sceneStatusFilter === "all" || normalizeSceneWritingStatus(dataFor(scene).writingStatus) === sceneStatusFilter),
+    [orderedScenes, povFilter, trackFilter, sceneStatusFilter],
   );
   const unassigned = visibleScenes.filter((scene) => !scene.chapter_id || !knownChapterIds.has(scene.chapter_id));
   const assignedCount = visibleScenes.length - unassigned.length;
@@ -132,7 +167,7 @@ export function ScenePlanner({
     () => buildPlotlineMatrix(visibleChapters, visibleScenes),
     [visibleChapters, visibleScenes],
   );
-  const canReorderVisible = canReorder && povFilter === "all" && trackFilter === "all";
+  const canReorderVisible = canReorder && povFilter === "all" && trackFilter === "all" && sceneStatusFilter === "all";
   const volumeOptions = [
     { value: "all", label: tr("全部卷", "All volumes") },
     { value: "unvolumed", label: tr("未分卷", "No volume") },
@@ -162,6 +197,10 @@ export function ScenePlanner({
             <label>{tr("章节状态", "Chapter status")}</label>
             <Select value={statusFilter} aria-label={tr("按章节状态筛选", "Filter by chapter status")} onValueChange={setStatusFilter} options={statusOptions} />
           </div>
+          <div className="scene-planner-filter scene-planner-writing-status-filter">
+            <label>{tr("场景写作进度", "Scene writing status")}</label>
+            <Select searchable value={sceneStatusFilter} aria-label={tr("按场景写作进度筛选", "Filter by scene writing status")} onValueChange={setSceneStatusFilter} options={sceneStatusOptions} />
+          </div>
           <div className="scene-planner-filter scene-planner-pov-filter">
             <label>{tr("视角人物", "POV")}</label>
             <Select value={povFilter} aria-label={tr("按视角人物筛选", "Filter by point of view")} onValueChange={setPovFilter} options={povOptions} />
@@ -185,7 +224,7 @@ export function ScenePlanner({
           <button type="button" className={viewMode === "timeline" ? "active" : ""} aria-pressed={viewMode === "timeline"} onClick={() => setViewMode("timeline")}>{tr("时间线", "Timeline")}</button>
           <button type="button" className={viewMode === "matrix" ? "active" : ""} aria-pressed={viewMode === "matrix"} onClick={() => setViewMode("matrix")}>{tr("剧情矩阵", "Matrix")}</button>
         </div>
-        <small>{viewMode === "matrix" ? tr("矩阵按章节汇总剧情线覆盖；点场景标题可打开细纲。", "Matrix summarizes plotline coverage by chapter; click a scene to open its outline.") : canReorderVisible ? tr("拖动卡片可调整章节与顺序 · 点击标题编辑细纲", "Drag to reorder or change chapter · Click a title to edit") : tr("筛选结果仅供查看；清除视角、剧情线、标签或属性筛选后可调整顺序。", "Filtered results are view-only; clear POV, plotline, label, or property filters to reorder.")}</small>
+        <small>{viewMode === "matrix" ? tr("矩阵按章节汇总剧情线覆盖；点场景标题可打开细纲。", "Matrix summarizes plotline coverage by chapter; click a scene to open its outline.") : canReorderVisible ? tr("拖动卡片可调整章节与顺序 · 点击标题编辑细纲", "Drag to reorder or change chapter · Click a title to edit") : tr("筛选结果仅供查看；清除视角、剧情线、标签或场景进度筛选后可调整顺序。", "Filtered results are view-only; clear POV, plotline, label, or scene progress filters to reorder.")}</small>
       </div>
 
       {viewMode === "board" ? <div className="scene-board-scroll" data-fd-id="scene-board-columns">
@@ -201,7 +240,7 @@ export function ScenePlanner({
               <span className="scene-lane-count">{unassigned.length}</span>
             </header>
             <div className="scene-lane-cards">
-              {unassigned.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} targetShare={null} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft={false} language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, null, scene.id)} />)}
+                  {unassigned.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} writingStatusOptions={writingStatusOptions} targetShare={null} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft={false} writingStatusBusy={Boolean(sceneStatusBusyId)} onWritingStatusChange={(status) => void updateSceneStatus(scene, status)} language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, null, scene.id)} />)}
               {!unassigned.length && <div className="scene-lane-empty">{canReorderVisible ? tr("把未安排的场景拖到这里", "Drop unassigned scenes here") : tr("当前筛选下没有待安排场景", "No unassigned scenes match these filters")}</div>}
             </div>
             <button className="scene-lane-add" onClick={() => onCreateScene()}>{tr("＋ 添加场景", "+ Add scene")}</button>
@@ -239,14 +278,14 @@ export function ScenePlanner({
                   />
                 </div>
                 <div className="scene-lane-cards">
-                  {laneScenes.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} targetShare={targetShare(scene)} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, chapter.id, scene.id)} />)}
+                  {laneScenes.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} writingStatusOptions={writingStatusOptions} targetShare={targetShare(scene)} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft writingStatusBusy={Boolean(sceneStatusBusyId)} onWritingStatusChange={(status) => void updateSceneStatus(scene, status)} language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, chapter.id, scene.id)} />)}
                   {!laneScenes.length && <div className="scene-lane-empty">{povFilter === "all" && trackFilter === "all" ? tr("拖入一个场景，开始拆解本章推进", "Drop a scene here to plan this chapter") : tr("当前筛选下暂无场景", "No scenes match these filters")}</div>}
                 </div>
                 <button className="scene-lane-add" onClick={() => onCreateScene(chapter)}>{tr("＋ 添加到本章", "+ Add to chapter")}</button>
               </section>
             );
           })}
-          {!visibleChapters.length && <div className="scene-board-no-chapters"><span>{tr("当前筛选范围内没有章节。", "No chapters match the current filters.")}</span><button type="button" onClick={() => { setVolumeFilter("all"); setStatusFilter("all"); setPovFilter("all"); setTrackFilter("all"); }}>{tr("清除筛选", "Clear filters")}</button></div>}
+          {!visibleChapters.length && <div className="scene-board-no-chapters"><span>{tr("当前筛选范围内没有章节。", "No chapters match the current filters.")}</span><button type="button" onClick={() => { setVolumeFilter("all"); setStatusFilter("all"); setSceneStatusFilter("all"); setPovFilter("all"); setTrackFilter("all"); }}>{tr("清除筛选", "Clear filters")}</button></div>}
           <button className="scene-lane-new-chapter" onClick={() => onCreateScene()}>{tr("＋ 新场景", "+ New scene")}</button>
         </div>
       </div> : viewMode === "timeline" ? <div className="scene-timeline-scroll" data-fd-id="scene-timeline">
@@ -267,6 +306,10 @@ export function ScenePlanner({
                     <span className="scene-timeline-marker" aria-hidden="true">{sceneIndex + 1}</span>
                     <div className="scene-timeline-card">
                       <header><span className="scene-timeline-time">{data.when || tr("未填写时间标记", "No time marker")}</span>{data.plotRole && <span className="scene-timeline-role">{data.plotRole}</span>}{scenePlotlines(data).slice(0, 2).map((plotline) => <span className="scene-timeline-tag plotline" key={`plotline:${plotline}`}>{plotline}</span>)}{sceneTags(data).slice(0, 2).map((tag) => <span className="scene-timeline-tag" key={`tag:${tag}`}>{tag}</span>)}{sceneCustomFields(data).slice(0, 2).map((field) => <span className="scene-timeline-tag custom" key={`custom:${field.key}`} title={`${field.key}: ${field.value}`}>{field.key}: {field.value}</span>)}</header>
+                      <div className={`scene-timeline-status state-${sceneStatusTone(data.writingStatus)}`}>
+                        <span>{tr("写作进度", "Writing status")}</span>
+                        <Select searchable size="compact" value={normalizeSceneWritingStatus(data.writingStatus)} missingLabel={normalizeSceneWritingStatus(data.writingStatus)} aria-label={tr(`${scene.title || "场景"}写作进度`, `Writing status for ${scene.title || "scene"}`)} disabled={Boolean(sceneStatusBusyId)} options={writingStatusOptions} onValueChange={(status) => void updateSceneStatus(scene, status)} />
+                      </div>
                       <button type="button" className="scene-timeline-title" onClick={() => onOpenScene(scene)}>{scene.title || tr("未命名场景", "Untitled scene")}</button>
                       {normalizeSceneTargetWords(data.targetWords) != null && <div className="scene-timeline-target" title={tr("相对条表示该场景目标字数占本章所有已规划场景目标字数的比例，不是写作进度", "The bar shows this scene's share of all planned scene targets in this chapter, not writing progress")}><span>{tr("目标", "Target")} {formatWords(normalizeSceneTargetWords(data.targetWords) || 0)} {tr("字", "words")}</span><span>{targetShare(scene)}%</span><i aria-hidden="true"><b style={{ width: `${targetShare(scene)}%` }} /></i></div>}
                       {data.body && <p>{data.body}</p>}
@@ -282,7 +325,7 @@ export function ScenePlanner({
             <header><b>{tr("待安排场景", "Unassigned scenes")}</b><small>{tr("这些场景不进入叙事顺序", "Not included in story order")}</small></header>
             <div>{unassigned.map((scene) => <button type="button" key={scene.id} onClick={() => onOpenScene(scene)}>{scene.title || tr("未命名场景", "Untitled scene")}</button>)}</div>
           </section>}
-          {!timelineGroups.length && <div className="scene-board-no-chapters"><span>{tr("当前筛选范围内没有章节。", "No chapters match the current filters.")}</span><button type="button" onClick={() => { setVolumeFilter("all"); setStatusFilter("all"); setPovFilter("all"); setTrackFilter("all"); }}>{tr("清除筛选", "Clear filters")}</button></div>}
+          {!timelineGroups.length && <div className="scene-board-no-chapters"><span>{tr("当前筛选范围内没有章节。", "No chapters match the current filters.")}</span><button type="button" onClick={() => { setVolumeFilter("all"); setStatusFilter("all"); setSceneStatusFilter("all"); setPovFilter("all"); setTrackFilter("all"); }}>{tr("清除筛选", "Clear filters")}</button></div>}
         </div>
       </div> : <div className="scene-matrix-scroll" data-fd-id="scene-plotline-matrix">
         <div className="scene-matrix-note">{tr("每格列出该章节属于对应剧情线的场景。矩阵只读，未安排到章节的场景不计入；可用上方视角与标签筛选缩小范围。", "Each cell lists scenes in that chapter assigned to the plotline. The matrix is read-only and excludes unassigned scenes; use the POV and label filters above to narrow the view.")}</div>
@@ -308,6 +351,7 @@ export function ScenePlanner({
 }
 function SceneCard({
   scene,
+  writingStatusOptions,
   targetShare,
   dragging,
   canReorder,
@@ -315,11 +359,14 @@ function SceneCard({
   onOpen,
   onDraft,
   canDraft,
+  writingStatusBusy,
+  onWritingStatusChange,
   onDragStart,
   onDragEnd,
   onDrop,
 }: {
   scene: SceneRow;
+  writingStatusOptions: SelectOption[];
   targetShare: number | null;
   dragging: boolean;
   canReorder: boolean;
@@ -327,18 +374,28 @@ function SceneCard({
   onOpen: () => void;
   onDraft: () => void;
   canDraft: boolean;
+  writingStatusBusy: boolean;
+  onWritingStatusChange: (status: string) => void;
   onDragStart: (event: React.DragEvent<HTMLElement>) => void;
   onDragEnd: () => void;
   onDrop: (event: React.DragEvent<HTMLElement>) => void;
 }) {
   const tr = (zh: string, en: string) => language === "en" ? en : zh;
   const targetWords = normalizeSceneTargetWords(scene.targetWords);
+  const writingStatus = normalizeSceneWritingStatus(scene.writingStatus);
+  const writingStatusTone = SCENE_WRITING_STATUSES.includes(writingStatus as typeof SCENE_WRITING_STATUSES[number]) ? writingStatus : "custom";
   const formattedTarget = targetWords == null ? "" : new Intl.NumberFormat(language === "en" ? "en-US" : "zh-CN").format(targetWords);
   return (
     <article
       className={`scene-card ${dragging ? "dragging" : ""}`}
       draggable={canReorder}
-      onDragStart={(event) => canReorder ? onDragStart(event) : event.preventDefault()}
+      onDragStart={(event) => {
+        if (!canReorder || (event.target as HTMLElement).closest("button,input,[role='combobox']")) {
+          event.preventDefault();
+          return;
+        }
+        onDragStart(event);
+      }}
       onDragEnd={onDragEnd}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => { event.stopPropagation(); onDrop(event); }}
@@ -346,6 +403,19 @@ function SceneCard({
     >
       <div className="scene-card-top"><span className="scene-drag-grip" aria-hidden="true">⠿</span><span className={`scene-status ${scene.status === "confirmed" ? "confirmed" : ""}`}>{scene.status === "confirmed" ? tr("已确认", "Canon") : tr("待确认", "Draft")}</span><span className="scene-card-sort">↕</span></div>
       <button className="scene-card-title" onClick={onOpen}>{scene.title || tr("未命名场景", "Untitled scene")}</button>
+      <div className={`scene-card-writing-state state-${writingStatusTone}`}>
+        <span>{tr("写作进度", "Writing status")}</span>
+        <Select
+          searchable
+          size="compact"
+          value={writingStatus}
+          missingLabel={writingStatus}
+          aria-label={tr(`${scene.title || "场景"}写作进度`, `Writing status for ${scene.title || "scene"}`)}
+          disabled={writingStatusBusy}
+          options={writingStatusOptions}
+          onValueChange={onWritingStatusChange}
+        />
+      </div>
       {targetWords != null && <div className="scene-card-target" title={tr("相对条表示该场景目标字数占本章所有已规划场景目标字数的比例，不是写作进度", "The bar shows this scene's share of all planned scene targets in this chapter, not writing progress")}><span>{tr("目标", "Target")} {formattedTarget} {tr("字", "words")}</span>{targetShare != null && <><small>{targetShare}%</small><i aria-hidden="true"><b style={{ width: `${targetShare}%` }} /></i></>}</div>}
       {scene.plotRole && <p className="scene-card-role">{scene.plotRole}</p>}
       {scene.body && <p className="scene-card-body">{scene.body}</p>}
