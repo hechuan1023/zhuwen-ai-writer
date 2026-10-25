@@ -79,8 +79,8 @@ button:disabled {
   box-shadow: 0 2px 7px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 88%, black);
-  border-color: color-mix(in srgb, var(--accent) 88%, black);
+  background: var(--accent-hover, color-mix(in srgb, var(--accent) 88%, black));
+  border-color: var(--accent-hover, color-mix(in srgb, var(--accent) 88%, black));
   box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 24%, transparent);
   transform: translateY(-1px);
 }
@@ -118,8 +118,8 @@ button.icon.danger-text:not(:disabled):hover {
   color: var(--danger);
 }
 button.danger:not(:disabled):hover {
-  background: color-mix(in srgb, var(--danger) 88%, black);
-  border-color: color-mix(in srgb, var(--danger) 88%, black);
+  background: var(--danger-hover, color-mix(in srgb, var(--danger) 88%, black));
+  border-color: var(--danger-hover, color-mix(in srgb, var(--danger) 88%, black));
 }
 button.danger-text:not(:disabled):hover {
   color: var(--danger);
@@ -130,7 +130,7 @@ button.danger-text:not(:disabled):hover {
   padding: 6px 12px;
 }
 .danger {
-  color: white;
+  color: var(--danger-ink, white);
   background: var(--danger);
   border-color: var(--danger);
 }
