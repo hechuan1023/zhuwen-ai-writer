@@ -20,6 +20,7 @@ function styleLabel(card: StyleCard, language: string) {
     "style-grounded-mystery": ["Grounded mystery", "Anchor investigation in daily routines, interests, and verifiable evidence."],
     "style-cultural-modernization": ["Cultural translation", "Put traditional culture into character action and modern emotional stakes."],
     "style-urban-workplace-agency": ["Urban work & lived detail", "Ground urban stories in concrete work processes, interests, and life choices."],
+    "style-professional-knowledge-causality": ["Professional knowledge & story causality", "Turn work experience and expertise into readable action, risk, collaboration, and character choices."],
     "style-fantasy-social-fusion": ["Fantasy & social systems", "Make institutions, resources, and social pressures part of a coherent fantasy world."],
     "style-high-stakes-game-theory": ["High-stakes strategy & limited agency", "Build tense choices from scarce resources, harsh rules, uncertain allies, and consequences that carry forward."],
     "style-system-agency-gameplay": ["System strategy & agency", "Let characters understand, negotiate with, exploit, or resist rules—and bear the consequences."],
@@ -75,6 +76,18 @@ const TECHNIQUE_PRESETS = [
     name: ["群像生活轻喜", "Ensemble slice-of-life comedy"],
     description: ["群像烟火 + 关系张力 + 处境错位", "Ensemble + relationship tension + situational comedy"],
     cardIds: ["style-human-ensemble", "style-character-voice-tension", "style-light-comedy-mismatch"],
+  },
+  {
+    id: "genre-professional-workplace",
+    name: ["专业知识行业连载", "Professional workplace serial"],
+    description: ["职业流程 + 专业行动 + 群像协作 + 连载兑现", "Work processes + expert action + ensemble teamwork + serial payoff"],
+    cardIds: ["style-professional-knowledge-causality", "style-urban-workplace-agency", "style-human-ensemble", "style-serial-hook-payoff"],
+  },
+  {
+    id: "genre-knowledge-driven-fantasy",
+    name: ["知识驱动幻想成长", "Knowledge-driven fantasy growth"],
+    description: ["专业知识 + 幻想规则 + 策略代价 + 阶段回报", "Expertise + fantasy systems + strategic costs + staged payoff"],
+    cardIds: ["style-professional-knowledge-causality", "style-fantasy-social-fusion", "style-system-agency-gameplay", "style-serial-hook-payoff"],
   },
   {
     id: "genre-urban-workplace",
