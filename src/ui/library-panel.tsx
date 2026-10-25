@@ -194,6 +194,7 @@ export function LibraryPanel({
   const [sceneHistoryBusy, setSceneHistoryBusy] = useState(false);
   const [sceneHistoryCompareOpen, setSceneHistoryCompareOpen] = useState(false);
   const [sceneRestoreOpen, setSceneRestoreOpen] = useState(false);
+  const [sceneRelinkBusyId, setSceneRelinkBusyId] = useState("");
   const draftVersion = useRef(0);
   const listSeq = useRef(0);
   const presenceDetailSeq = useRef(0);
@@ -457,6 +458,53 @@ export function LibraryPanel({
     }
     load();
     notify(archived ? tr("场景已归档，可随时恢复", "Scene archived; you can restore it anytime") : tr("场景已恢复到规划板", "Scene restored to the planning board"));
+    return true;
+  }
+  const canRelinkManuscriptSelection = Boolean(
+    plannerOpen && chapter?.id && chapterSaved && !dirty && !saveBusy && !sceneRelinkBusyId &&
+    selectedText.text.trim() && selectedText.start >= 0 &&
+    selectedText.end - selectedText.start === selectedText.text.length &&
+    String(chapter?.plain_text || "").slice(selectedText.start, selectedText.end) === selectedText.text &&
+    Array.from(selectedText.text.trim()).length <= 40_000,
+  );
+  async function relinkSceneManuscript(scene: AnyRow) {
+    if (dirty || saveBusy) {
+      notify(tr("请先保存或关闭正在编辑的细纲，再重新关联正文。", "Save or close the scene outline being edited before relinking."));
+      return false;
+    }
+    if (!chapter?.id || !chapterSaved || scene.chapter_id !== chapter.id || !selectedText.text.trim() || selectedText.start < 0 || selectedText.end - selectedText.start !== selectedText.text.length || String(chapter.plain_text || "").slice(selectedText.start, selectedText.end) !== selectedText.text || Array.from(selectedText.text.trim()).length > 40_000) {
+      notify(tr("请先保存当前章节，并选中该场景所属章节中的正文片段。", "Save the current chapter and select a passage from the scene's assigned chapter."));
+      return false;
+    }
+    setSceneRelinkBusyId(scene.id);
+    const result = await api("library:save", {
+      id: scene.id,
+      novelId: novel.id,
+      kind: "scene",
+      title: scene.title,
+      content: {
+        ...parseJson(scene.content_json),
+        manuscriptLink: {
+          start: selectedText.start,
+          end: selectedText.end,
+          characterCount: sceneManuscriptExcerptWords(selectedText.text),
+          fingerprint: sceneExcerptFingerprint(selectedText.text),
+          chapterId: chapter.id,
+          chapterTitle: chapter.title || "",
+          chapterRevision: chapter.revision || 0,
+        },
+      },
+      tags: parseTags(scene.tags_json || "[]").split(/[,，]/u).map((tag: string) => tag.trim()).filter(Boolean),
+      status: scene.status || "idea",
+      chapterId: scene.chapter_id || null,
+    });
+    setSceneRelinkBusyId("");
+    if (!result.ok) {
+      notify(result.error || tr("重新关联正文失败", "Could not relink manuscript excerpt"));
+      return false;
+    }
+    load();
+    notify(tr("正文片段已重新关联", "Manuscript excerpt relinked"));
     return true;
   }
   async function openSceneHistory() {
@@ -1414,6 +1462,8 @@ export function LibraryPanel({
           onMoveScene={(sceneId, chapterId, beforeId) => void moveScene(sceneId, chapterId, beforeId)}
           notify={notify}
           canReorder={!search.trim()}
+          canRelinkSelection={canRelinkManuscriptSelection}
+          onRelinkManuscript={relinkSceneManuscript}
         />,
         detailTarget,
       )}

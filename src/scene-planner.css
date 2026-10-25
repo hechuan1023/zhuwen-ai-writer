@@ -113,6 +113,9 @@
 .scene-card-manuscript { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 8px; margin-top: 7px; color: var(--success); font-size: 9px; font-variant-numeric: tabular-nums; }
 .scene-card-manuscript small { color: var(--success); font-size: 9px; }
 .scene-card-manuscript > span { grid-column: 1 / -1; line-height: 1.45; }
+.scene-card-relink { justify-self: start; min-height: 23px; padding: 2px 7px; border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--line)); border-radius: var(--r-sm); background: color-mix(in srgb, var(--warning) 8%, var(--paper)); color: var(--warning); font-size: 9px; cursor: pointer; }
+.scene-card-relink:hover:not(:disabled) { border-color: var(--warning); background: color-mix(in srgb, var(--warning) 15%, var(--paper)); }
+.scene-card-relink:disabled { opacity: .55; cursor: not-allowed; }
 .scene-card-manuscript:has(small) > span { grid-column: 1; }
 .scene-card-manuscript > i { grid-column: 1 / -1; display: block; height: 4px; overflow: hidden; border-radius: 99px; background: var(--panel-2); }
 .scene-card-manuscript > i b { display: block; height: 100%; border-radius: inherit; background: var(--success); }
