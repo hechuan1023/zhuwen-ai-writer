@@ -614,7 +614,7 @@
   min-height: var(--ctl-h, 34px);
   padding: 0 10px 0 12px;
   border: 1px solid var(--line);
-  border-radius: var(--r-sm, 8px);
+  border-radius: var(--r-md, 10px);
   background: color-mix(in srgb, var(--panel-2, var(--paper)) 92%, var(--accent-soft, var(--paper)));
   color: var(--ink);
   font-size: 13px;
@@ -660,9 +660,9 @@
   display: flex;
   flex-direction: column;
   border: 1px solid color-mix(in srgb, var(--line) 78%, var(--accent));
-  border-radius: 13px;
-  background: color-mix(in srgb, var(--paper) 96%, transparent);
-  box-shadow: var(--shadow, 0 16px 40px rgba(0,0,0,.18)), 0 2px 8px rgba(31, 36, 32, .06), inset 0 1px 0 rgba(255,255,255,.25);
+  border-radius: var(--r-lg, 14px);
+  background: color-mix(in srgb, var(--paper) 96%, var(--panel));
+  box-shadow: var(--shadow, 0 16px 40px rgba(0,0,0,.18)), 0 2px 8px color-mix(in srgb, var(--ink) 7%, transparent);
   backdrop-filter: blur(var(--glass-blur, 12px)) saturate(1.12);
   -webkit-backdrop-filter: blur(var(--glass-blur, 12px)) saturate(1.12);
   animation: zw-select-in 140ms var(--ease);
@@ -697,7 +697,7 @@
   min-height: 30px;
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-sm, 8px);
   background: var(--panel);
   color: var(--ink);
   font-size: 13px;
@@ -721,7 +721,7 @@
   gap: 8px;
   min-height: 34px;
   padding: 7px 10px;
-  border-radius: 8px;
+  border-radius: var(--r-sm, 8px);
   cursor: pointer;
   color: var(--ink);
   font-size: 13px;
@@ -732,6 +732,9 @@
 .zw-select-option.selected {
   font-weight: 600;
   color: color-mix(in srgb, var(--ink) 78%, var(--accent));
+}
+.zw-select-option.selected:not(.active) {
+  background: color-mix(in srgb, var(--accent-soft, var(--accent)) 42%, var(--paper));
 }
 .zw-select-option.selected .zw-select-check {
   color: var(--accent);
