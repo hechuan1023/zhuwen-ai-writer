@@ -303,6 +303,7 @@ export function Composer({
           <ChatMenu
             ariaLabel={tr("提示词模板", "Prompt templates")}
             dataFdId="ai-prompt-template-menu"
+            wrapClassName="prompt-template-menu"
             menuClassName="prompt-menu open-up"
             trigger={
               <>
@@ -310,7 +311,7 @@ export function Composer({
                 <span>{tr("模板", "Prompts")}</span>
               </>
             }
-            triggerClassName="zchat-pill wide"
+            triggerClassName="zchat-pill wide prompt-template-trigger"
             items={promptItems}
           />
           <ChatMenu

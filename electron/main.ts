@@ -367,7 +367,9 @@ function openFloatWindow() {
     });
 }
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
-if (process.env.ZHUWEN_UI_SMOKE)
+if (process.env.ZHUWEN_USER_DATA_DIR?.trim())
+  app.setPath("userData", path.resolve(process.env.ZHUWEN_USER_DATA_DIR.trim()));
+else if (process.env.ZHUWEN_UI_SMOKE)
   app.setPath(
     "userData",
     path.join(process.cwd(), "artifacts", "ui-smoke-profile"),

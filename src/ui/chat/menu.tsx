@@ -32,6 +32,7 @@ export function ChatMenu({
   align = "end",
   trigger,
   triggerClassName = "",
+  wrapClassName = "",
   menuClassName = "",
   ariaLabel,
   dataFdId,
@@ -42,6 +43,7 @@ export function ChatMenu({
   /** 自定义触发器内容；给出时忽略 label */
   trigger?: ReactNode;
   triggerClassName?: string;
+  wrapClassName?: string;
   menuClassName?: string;
   ariaLabel: string;
   dataFdId?: string;
@@ -129,7 +131,7 @@ export function ChatMenu({
   }
 
   return (
-    <div className="zchat-menu-wrap" ref={wrapRef}>
+    <div className={`zchat-menu-wrap ${wrapClassName}`} ref={wrapRef}>
       <button
         ref={triggerRef}
         type="button"
