@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnyRow, Modal, ConfirmDialog, api } from "../shared";
 import { ChatMenu, type MenuItem } from "./menu";
-import { IconCheck, IconChevronDown, IconCopy, IconDoc, IconDownload, IconRename, IconSparkle, IconTrash, IconUpload } from "./icons";
+import { IconCheck, IconChevronDown, IconCopy, IconDoc, IconDownload, IconRename, IconSearch, IconSparkle, IconTrash, IconUpload } from "./icons";
 
 export type StyleCard = AnyRow & { tasks: string[]; version: number };
 export type StyleIntensity = "light" | "balanced" | "strong";
 type StyleComposition = { id: string; name: string; description: string; styleIds: string[]; updatedAt?: string };
+type StyleCardFilter = "all" | "continue" | "outline" | "polish" | "naturalize" | "custom";
 
 function styleLabel(card: StyleCard, language: string) {
   if (language !== "en" || !card.builtin) return { name: card.name, description: card.description };
@@ -194,6 +195,21 @@ export function StyleCardPanel({
   const [savingComposition, setSavingComposition] = useState(false);
   const [importingComposition, setImportingComposition] = useState(false);
   const [exportingComposition, setExportingComposition] = useState("");
+  const [cardSearch, setCardSearch] = useState("");
+  const [cardFilter, setCardFilter] = useState<StyleCardFilter>("all");
+  const visibleCards = useMemo(() => {
+    const locale = language === "en" ? "en-US" : "zh-CN";
+    const query = cardSearch.trim().toLocaleLowerCase(locale);
+    return cards.filter((card) => {
+      if (cardFilter === "custom" ? Boolean(card.builtin) : cardFilter !== "all" && !(card.tasks.includes(cardFilter) || (cardFilter === "polish" && card.tasks.includes("naturalize")))) return false;
+      if (!query) return true;
+      const label = styleLabel(card, language);
+      const searchable = [label.name, label.description, ...card.tasks.map((task) => taskLabel(task, language))]
+        .join(" ")
+        .toLocaleLowerCase(locale);
+      return searchable.includes(query);
+    });
+  }, [cards, cardSearch, cardFilter, language]);
   useEffect(() => {
     if (!open) return;
     let live = true;
@@ -356,11 +372,42 @@ export function StyleCardPanel({
               else if (result.data) { await onReload(); }
             }} data-fd-id="ai-style-import"><IconUpload />{importing ? tr("导入中…", "Importing…") : tr("导入技法卡", "Import card")}</button>
           </div>
+          <div className="zchat-style-browser">
+            <label className="zchat-style-search">
+              <IconSearch size={14} aria-hidden="true" />
+              <input
+                type="search"
+                value={cardSearch}
+                onChange={(event) => setCardSearch(event.target.value)}
+                placeholder={tr("搜索技法名称或用途", "Search techniques or use cases")}
+                aria-label={tr("搜索写作技法卡", "Search writing techniques")}
+              />
+            </label>
+            <div className="zchat-style-filters" role="group" aria-label={tr("按适用任务筛选", "Filter by task")}>
+              {([
+                ["all", tr("全部", "All")],
+                ["continue", tr("续写", "Continue")],
+                ["outline", tr("构思", "Outline")],
+                ["polish", tr("润色", "Polish")],
+                ["naturalize", tr("自然化", "Naturalize")],
+                ["custom", tr("自定义", "Custom")],
+              ] as [StyleCardFilter, string][]).map(([filter, label]) => (
+                <button
+                  type="button"
+                  key={filter}
+                  className={cardFilter === filter ? "active" : ""}
+                  aria-pressed={cardFilter === filter}
+                  onClick={() => setCardFilter(filter)}
+                >{label}</button>
+              ))}
+              <small>{tr(`显示 ${visibleCards.length} / ${cards.length} · 已选 ${selected.length}`, `${visibleCards.length} of ${cards.length} · ${selected.length} selected`)}</small>
+            </div>
+          </div>
           <div className="zchat-style-list">
             <button type="button" className={!selectedIds.length ? "active" : ""} onClick={() => onSelectionChange([])}>
               <b>{tr("不使用风格卡", "No style card")}</b><small>{tr("恢复现有行为，不向普通聊天添加正文规则。", "Keep existing behavior; no writing rules are added to normal chat.")}</small>
             </button>
-            {cards.map((card) => (
+            {visibleCards.map((card) => (
               <div className={`zchat-style-row ${selectedIds.includes(card.id) ? "active" : ""}`} key={card.id}>
                 <button type="button" className="zchat-style-select" aria-pressed={selectedIds.includes(card.id)} onClick={() => onSelectionChange(selectedIds.includes(card.id) ? selectedIds.filter((id) => id !== card.id) : [...selectedIds, card.id])}>
                   <span className={`zchat-style-check ${selectedIds.includes(card.id) ? "selected" : ""}`} aria-hidden="true">{selectedIds.includes(card.id) ? <IconCheck size={13} /> : null}</span>
@@ -377,6 +424,7 @@ export function StyleCardPanel({
                 </div>
               </div>
             ))}
+            {!visibleCards.length && <p className="zchat-style-no-results">{tr("没有匹配的技法卡。试试其他关键词或筛选条件。", "No techniques match. Try another search or filter.")}</p>}
           </div>
           {error && <p className="hint error">{error}</p>}
           <div className="row end"><button type="button" onClick={() => setEdit({ id: "", name: "", description: "", rules: "", tasks: ["continue", "polish"], builtin: 0, version: 1 })}>{tr("新建自定义卡", "New custom card")}</button></div>
