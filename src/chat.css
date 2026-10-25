@@ -1193,6 +1193,35 @@
   font-size: 10px;
   line-height: 1.5;
 }
+.zchat-picker-bulk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #e2ddd2);
+  border-radius: var(--r-md, 10px);
+  background: color-mix(in srgb, var(--panel) 32%, var(--paper));
+  color: var(--ink, var(--text, #2c2a26));
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur, 180ms) var(--ease, ease), background var(--dur, 180ms) var(--ease, ease);
+}
+.zchat-picker-bulk > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+}
+.zchat-picker-bulk > span svg { flex: none; color: var(--accent, #4d7a68); }
+.zchat-picker-bulk > small { flex: none; color: var(--muted, #8a8577); font-size: 10px; }
+.zchat-picker-bulk:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft, var(--accent2, #dfe9e3)); }
+.zchat-picker-bulk:focus-visible { outline: 2px solid var(--accent, #4d7a68); outline-offset: 1px; }
+.zchat-picker-bulk:disabled { opacity: .72; cursor: default; }
 .zchat-picker-empty {
   padding: 9px 10px;
   border: 1px dashed var(--line-strong, var(--line));
@@ -1500,8 +1529,8 @@
   margin-left: 18px;
   margin-right: 18px;
 }
-@media (prefers-reduced-motion: reduce) { .zchat-send, .zchat-context-ring { transition: none; } }
-.reduce-motion .zchat-send, .reduce-motion .zchat-context-ring { transition: none; }
+@media (prefers-reduced-motion: reduce) { .zchat-send, .zchat-context-ring, .zchat-picker-bulk { transition: none; } }
+.reduce-motion .zchat-send, .reduce-motion .zchat-context-ring, .reduce-motion .zchat-picker-bulk { transition: none; }
 .zchat-style-entry { flex: none; padding: 0 10px 6px; min-width: 0; }
 .zchat-composer-bar .zchat-style-entry { display: inline-flex; padding: 0; max-width: none; }
 .zchat-composer-bar .zchat-style-entry .zchat-pill.wide { max-width: 100%; min-width: 0; }

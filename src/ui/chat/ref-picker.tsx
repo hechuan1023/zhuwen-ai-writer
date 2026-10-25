@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnyRow, fmt, kindNameFor, kinds } from "../shared";
-import { IconCheck, IconClose, IconDoc, IconQuote, IconSparkle, IconUser } from "./icons";
+import { IconCheck, IconClose, IconDoc, IconPlus, IconQuote, IconSparkle, IconUser } from "./icons";
 import type { MaterialSuggestion } from "../../relevant";
 import { materialReferenceContent } from "../../relevant";
 
@@ -83,6 +83,10 @@ export function RefPicker({
   }, []);
 
   const others = bookChapters.filter((c) => c.id !== chapterId);
+  const unaddedSummaries = bookChapters.filter(
+    (chapter) => String(chapter.summary || "").trim() && !isAdded("summary", chapter.id),
+  );
+  const savedSummaryCount = bookChapters.filter((chapter) => String(chapter.summary || "").trim()).length;
 
   return (
     <>
@@ -192,6 +196,37 @@ export function RefPicker({
               ) : null}
             </div>
           </section>
+          {savedSummaryCount > 0 ? (
+            <section data-fd-id="ai-picker-book-outline">
+              <h4>
+                <IconDoc /> {tr("全书脉络", "Book overview")}
+              </h4>
+              <p className="zchat-picker-match-note">
+                {tr("一次加入各章已保存的摘要；每章仍是独立引用，可单独移除。不会加入章节全文。", "Add saved chapter summaries at once. Each stays a separate reference you can remove; chapter full text is not included.")}
+              </p>
+              <button
+                type="button"
+                className="zchat-picker-bulk"
+                data-fd-id="ai-picker-all-summaries"
+                disabled={!unaddedSummaries.length}
+                onClick={() => {
+                  for (const chapter of unaddedSummaries) {
+                    onAdd({
+                      label: `${chapter.title} · ${tr("摘要", "Summary")}`,
+                      kind: "summary",
+                      content: String(chapter.summary || ""),
+                      sourceId: chapter.id,
+                    });
+                  }
+                }}
+              >
+                <span><IconPlus /> {unaddedSummaries.length
+                  ? tr(`添加未引用摘要（${unaddedSummaries.length}）`, `Add remaining summaries (${unaddedSummaries.length})`)
+                  : tr("全书摘要已添加", "All summaries added")}</span>
+                <small>{tr(`共 ${savedSummaryCount} 章`, `${savedSummaryCount} chapters`)}</small>
+              </button>
+            </section>
+          ) : null}
           <section>
             <h4>
               <IconDoc /> {tr("其他章节", "Other chapters")}
