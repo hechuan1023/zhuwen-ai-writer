@@ -55,6 +55,28 @@ const bounded = (value: unknown, min: number, max: number, fallback: number) => 
   return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
 };
 
+function SearchSnippet({ text, query }: { text: string; query: string }) {
+  const queryText = query.trim();
+  const needle = queryText.toLowerCase();
+  if (!needle) return <>{text}</>;
+  const queryLength = queryText.length;
+  const lower = text.toLowerCase();
+  const parts: Array<{ text: string; highlighted: boolean; key: number }> = [];
+  let cursor = 0;
+  let match = lower.indexOf(needle, cursor);
+  while (match >= 0) {
+    if (match > cursor) parts.push({ text: text.slice(cursor, match), highlighted: false, key: cursor });
+    parts.push({ text: text.slice(match, match + queryLength), highlighted: true, key: match });
+    cursor = match + queryLength;
+    match = lower.indexOf(needle, cursor);
+  }
+  if (!parts.length) return <>{text}</>;
+  if (cursor < text.length) parts.push({ text: text.slice(cursor), highlighted: false, key: cursor });
+  return <>{parts.map((part) => part.highlighted
+    ? <mark className="search-hit" key={part.key}>{part.text}</mark>
+    : <span className="search-snippet-text" key={part.key}>{part.text}</span>)}</>;
+}
+
 function WorkspaceIcon({ name }: { name: "chapters" | "library" | "history" | "trash" }) {
   const paths = {
     chapters: <><path d="M8 6h11M8 12h11M8 18h11"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></>,
@@ -147,6 +169,7 @@ export function Workspace({
     [matchCount, setMatchCount] = useState(0),
     [searchOpen, setSearchOpen] = useState(false),
     [bookQuery, setBookQuery] = useState(""),
+    [bookResultQuery, setBookResultQuery] = useState(""),
     [bookResults, setBookResults] = useState<AnyRow[]>([]),
     [bookSearching, setBookSearching] = useState(false),
     [bookProgress, setBookProgress] = useState({ scanned: 0, total: 0, matches: 0 }),
@@ -889,12 +912,15 @@ export function Workspace({
     const query = bookQuery.trim();
     if (!query) {
       setBookResults([]);
+      setBookResultQuery("");
       return;
     }
     if (searchRequest.current)
       await api("search:cancel", searchRequest.current);
     const requestId = crypto.randomUUID();
     searchRequest.current = requestId;
+    setBookResults([]);
+    setBookResultQuery("");
     setBookProgress({ scanned: 0, total: chapters.length, matches: 0 });
     setBookSearching(true);
     const r = await api<{ results: AnyRow[]; cancelled: boolean }>("search:novel", {
@@ -905,7 +931,10 @@ export function Workspace({
     if (searchRequest.current !== requestId) return;
     searchRequest.current = "";
     setBookSearching(false);
-    if (r.ok) setBookResults(r.data.results);
+    if (r.ok) {
+      setBookResults(r.data.results);
+      setBookResultQuery(query);
+    }
     else notify(r.error || tr("搜索失败", "Search failed"));
   }
   async function closeBookSearch() {
@@ -929,7 +958,8 @@ export function Workspace({
     }
     const target = chapters.find((c) => c.id === resultId);
     if (!target) return;
-    const query = bookQuery.trim();
+    const query = bookResultQuery;
+    if (!query) return;
     setSearchOpen(false);
     await switchChapter(target);
     setFindText(query);
@@ -2364,7 +2394,7 @@ export function Workspace({
                 <span>{tr(`已扫描 ${bookProgress.scanned} / ${bookProgress.total} 章，找到 ${bookProgress.matches} 章`, `Scanned ${bookProgress.scanned} / ${bookProgress.total} chapters; ${bookProgress.matches} matched`)}</span>
               </div>
             )}
-            {!bookSearching && bookQuery.trim() && !bookResults.length && (
+            {!bookSearching && bookResultQuery === bookQuery.trim() && bookResultQuery && !bookResults.length && (
               <p className="hint">{tr(`没有在章节或故事资料中找到“${bookQuery.trim()}”。`, `No chapters or story materials contain “${bookQuery.trim()}”.`)}</p>
             )}
             <div className="search-results">
@@ -2380,7 +2410,7 @@ export function Workspace({
                       : tr("章节", "Chapter")}</small>
                     <small>{tr(`${r.count} 处`, `${r.count} matches`)}</small>
                   </b>
-                  <span>{r.snippet}</span>
+                  <span><SearchSnippet text={String(r.snippet || "")} query={bookResultQuery} /></span>
                 </button>
               ))}
             </div>

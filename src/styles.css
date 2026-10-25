@@ -1898,6 +1898,7 @@ button.danger-text:not(:disabled):hover {
   white-space: pre-wrap;
   word-break: break-word;
 }
+.search-results mark.search-hit { border-radius: 3px; padding: 0 1px; background: color-mix(in srgb, var(--warning) 30%, var(--paper)); color: var(--ink); font-weight: 650; }
 .phrase-audit { display: grid; gap: 10px; }
 .phrase-audit > .hint { margin: 0; line-height: 1.55; }
 .phrase-audit-list { display: grid; gap: 6px; max-height: min(52vh, 520px); overflow: auto; overscroll-behavior: contain; }
