@@ -1419,6 +1419,10 @@
 .zchat.expanded .zchat-scroll-inner {
   padding-left: 22px;
   padding-right: 22px;
+  align-items: center;
+}
+.zchat.expanded .zchat-scroll-inner > .zchat-msg {
+  width: min(100%, 880px);
 }
 .zchat.expanded .zchat-composer {
   margin-left: 18px;
