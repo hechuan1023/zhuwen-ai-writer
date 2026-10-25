@@ -53,6 +53,12 @@ export function ChatMenu({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const openAtEndRef = useRef(false);
+  const typeaheadRef = useRef("");
+  const typeaheadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (typeaheadTimerRef.current) clearTimeout(typeaheadTimerRef.current);
+  }, []);
 
   const enabled = items.map((it, i) => (it.disabled ? -1 : i)).filter((i) => i >= 0);
   const selectionMenu = items.some((it) => typeof it.selected === "boolean");
@@ -60,6 +66,8 @@ export function ChatMenu({
   const close = useCallback(
     (restoreFocus = true) => {
       setOpen(false);
+      typeaheadRef.current = "";
+      if (typeaheadTimerRef.current) clearTimeout(typeaheadTimerRef.current);
       if (restoreFocus) triggerRef.current?.focus();
     },
     [],
@@ -167,6 +175,45 @@ export function ChatMenu({
               focusEdge("last");
             } else if (e.key === "Tab") {
               // Let the browser move focus normally; onBlur closes after it leaves the menu.
+            } else if (
+              e.key.length === 1 &&
+              e.key !== " " &&
+              !e.ctrlKey &&
+              !e.metaKey &&
+              !e.altKey &&
+              !e.nativeEvent.isComposing
+            ) {
+              // Match the native menu convention: typing jumps to the next matching item.
+              const char = e.key.normalize("NFKC").toLocaleLowerCase();
+              const previous = typeaheadRef.current;
+              const repeated = previous.length > 0 && [...previous].every((value) => value === char);
+              const query = repeated ? char : `${previous}${char}`;
+              typeaheadRef.current = query;
+              if (typeaheadTimerRef.current) clearTimeout(typeaheadTimerRef.current);
+              typeaheadTimerRef.current = setTimeout(() => {
+                typeaheadRef.current = "";
+                typeaheadTimerRef.current = null;
+              }, 650);
+
+              const current = enabled.indexOf(active);
+              const findMatch = (prefix: string) => {
+                for (let offset = 1; offset <= enabled.length; offset += 1) {
+                  const index = enabled[(Math.max(current, -1) + offset) % enabled.length];
+                  const label = items[index]?.label.normalize("NFKC").toLocaleLowerCase();
+                  if (label?.startsWith(prefix)) return index;
+                }
+                return -1;
+              };
+              let index = findMatch(query);
+              if (index < 0 && query !== char) {
+                typeaheadRef.current = char;
+                index = findMatch(char);
+              }
+              if (index >= 0) {
+                e.preventDefault();
+                setActive(index);
+                itemRefs.current[index]?.focus();
+              }
             }
           }}
         >
