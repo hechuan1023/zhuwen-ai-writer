@@ -126,6 +126,8 @@ export type ReplyActions = {
   onSegments: () => void;
   onCompare: () => void;
   onSaveInspiration: () => void;
+  canReviewStyle: boolean;
+  onReviewStyle: () => void;
   /** 浮窗内不允许改动正文 */
   floatOnlyHint?: boolean;
   /** 自然化润色必须先走原文/结果差异确认 */
@@ -220,6 +222,16 @@ function AssistantActions({
     },
   ];
   const moreItems: MenuItem[] = [
+    {
+      id: "ai-review-style-use",
+      label: tr("核对技法落实", "Review technique use"),
+      icon: <IconDoc />,
+      hint: actions.canReviewStyle
+        ? tr("在独立分支中对照实际生效规则", "Compare against the actual rules in a separate branch")
+        : tr("此回复未保存可核对的技法规则", "No saved technique rules for this response"),
+      disabled: !actions.canReviewStyle,
+      onSelect: actions.onReviewStyle,
+    },
     {
       id: "ai-more-inspiration",
       label: tr("存为灵感", "Save as idea"),

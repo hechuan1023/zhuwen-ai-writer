@@ -15,6 +15,7 @@ import { ContextDialog } from "./chat/context-dialog";
 import { StyleCardPanel, type StyleCard, type StyleIntensity } from "./chat/style-card-panel";
 import {
   contextBreakdown,
+  findSourcePrompt,
   markInvalidRefs,
 } from "./chat/chat-model";
 
@@ -1203,6 +1204,16 @@ export function AiPanel({
       ),
     },
     {
+      id: "review-style-application",
+      kind: "check",
+      label: tr("核对技法落实", "Review technique use"),
+      draft: tr(
+        "请核对引用的 AI 回复是否落实了生成时实际注入的写作技法规则。逐条标记“落实充分 / 部分落实 / 未落实 / 不适用”，引用回复中的短证据；指出过度套用或公式化迹象，并给出最多 3 条具体修改建议。只做评估，不要直接改写正文或补充事实。结论属于 AI 初审，由作者决定是否采纳。",
+        "Review whether the referenced AI response follows the writing techniques actually used to generate it. Mark each rule as met, partial, missing, or not applicable, with brief evidence from the response. Flag over-application or formulaic patterns and give up to 3 concrete revision suggestions. Assess only; do not rewrite the prose or add facts. This is an AI first pass for the author to judge.",
+      ),
+      hint: tr("需引用目标回复与生成规则；从回复菜单启动可自动准备。", "Attach the response and its rules; launching from a reply prepares both."),
+    },
+    {
       id: "ground-setting",
       kind: "check",
       label: tr("设定奠基", "Ground setting"),
@@ -1272,8 +1283,62 @@ export function AiPanel({
       hint: tr("先添加正文选区；结果会进入 AI 面板，确认后才修改正文。", "Add a manuscript selection first; nothing changes until you adopt the result."),
     },
   ];
+  async function prepareStyleReview(reply: AnyRow, sourcePrompt: AnyRow) {
+    const rules = String(sourcePrompt.style_rules || "").trim();
+    if (!rules) {
+      notify(tr("这条回复生成时没有注入技法卡规则，无法核对风格落实。", "No technique rules were injected for this response, so style adherence cannot be reviewed."));
+      return;
+    }
+    const branched = await api<{ conversationId: string; title?: string }>("ai:conversation:branch", String(sourcePrompt.id || ""));
+    if (!branched.ok || !branched.data?.conversationId) {
+      notify(branched.error || tr("无法为风格核对创建独立分支。", "Could not create a separate branch for the style review."));
+      return;
+    }
+    const branchId = String(branched.data.conversationId);
+    const loaded = await api("ai:session:loadConversation", branchId);
+    if (!loaded.ok) {
+      notify(loaded.error || tr("分支已创建，但暂时无法打开。", "The branch was created, but could not be opened."));
+      return;
+    }
+    const reviewContexts = [
+      {
+        label: tr("生成时的原始提问", "Original writing request"),
+        kind: "style-review-request",
+        content: String(sourcePrompt.content || ""),
+        sourceId: String(sourcePrompt.id || ""),
+      },
+      {
+        label: tr("生成时实际注入的技法规则", "Technique rules actually used"),
+        kind: "style-review-rules",
+        content: rules,
+        sourceId: String(sourcePrompt.id || ""),
+      },
+      {
+        label: tr("待核对的 AI 回复", "AI response to review"),
+        kind: "style-review-output",
+        content: String(reply.content || ""),
+        sourceId: String(reply.id || ""),
+      },
+    ];
+    const task = tasks.find((item) => item.id === "review-style-application");
+    const prompt = String(task?.draft || "");
+    const saved = await saveComposerState(prompt, reviewContexts, branchId, []);
+    if (!saved.ok || saved.data?.accepted === false) {
+      notify(saved.error || tr("风格核对分支已创建，但草稿保存失败。", "The style-review branch was created, but its draft could not be saved."));
+      return;
+    }
+    setMode("check");
+    setActiveTaskId("review-style-application");
+    setCurrentConversationTitle(String(branched.data.title || tr("技法落实核对", "Technique review")));
+    setHistoryOpen(false);
+    loadConversations({ offset: 0 });
+    window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-fd-id="ai-input"]')?.focus());
+    notify(tr("已在独立分支中准备好风格核对。确认引用与问题后再发送，不会自动改写正文。", "A separate style-review branch is ready. Review its references and prompt before sending; no manuscript text is changed automatically."));
+  }
   const actionsFor = useCallback(
     (m: AnyRow): ReplyActions => {
+      const sourcePrompt = findSourcePrompt(messages, m);
+      const hasStyleSnapshot = Boolean(String(sourcePrompt?.style_rules || "").trim());
       const naturalize = m.task_kind === "naturalize";
       const sourceChapterMismatch = Boolean(m.chapter_id && chapterId && m.chapter_id !== chapterId);
       const sourceChapterTitle = bookChapters.find((item) => item.id === m.chapter_id)?.title || tr("来源章节", "source chapter");
@@ -1299,6 +1364,10 @@ export function AiPanel({
       onAppendToEnd: () => naturalize ? openComparison() : void applyEnd(m.content, m.source_revision, m.chapter_id, undefined, m.source_message_id),
       onSegments: () => naturalize ? openComparison() : setSegments({ msg: m }),
       onCompare: openComparison,
+      canReviewStyle: hasStyleSnapshot && !m.incomplete,
+      onReviewStyle: () => {
+        if (sourcePrompt) void prepareStyleReview(m, sourcePrompt);
+      },
       onSaveInspiration: () => {
         void api("library:save", {
           novelId,
@@ -1331,8 +1400,10 @@ export function AiPanel({
       editor,
       float,
       language,
+      messages,
       novelId,
       notify,
+      prepareStyleReview,
     ],
   );
   const renderMarkdown = useCallback(
