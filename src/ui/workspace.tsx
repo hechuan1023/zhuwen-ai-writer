@@ -913,8 +913,18 @@ export function Workspace({
     }
     setSearchOpen(false);
   }
-  async function openSearchResult(chapterId: string) {
-    const target = chapters.find((c) => c.id === chapterId);
+  async function openSearchResult(resultId: string) {
+    if (leftView === "library" && libraryControlsRef.current?.isDirty() && !(await libraryControlsRef.current.requestLeave())) return;
+    const result = bookResults.find((item) => item.chapterId === resultId || item.sourceId === resultId);
+    if (result?.resultType === "library") {
+      const libraryKinds = new Set(["outline", "scene", "character", "world", "inspiration", "timeline", "foreshadow", "relation"]);
+      if (!libraryKinds.has(result.kind) || !result.sourceId) return;
+      setSearchOpen(false);
+      setLeftView("library");
+      setSourceNavigationRequest({ nonce: crypto.randomUUID(), kind: result.kind, sourceId: result.sourceId });
+      return;
+    }
+    const target = chapters.find((c) => c.id === resultId);
     if (!target) return;
     const query = bookQuery.trim();
     setSearchOpen(false);
@@ -2297,12 +2307,12 @@ export function Workspace({
         </Modal>
       )}
       {searchOpen && (
-        <Modal title={tr("全书查找", "Search book")} close={closeBookSearch}>
+        <Modal title={tr("全书与资料查找", "Search book & story bible")} close={closeBookSearch}>
           <div className="book-search">
             <div className="row">
               <input
                 autoFocus
-                placeholder={tr("输入关键词，回车搜索", "Enter keywords and press Enter")}
+                placeholder={tr("搜章节正文、人物、设定、场景等；回车搜索", "Search chapters, characters, settings, scenes… press Enter")}
                 value={bookQuery}
                 onChange={(e) => setBookQuery(e.target.value)}
                 onKeyDown={(e) => {
@@ -2330,16 +2340,19 @@ export function Workspace({
               </div>
             )}
             {!bookSearching && bookQuery.trim() && !bookResults.length && (
-              <p className="hint">{tr(`没有找到包含“${bookQuery.trim()}”的章节。`, `No chapters contain “${bookQuery.trim()}”.`)}</p>
+              <p className="hint">{tr(`没有在章节或故事资料中找到“${bookQuery.trim()}”。`, `No chapters or story materials contain “${bookQuery.trim()}”.`)}</p>
             )}
             <div className="search-results">
               {bookResults.map((r) => (
                 <button
-                  key={r.chapterId}
-                  onClick={() => openSearchResult(r.chapterId)}
+                  key={r.resultType === "library" ? `library:${r.sourceId}` : `chapter:${r.chapterId}`}
+                  onClick={() => openSearchResult(r.resultType === "library" ? r.sourceId : r.chapterId)}
                 >
                   <b>
                     {r.title}
+                    <small className="search-result-kind">{r.resultType === "library"
+                      ? ({ outline: tr("大纲", "Outline"), scene: tr("场景", "Scene"), character: tr("人物", "Character"), world: tr("世界设定", "World"), inspiration: tr("灵感", "Idea"), timeline: tr("时间线", "Timeline"), foreshadow: tr("伏笔", "Foreshadow"), relation: tr("关系", "Relationship") } as Record<string, string>)[r.kind] || tr("故事资料", "Story material")
+                      : tr("章节", "Chapter")}</small>
                     <small>{tr(`${r.count} 处`, `${r.count} matches`)}</small>
                   </b>
                   <span>{r.snippet}</span>

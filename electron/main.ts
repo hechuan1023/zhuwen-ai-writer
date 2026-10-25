@@ -2460,17 +2460,19 @@ function registerIpc(userDir: string) {
     searchTasks.set(requestId, task);
     const lower = query.toLowerCase();
     const out: any[] = [];
-    const total = Number(
-      (get(
-        "SELECT COUNT(*) total FROM chapters WHERE novel_id=? AND deleted_at IS NULL",
-        p.novelId,
-      ) as any)?.total || 0,
+    const chapterTotal = Number(
+      (get("SELECT COUNT(*) total FROM chapters WHERE novel_id=? AND deleted_at IS NULL", p.novelId) as any)?.total || 0,
     );
+    const libraryTotal = Number(
+      (get("SELECT COUNT(*) total FROM library_items WHERE novel_id=? AND deleted_at IS NULL", p.novelId) as any)?.total || 0,
+    );
+    const total = chapterTotal + libraryTotal;
     let scanned = 0;
     let cursorSort: number | null = null;
     let cursorId = "";
     try {
-      while (scanned < total && !task.cancelled) {
+      event.sender.send("search:progress", { requestId, scanned, total, matches: 0 });
+      while (scanned < chapterTotal && !task.cancelled) {
         const rows: any[] = cursorSort === null
           ? all(
               "SELECT id,title,plain_text,sort_order FROM chapters WHERE novel_id=? AND deleted_at IS NULL ORDER BY sort_order,id LIMIT 24",
@@ -2497,6 +2499,7 @@ function registerIpc(userDir: string) {
           const first = hay.indexOf(lower);
           const start = Math.max(0, first - 24);
           out.push({
+            resultType: "chapter",
             chapterId: r.id,
             title: r.title,
             count,
@@ -2516,6 +2519,69 @@ function registerIpc(userDir: string) {
           total,
           matches: out.length,
         });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+      let libraryCursor: { kind: string; sort_order: number; id: string } | null = null;
+      while (scanned < total && !task.cancelled) {
+        const rows: any[] = libraryCursor === null
+          ? all(
+              "SELECT id,title,kind,content_json,tags_json,sort_order FROM library_items WHERE novel_id=? AND deleted_at IS NULL ORDER BY kind,sort_order,id LIMIT 48",
+              p.novelId,
+            )
+          : all(
+              "SELECT id,title,kind,content_json,tags_json,sort_order FROM library_items WHERE novel_id=? AND deleted_at IS NULL AND (kind>? OR (kind=? AND (sort_order>? OR (sort_order=? AND id>?)))) ORDER BY kind,sort_order,id LIMIT 48",
+              p.novelId,
+              libraryCursor.kind,
+              libraryCursor.kind,
+              libraryCursor.sort_order,
+              libraryCursor.sort_order,
+              libraryCursor.id,
+            );
+        if (!rows.length) break;
+        for (const row of rows) {
+          let content: unknown = {};
+          try { content = JSON.parse(String(row.content_json || "{}")); } catch { content = {}; }
+          const textParts: string[] = [String(row.title || "")];
+          const collectText = (value: unknown, key = "") => {
+            if (["id", "chapterId", "chapter_id", "archivedAt", "createdAt", "updatedAt"].includes(key)) return;
+            if (typeof value === "string") {
+              if (value.trim()) textParts.push(value);
+            } else if (Array.isArray(value)) {
+              for (const item of value) collectText(item, key);
+            } else if (value && typeof value === "object") {
+              for (const [childKey, childValue] of Object.entries(value)) collectText(childValue, childKey);
+            }
+          };
+          collectText(content);
+          try {
+            const tags = JSON.parse(String(row.tags_json || "[]"));
+            collectText(tags, "tags");
+          } catch { /* Invalid legacy tags should not stop a project search. */ }
+          const text = textParts.join("\n");
+          const hay = text.toLowerCase();
+          let idx = hay.indexOf(lower);
+          if (idx !== -1) {
+            let count = 0;
+            while (idx !== -1) {
+              count++;
+              idx = hay.indexOf(lower, idx + lower.length);
+            }
+            const first = hay.indexOf(lower);
+            const start = Math.max(0, first - 24);
+            out.push({
+              resultType: "library",
+              sourceId: row.id,
+              kind: row.kind,
+              title: row.title,
+              count,
+              snippet: (start > 0 ? "…" : "") + text.slice(start, first + query.length + 48) + (first + query.length + 48 < text.length ? "…" : ""),
+            });
+          }
+        }
+        scanned += rows.length;
+        const cursor = rows[rows.length - 1];
+        libraryCursor = { kind: String(cursor.kind), sort_order: Number(cursor.sort_order), id: String(cursor.id) };
+        event.sender.send("search:progress", { requestId, scanned, total, matches: out.length });
         await new Promise<void>((resolve) => setImmediate(resolve));
       }
       return ok({ results: out, cancelled: task.cancelled });
