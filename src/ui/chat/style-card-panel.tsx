@@ -17,6 +17,7 @@ function styleLabel(card: StyleCard, language: string) {
     "style-serial-hook-payoff": ["Serial hooks & payoff", "Connect chapter rewards, unresolved actions, and the next reading impulse."],
     "style-scene-visual-payoff": ["Visual scene anchors & emotional aftermath", "Sharpen action and spatial clarity while preserving interiority and emotional resonance."],
     "style-suspense-information-control": ["Clues & information control", "Keep clues traceable and reveals consequential."],
+    "style-multipov-ensemble": ["Multi-POV ensemble & information gaps", "Use bounded viewpoint shifts to reveal distinct motives, information, and consequences."],
     "style-character-voice-tension": ["Character voice & tension", "Give dialogue a character-specific agenda and subtext."],
     "style-light-comedy-mismatch": ["Situational comedy", "Build humor from character relationships and mismatched situations."],
     "style-grounded-mystery": ["Grounded mystery", "Anchor investigation in daily routines, interests, and verifiable evidence."],
@@ -43,6 +44,12 @@ function taskLabel(task: string, language: string) {
 }
 
 const TECHNIQUE_PRESETS = [
+  {
+    id: "genre-multipov-suspense",
+    name: ["多视角悬疑群像", "Multi-POV ensemble suspense"],
+    description: ["视点纪律 + 线索信息差 + 人物关系", "Viewpoint discipline + clue distribution + character dynamics"],
+    cardIds: ["style-multipov-ensemble", "style-suspense-information-control", "style-character-voice-tension"],
+  },
   {
     id: "genre-authorial-fantasy",
     name: ["作者性幻想连载", "Authorial fantasy serial"],
@@ -247,7 +254,7 @@ export function StyleCardPanel({
       />
       {open && (
         <Modal title={tr("AI 写作风格", "AI writing styles")} close={() => setOpen(false)}>
-          <p className="hint">{tr("可组合多张技法卡。每张卡按其适用任务生效；普通聊天和逻辑检查不会注入写作风格。", "Combine techniques. Each card applies only to its enabled writing tasks; normal chat and logic checks do not receive style rules.")}</p>
+          <p className="hint">{tr("可组合多张技法卡。内置卡抽象通用叙事方法，不复刻单部作品或作者表达；每张卡按适用任务生效，普通聊天和逻辑检查不会注入写作风格。", "Combine techniques. Built-ins abstract general narrative methods rather than copying a specific work or author; cards apply only to enabled writing tasks, not normal chat or logic checks.")}</p>
           <section className="zchat-style-preview" data-fd-id="ai-style-composition-preview">
             <header><b>{tr("本任务实际注入规则", "Rules applied to this task")}</b><small>{taskLabel(taskKind, language)}</small></header>
             <div className="zchat-style-intensity" role="group" aria-label={tr("技法强调度", "Technique emphasis")} data-fd-id="ai-style-intensity">
