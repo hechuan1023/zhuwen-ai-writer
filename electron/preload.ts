@@ -111,7 +111,8 @@ contextBridge.exposeInMainWorld('zhuwen', {
       return Promise.resolve({ ok: true, data: [{ role: 'user', content: String((payload as any)?.prompt || '') }] })
     if (process.env.ZHUWEN_UI_SMOKE && channel === 'ai:send') {
       uiSmokeLastAiSend = payload
-      return Promise.resolve({ ok: true, data: { smoke: true } })
+      if (process.env.ZHUWEN_AI_ECHO !== '1')
+        return Promise.resolve({ ok: true, data: { smoke: true } })
     }
     return ipcRenderer.invoke(channel, payload)
   },

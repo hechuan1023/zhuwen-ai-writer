@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BASE_STYLE_RULES, BUILTIN_STYLE_CARDS, NATURALIZE_RULES, buildTaskAndStyleInstructions, effectiveStyleRules, styleInstruction } from "../electron/ai-style-cards";
+import { BASE_STYLE_RULES, BUILTIN_STYLE_CARDS, NATURALIZE_RULES, STYLE_CARD_BOUNDARY_RULES, buildTaskAndStyleInstructions, effectiveStyleRules, styleInstruction } from "../electron/ai-style-cards";
 import { parseStyleCompositionBundle } from "../electron/ai-style-bundle";
 
 describe("AI 写作风格卡", () => {
@@ -28,6 +28,16 @@ describe("AI 写作风格卡", () => {
     expect(instruction).toContain(card.name);
     expect(instruction.match(/【组合写作方法：/g)).toHaveLength(1);
     expect(instruction.match(/围绕人物当前要做的事展开场景/g)).toHaveLength(1);
+  });
+
+  it("明确任务/作品事实优先级，风格卡不新增事实、不抹平作者语气", () => {
+    const instruction = buildTaskAndStyleInstructions(BUILTIN_STYLE_CARDS[1], "continue");
+    expect(instruction).toContain(STYLE_CARD_BOUNDARY_RULES);
+    expect(instruction).toContain("本轮用户明确的任务要求");
+    expect(instruction).toContain("作品已确认事实/引用优先于技法卡");
+    expect(instruction).toContain("不悄悄改写作品事实");
+    expect(instruction).toContain("保留有效的人物毛边、作者独特观察和既有语气");
+    expect(instruction).toContain("不是作品事实");
   });
 
   it("只注入适用于当前任务的卡片；自然化兼容润色卡且不重复基础规则", () => {

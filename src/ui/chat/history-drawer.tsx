@@ -6,6 +6,7 @@ import { filterConversations, groupConversations, partitionPinnedConversations }
 /** 历史对话抽屉：浮层覆盖，不挤压消息区；Esc 关闭并归还焦点。 */
 export function HistoryDrawer({
   language,
+  novelTitle,
   conversations,
   currentId,
   query,
@@ -24,6 +25,7 @@ export function HistoryDrawer({
   onClose,
 }: {
   language: string;
+  novelTitle: string;
   conversations: AnyRow[];
   currentId: string;
   query: string;
@@ -173,6 +175,17 @@ export function HistoryDrawer({
           >
             <IconClose />
           </button>
+        </div>
+        <div
+          className="zchat-history-novel"
+          role="note"
+          aria-label={tr(`当前作品：${novelTitle || "未命名作品"}`, `Current novel: ${novelTitle || "Untitled novel"}`)}
+          data-fd-id="ai-history-novel-scope"
+        >
+          <span>{tr("当前作品", "Current novel")}</span>
+          <b className="zchat-ellipsis" title={novelTitle || tr("未命名作品", "Untitled novel")}>
+            {novelTitle || tr("未命名作品", "Untitled novel")}
+          </b>
         </div>
         <div className="zchat-history-scope" role="group" aria-label={tr("会话范围", "Conversation scope")} data-fd-id="ai-history-scope">
           <button type="button" aria-pressed={!archivedMode} onClick={() => onArchivedModeChange(false)}>

@@ -13,7 +13,7 @@
     "icons": "electron scripts/make-icon.js",
     "test": "tsc -p tsconfig.node.json && electron dist-electron/smoke.js",
     "test:unit": "vitest run",
-    "test:ui": "npm run build && cross-env ZHUWEN_UI_SMOKE=1 electron .",
+    "test:ui": "npm run build && cross-env ZHUWEN_UI_SMOKE=1 ZHUWEN_AI_ECHO=1 electron .",
     "dist": "npm run build && electron-builder --win nsis",
     "dist:mac": "npm run build && electron-builder --mac",
     "pack": "npm run build && electron-builder --dir"

@@ -788,10 +788,25 @@
   font-size: 13px;
   padding: 6px 0;
 }
+.zchat-history-novel {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 12px 3px;
+  color: var(--muted, #8a8577);
+  font-size: 11px;
+}
+.zchat-history-novel b {
+  min-width: 0;
+  color: var(--ink, var(--text, #2c2a26));
+  font-size: 12px;
+  font-weight: 600;
+}
 .zchat-history-scope {
   display: flex;
   gap: 3px;
-  margin: 6px 8px 0;
+  margin: 3px 8px 0;
   padding: 3px;
   border: 1px solid var(--line, #e2ddd2);
   border-radius: 9px;

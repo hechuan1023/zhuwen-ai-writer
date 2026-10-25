@@ -9,6 +9,7 @@ import {
 } from "electron";
 import path from "node:path";
 import fs from "node:fs";
+import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { extractDocxTextBuffer } from "./docx";
 import { decodeImportBuffer } from "./text-import";
@@ -41,6 +42,16 @@ const searchTasks = new Map<string, { cancelled: boolean }>();
 const importTasks = new Map<number, AbortController>();
 const importFiles = new Map<string, { file: string; createdAt: number }>();
 const IMPORT_SESSION_TTL = 30 * 60 * 1000;
+let uiSmokeEchoBaseUrl = "";
+let uiSmokeEchoServer: ReturnType<typeof createServer> | null = null;
+let uiSmokeEchoRequest: { authorization: string; payload: any } | null = null;
+function closeUiSmokeEchoServer() {
+  if (!uiSmokeEchoServer) return;
+  uiSmokeEchoServer.closeAllConnections();
+  uiSmokeEchoServer.close();
+  uiSmokeEchoServer = null;
+  uiSmokeEchoBaseUrl = "";
+}
 // 铸文商用版固定走服务器网关：客户端不保存 LongCat API Key，也不允许切换模型。
 // 网关令牌只允许通过运行环境注入，禁止写入源码或安装包。
 const ZHUWEN_SERVER_CONNECTION_ID = "zhuwen-server-longcat";
@@ -509,6 +520,54 @@ function createMainWindow() {
         fs.rmSync(uiSmokeErrorFile, { force: true });
       } catch {}
       try {
+        if (process.env.ZHUWEN_AI_ECHO === "1") {
+          uiSmokeEchoRequest = null;
+          uiSmokeEchoServer = createServer((req, res) => {
+            const body: Buffer[] = [];
+            req.on("data", (chunk: Buffer) => body.push(Buffer.from(chunk)));
+            req.on("end", () => {
+              try {
+                const payload = JSON.parse(Buffer.concat(body).toString("utf8"));
+                uiSmokeEchoRequest = {
+                  authorization: String(req.headers.authorization || ""),
+                  payload,
+                };
+                const lastUser = [...(Array.isArray(payload.messages) ? payload.messages : [])]
+                  .reverse()
+                  .find((message: any) => message?.role === "user");
+                const responseText = `Echo response: ${String(lastUser?.content || "")}`;
+                res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+                const chunks = Array.from(responseText).reduce((all: string[][], char) => {
+                  if (!all.length || all[all.length - 1].length >= 6) all.push([]);
+                  all[all.length - 1].push(char);
+                  return all;
+                }, []);
+                let index = 0;
+                const sendChunk = () => {
+                  if (index >= chunks.length) {
+                    res.write("data: [DONE]\n\n");
+                    res.end();
+                    return;
+                  }
+                  const content = chunks[index++].join("");
+                  res.write(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`);
+                  setTimeout(sendChunk, 45);
+                };
+                sendChunk();
+              } catch {
+                res.writeHead(400);
+                res.end("invalid test request");
+              }
+            });
+          });
+          await new Promise<void>((resolve, reject) => {
+            uiSmokeEchoServer!.once("error", reject);
+            uiSmokeEchoServer!.listen(0, "127.0.0.1", resolve);
+          });
+          const address = uiSmokeEchoServer.address();
+          if (!address || typeof address === "string") throw new Error("Local AI echo server did not bind a TCP port");
+          uiSmokeEchoBaseUrl = `http://127.0.0.1:${address.port}/v1`;
+        }
         await wait(500);
         // 首次引导：有则关闭，避免挡住首页操作
         await js(
@@ -624,16 +683,50 @@ function createMainWindow() {
             await shot("ai-retry-options");
             await js(`document.querySelector('[data-fd-id="ai-regenerate-branch"]')?.click()`);
             let retrySent = false;
-            for (let i = 0; i < 30 && !retrySent; i++) {
+            let echoReplyReady = false;
+            let echoStreamingObserved = false;
+            let echoReplyText = "";
+            for (let i = 0; i < 160 && !echoReplyReady; i++) {
               retrySent = await js(`Boolean(window.zhuwen.__uiSmokeGetLastAiSend()?.prompt)`);
-              if (!retrySent) await wait(100);
+              const visible = await js(`(()=>{const content=[...document.querySelectorAll('.zchat-msg.assistant .zchat-msg-content')].map(el=>el.textContent||'').find(text=>text.includes('Echo response:'));return {streaming:Boolean(document.querySelector('.zchat-msg.assistant .zchat-cursor')),content:content||''}})()`);
+              echoStreamingObserved ||= Boolean(visible.streaming);
+              echoReplyText = String(visible.content || "");
+              echoReplyReady = echoReplyText.includes("Echo response: UI smoke: regenerate this exact prompt");
+              if (!echoReplyReady) await wait(50);
             }
             regenerateDiagnostics.retrySent = retrySent;
+            regenerateDiagnostics.echoStreamingObserved = echoStreamingObserved;
+            regenerateDiagnostics.echoReplyReady = echoReplyReady;
+            regenerateDiagnostics.echoReplyText = echoReplyText;
             regenerateDiagnostics.toast = await js(`document.querySelector('.toast')?.textContent||''`);
             regenerateDiagnostics.currentSession = await js(`window.zhuwen.invoke('ai:session:get').then(r=>({conversationId:r.data?.conversationId,novelId:r.data?.novelId,chapterId:r.data?.chapter?.id}))`);
             regenerateDiagnostics.branchRows = db.prepare("SELECT id,title FROM ai_conversations WHERE novel_id=? AND title LIKE '%分支%' ORDER BY created_at DESC LIMIT 2").all(smokeAiNovel.id);
             regenerateDiagnostics.sentPayload = retrySent ? await js(`({prompt:window.zhuwen.__uiSmokeGetLastAiSend()?.prompt,conversationId:window.zhuwen.__uiSmokeGetLastAiSend()?.conversationId,connectionId:window.zhuwen.__uiSmokeGetLastAiSend()?.connectionId})`) : null;
-            regenerateUiOk = sourceReplyReady && retryMenuOk && retrySent && await js(
+            const currentSessionForEcho = regenerateDiagnostics.currentSession as { conversationId?: string } | null;
+            const branchId = String(currentSessionForEcho?.conversationId || "");
+            const savedEchoReply: any = branchId
+              ? db.prepare("SELECT content,incomplete FROM ai_messages WHERE conversation_id=? AND role='assistant' AND content LIKE 'Echo response:%' ORDER BY rowid DESC LIMIT 1").get(branchId)
+              : null;
+            const savedOriginalPrompt: any = branchId
+              ? db.prepare("SELECT content FROM ai_messages WHERE conversation_id=? AND role='user' ORDER BY rowid DESC LIMIT 1").get(branchId)
+              : null;
+            const echoPayload = uiSmokeEchoRequest?.payload;
+            const echoLastUser = [...(Array.isArray(echoPayload?.messages) ? echoPayload.messages : [])]
+              .reverse()
+              .find((message: any) => message?.role === "user");
+            const echoTransportOk = Boolean(
+              uiSmokeEchoRequest?.authorization === "Bearer ui-smoke-key" &&
+              echoPayload?.stream === true &&
+              echoLastUser?.content === "UI smoke: regenerate this exact prompt",
+            );
+            const echoPersistenceOk = Boolean(
+              savedEchoReply && Number(savedEchoReply.incomplete || 0) === 0 &&
+              savedEchoReply.content === "Echo response: UI smoke: regenerate this exact prompt" &&
+              savedOriginalPrompt?.content === "UI smoke: regenerate this exact prompt",
+            );
+            regenerateDiagnostics.echoTransportOk = echoTransportOk;
+            regenerateDiagnostics.echoPersistenceOk = echoPersistenceOk;
+            regenerateUiOk = sourceReplyReady && retryMenuOk && retrySent && echoReplyReady && echoStreamingObserved && echoTransportOk && echoPersistenceOk && await js(
               `window.zhuwen.__uiSmokeGetLastAiSend().prompt==='UI smoke: regenerate this exact prompt'&&window.zhuwen.__uiSmokeGetLastAiSend().conversationId!=='${sourceConvId}'&&window.zhuwen.__uiSmokeGetLastAiSend().connectionId==='ui-smoke-no-network'`,
             );
           }
@@ -675,7 +768,7 @@ function createMainWindow() {
         await wait(250);
         await shot("03-history-drawer");
         const historyDrawerOk = await js(
-          `Boolean(document.querySelector('[data-fd-id="ai-history-drawer"]')&&document.querySelector('[data-fd-id="ai-history-scope"]'))`,
+          `Boolean(document.querySelector('[data-fd-id="ai-history-drawer"]')&&document.querySelector('[data-fd-id="ai-history-scope"]')&&document.querySelector('[data-fd-id="ai-history-novel-scope"]')?.textContent.includes('界面测试作品'))`,
         );
         const historyArchiveScopeOk = await js(
           `(async()=>{const scope=document.querySelector('[data-fd-id="ai-history-scope"]');const archived=[...scope?.querySelectorAll('button')||[]].find(b=>b.textContent.includes('已归档')||b.textContent.includes('Archived'));if(!archived)return false;archived.click();await new Promise(r=>setTimeout(r,80));const switched=archived.getAttribute('aria-pressed')==='true';const active=[...scope.querySelectorAll('button')].find(b=>b!==archived);active?.click();await new Promise(r=>setTimeout(r,80));return switched&&active?.getAttribute('aria-pressed')==='true'})()`,
@@ -1075,12 +1168,14 @@ function createMainWindow() {
         console.log(
           `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n ai_managed_settings epub_reader_viewport reference_picker typography_settings daily_goal focus_session database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared ai_style_manager_action_icons history_drawer history_archive_scope ai_dock_left ai_dock_restore summary_modal library_kinds relation_graph relation_expand library_detail library_trash ${status} ${out}`,
         );
+        closeUiSmokeEchoServer();
         app.exit(0);
       } catch (e) {
         try { fs.mkdirSync(path.dirname(uiSmokeErrorFile), { recursive: true }); fs.writeFileSync(uiSmokeErrorFile, String(e instanceof Error ? e.stack || e.message : e)); } catch {}
         console.error(
           `UI_SMOKE_FAIL ${e instanceof Error ? e.message : String(e)}`,
         );
+        closeUiSmokeEchoServer();
         app.exit(1);
       }
     });
@@ -3277,12 +3372,27 @@ function registerIpc(userDir: string) {
       // 规则只在本次请求的内存快照中加入一次，不写入对话历史，避免逐轮累积。
       const history = withWriterPersona(conversationHistory(conv));
       if (style.instruction) history.splice(1, 0, { role: "system", content: style.instruction });
-      connection =
-        p.connectionId === ZHUWEN_SERVER_CONNECTION_ID
+      const useUiSmokeEcho =
+        process.env.ZHUWEN_UI_SMOKE === "1" &&
+        process.env.ZHUWEN_AI_ECHO === "1" &&
+        p.connectionId === "ui-smoke-no-network";
+      connection = useUiSmokeEcho
+        ? {
+            id: "ui-smoke-echo",
+            name: "Local UI smoke echo",
+            base_url: uiSmokeEchoBaseUrl,
+            model: "ui-smoke-echo",
+            temperature: 0,
+            max_tokens: 1024,
+            timeout_ms: 10000,
+            streaming: 1,
+          }
+        : p.connectionId === ZHUWEN_SERVER_CONNECTION_ID
           ? serverConnection()
           : get("SELECT * FROM api_connections WHERE id=?", p.connectionId);
-      const key =
-        p.connectionId === ZHUWEN_SERVER_CONNECTION_ID
+      const key = useUiSmokeEcho
+        ? "ui-smoke-key"
+        : p.connectionId === ZHUWEN_SERVER_CONNECTION_ID
           ? requireServerToken()
           : readSecret(userDir, p.connectionId);
       if (!connection || !key) throw new Error("AI 连接或 API Key 未配置");

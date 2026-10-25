@@ -18,6 +18,8 @@ export const BASE_STYLE_RULES = `围绕人物当前要做的事展开场景。
 比喻有助于理解时才使用。
 允许停顿和情绪余韵，不强制反转或升华。`;
 
+export const STYLE_CARD_BOUNDARY_RULES = `规则优先级：本轮用户明确的任务要求、输出格式和作品已确认事实/引用优先于技法卡；若用户要求与已确认事实冲突，明确指出冲突，不悄悄改写作品事实。技法卡只影响表达与叙事组织倾向，不得新增或改写人物、设定、事件、视角、线索或结局，也不能把建议变成硬性配额。只在与当前任务相关处应用，不逐条套成固定模板；保留有效的人物毛边、作者独特观察和既有语气。资料不足时保留为待确认，不把推测写成事实。`;
+
 export const BUILTIN_STYLE_CARDS: AiStyleCard[] = [
   {
     id: "style-natural-narrative",
@@ -298,7 +300,7 @@ export function buildTaskAndStyleInstructions(card: AiStyleCard | AiStyleCard[] 
   const style = styleCards.length
     ? [BASE_STYLE_RULES, ...specificRules].join("\n\n")
     : "";
-  const stylePart = style ? `【组合写作方法：${styleCards.map((item) => `${item.name} v${item.version}`).join(" + ")}】\n${styleCards.map((item) => `- ${item.name}：${item.description}`).join("\n")}\n请将以下规则作为表达偏好，而不是作品事实或硬性篇幅配额：\n${style}` : "";
+  const stylePart = style ? `【组合写作方法：${styleCards.map((item) => `${item.name} v${item.version}`).join(" + ")}】\n${styleCards.map((item) => `- ${item.name}：${item.description}`).join("\n")}\n${STYLE_CARD_BOUNDARY_RULES}\n以下内容是表达偏好，不是作品事实：\n${style}` : "";
   const taskPart = task === "naturalize" ? NATURALIZE_RULES : "";
   return [taskPart, stylePart].filter(Boolean).join("\n\n");
 }

@@ -1550,6 +1550,7 @@ export function AiPanel({
       {historyOpen && (
         <HistoryDrawer
           language={language}
+          novelTitle={String(novel.title || "")}
           conversations={conversations}
           currentId={conversation}
           query={historyQuery}
