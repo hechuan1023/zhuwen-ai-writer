@@ -1512,3 +1512,64 @@ button.zchat-style-saved-apply:not(.primary):not(.danger):not(.danger-text):not(
   .zchat-style-row-actions { gap: 1px; }
   .zchat-style-row-actions button { width: 28px; min-width: 28px; height: 28px; min-height: 28px; }
 }
+
+/* The chat sidebar can be narrow even when the app window is wide. */
+@container ai-composer (max-width: 360px) {
+  .zchat-composer-tools {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) 30px minmax(88px, 1.15fr);
+    gap: 4px;
+  }
+  .zchat-composer-tools > .zchat-pill {
+    width: 30px;
+    min-width: 30px;
+    justify-content: center;
+    padding: 0;
+  }
+  .zchat-composer-tools > .zchat-style-entry {
+    width: 100%;
+    max-width: none;
+    flex: none;
+  }
+  .zchat-composer-tools > .zchat-style-entry > .zchat-menu-wrap,
+  .zchat-composer-tools > .zchat-menu-wrap {
+    width: 100%;
+    min-width: 0;
+  }
+  .zchat-composer-tools > .zchat-menu-wrap > .zchat-pill.wide {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    justify-content: center;
+    padding-right: 5px;
+    padding-left: 5px;
+  }
+  .zchat-composer-tools > .prompt-template-menu {
+    flex: none;
+  }
+  .zchat-composer-tools .prompt-template-trigger {
+    width: 30px;
+    min-width: 30px;
+    max-width: 30px;
+    justify-content: center;
+    padding: 0;
+  }
+  .zchat-composer-tools .prompt-template-trigger > span {
+    display: none;
+  }
+  .zchat-composer-actions {
+    gap: 6px;
+  }
+  .zchat-composer-actions .zchat-pill.context {
+    flex: 1 1 0;
+    max-width: none;
+  }
+  .zchat-enter-hint,
+  .zchat-context-limit {
+    display: none;
+  }
+}
+@container ai-composer (max-width: 300px) {
+  .zchat-style-state { display: none; }
+  .zchat-composer-tools { grid-template-columns: 30px minmax(0, 1fr) 30px minmax(80px, 1fr); }
+}
