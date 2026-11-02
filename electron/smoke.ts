@@ -63,8 +63,10 @@ try{
   assert.equal((db.prepare('SELECT COUNT(*) n FROM chapters WHERE novel_id=?').get(novel) as any).n,0,'永久删除小说级联清除章节')
   assert.equal((db.prepare('SELECT COUNT(*) n FROM ai_conversations WHERE novel_id=?').get(novel) as any).n,0,'永久删除小说级联清除会话')
   const schemaVersion:any=db.prepare('SELECT MAX(version) v FROM schema_migrations').get()
-  assert.equal(schemaVersion.v,21,'数据库迁移到版本 21')
+  assert.equal(schemaVersion.v,22,'数据库迁移到版本 22')
   assert.ok(db.prepare('PRAGMA table_info(ai_messages)').all().some((x:any)=>x.name==='project_instructions'),'用户消息保存作品指令快照')
+  assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='library_item_revisions'").get(),'设定库历史版本表创建')
+  assert.ok(db.prepare('PRAGMA table_info(novel_ai_styles)').all().some((x:any)=>x.name==='style_intensity'),'作品风格强度字段创建')
   assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('world_chapter_mention_index','world_chapter_mentions') ORDER BY name").all().length===2,'地点与势力提及索引表创建')
   assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ai_style_compositions'").get(),'自定义技法组合表创建')
   assert.ok(db.prepare('PRAGMA table_info(ai_conversations)').all().some((x:any)=>x.name==='pinned'),'AI 会话支持置顶标记')
@@ -86,7 +88,12 @@ try{
   const dbBytes=readFileSync(path).toString('utf8')
   assert.ok(!dbBytes.includes('sk-test-should-never-appear'),'数据库不含 API Key 测试串')
   db.close()
-  console.log('SMOKE_OK migration style_cards style_snapshot unicode_save optimistic_revision trash_restore library_trash world_mention_index word_count local_calendar_date secret_schema_absence novel_trash chapter_reorder ai_conversation cascade_purge summary_schema ai_indexes')
+  console.log('SMOKE_OK migration style_cards style_snapshot unicode_save optimistic_revision trash_restore library_trash world_mention_index word_count local_calendar_date secret_schema_absence novel_trash chapter_reorder ai_conversation cascade_purge summary_schema ai_indexes library_revisions style_intensity')
+}catch(e){
+  // 断言失败时 Electron 主进程不会自己退出，会让 `npm test` 静默挂起，
+  // 因此这里显式打印并返回非零退出码，避免把「红」误读成「卡住」。
+  console.error('SMOKE_FAIL', e instanceof Error ? e.message : e)
+  process.exit(1)
 }finally{
   try{rmSync(dir,{recursive:true,force:true,maxRetries:5,retryDelay:100})}catch{ /* temp cleanup is best-effort */ }
 }

@@ -73,6 +73,7 @@ export function AiPanel({
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const [session, patch] = useAiSessionStore();
   const [connections, setConnections] = useState<AnyRow[]>([]),
+    [tokenState, setTokenState] = useState<{ configured: boolean } | null>(null),
     [prompts, setPrompts] = useState<AnyRow[]>([]),
     [conversations, setConversations] = useState<AnyRow[]>([]),
     [libraryAll, setLibraryAll] = useState<AnyRow[]>([]),
@@ -147,6 +148,16 @@ export function AiPanel({
     setDraft(text);
   }, [text]);
   useEffect(() => () => window.clearTimeout(draftTimer.current), []);
+  // 设置页保存/清除令牌后立即刷新提示，不必等重开会话
+  useEffect(() => {
+    const refresh = () =>
+      api<{ configured: boolean }>("ai:token:status").then(
+        (r) => r.ok && setTokenState(r.data),
+      );
+    const onChange = () => void refresh();
+    window.addEventListener("zhuwen:token-changed", onChange);
+    return () => window.removeEventListener("zhuwen:token-changed", onChange);
+  }, []);
   useEffect(() => {
     if (!editor?.on || !editor?.off) return;
     const onEditorUpdate = () => setEditorContextRevision((revision) => revision + 1);
@@ -305,6 +316,9 @@ export function AiPanel({
     });
     loadConversations();
     api("connections:list").then((r) => r.ok && setConnections(r.data));
+    api<{ configured: boolean }>("ai:token:status").then(
+      (r) => r.ok && setTokenState(r.data),
+    );
     api("prompts:list").then((r) => r.ok && setPrompts(r.data));
     api<StyleCard[]>("ai:styles:list").then((r) => r.ok && setStyleCards(r.data || []));
     api<any>("ai:style-selection:get", novelId).then((r) => {
@@ -1643,6 +1657,27 @@ export function AiPanel({
             </button>
           ))}
         </nav>
+      )}
+      {tokenState && !tokenState.configured && (
+        <div className="zchat-notice zchat-notice-warn" data-fd-id="ai-token-missing">
+          <p>{tr("AI 服务尚未激活", "AI service is not activated")}</p>
+          <small className="hint">
+            {tr(
+              "保存激活令牌后即可发送消息；令牌只保存在本机加密存储。",
+              "Save an activation token to send messages; the token stays in encrypted local storage.",
+            )}
+          </small>
+          {!float && onOpenSettings && (
+            <button
+              type="button"
+              className="primary"
+              data-fd-id="ai-token-activate"
+              onClick={onOpenSettings}
+            >
+              {tr("去激活", "Activate")}
+            </button>
+          )}
+        </div>
       )}
       {!connections.length && (
         <div className="zchat-notice" data-fd-id="ai-no-connection">

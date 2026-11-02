@@ -64,6 +64,9 @@ export function Settings({
     [promptEdit, setPromptEdit] = useState<any>(null),
     [modelOptions, setModelOptions] = useState<string[]>([]),
     [loadingModels, setLoadingModels] = useState(false),
+    [tokenStatus, setTokenStatus] = useState<AnyRow | null>(null),
+    [tokenInput, setTokenInput] = useState(""),
+    [tokenBusy, setTokenBusy] = useState(false),
     [edit, setEdit] = useState<any>({
       name: "",
       baseUrl: "https://api.openai.com/v1",
@@ -105,9 +108,39 @@ export function Settings({
     });
   const loadPrompts = () =>
     api("prompts:list").then((r) => r.ok && setPrompts(r.data));
+  const loadTokenStatus = () =>
+    api<AnyRow>("ai:token:status").then((r) => {
+      if (r.ok) setTokenStatus(r.data);
+    });
+  async function saveToken() {
+    setTokenBusy(true);
+    try {
+      const r = await api<AnyRow>("ai:token:save", tokenInput);
+      if (!r.ok) return notify(String(r.error || tr("保存失败", "Save failed")));
+      setTokenStatus(r.data);
+      setTokenInput("");
+      window.dispatchEvent(new Event("zhuwen:token-changed"));
+      notify(tr("激活令牌已保存到本机加密存储", "Activation token saved to encrypted local storage"));
+    } finally {
+      setTokenBusy(false);
+    }
+  }
+  async function clearToken() {
+    setTokenBusy(true);
+    try {
+      const r = await api<AnyRow>("ai:token:clear");
+      if (!r.ok) return notify(String(r.error || tr("清除失败", "Clear failed")));
+      setTokenStatus(r.data);
+      window.dispatchEvent(new Event("zhuwen:token-changed"));
+      notify(tr("已清除本机激活令牌", "Local activation token cleared"));
+    } finally {
+      setTokenBusy(false);
+    }
+  }
   useEffect(() => {
     load();
     loadPrompts();
+    loadTokenStatus();
   }, []);
   async function savePrompt() {
     if (!promptEdit?.name?.trim() || !promptEdit?.content?.trim())
@@ -325,6 +358,75 @@ export function Settings({
               >
                 {tr("＋ 新连接", "+ New connection")}
               </button>}
+            </div>
+            <div
+              className={`settings-token-card ${tokenStatus?.configured ? "is-active" : "is-inactive"}`}
+              data-fd-id="settings-ai-token"
+            >
+              <div className="settings-token-head">
+                <div>
+                  <b>{tr("AI 服务激活", "AI service activation")}</b>
+                  <small>
+                    {tokenStatus?.source === "env"
+                      ? tr("令牌由运行环境注入，应用内不可修改", "Token injected by the environment; read-only in the app")
+                      : tokenStatus?.configured
+                        ? tr("已激活 · 令牌保存在本机加密存储，不上传服务器", "Activated · token stored locally with OS encryption, never uploaded")
+                        : tr("尚未激活，AI 对话与写作功能不可用", "Not activated yet; AI chat and writing are unavailable")}
+                  </small>
+                </div>
+                <span className="settings-token-badge">
+                  {tokenStatus?.source === "env"
+                    ? tr("环境变量", "Environment")
+                    : tokenStatus?.configured
+                      ? tr("已激活", "Activated")
+                      : tr("未激活", "Inactive")}
+                </span>
+              </div>
+              {tokenStatus?.manageable && (
+                <>
+                  <div className="settings-token-row">
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      spellCheck={false}
+                      aria-label={tr("激活令牌", "Activation token")}
+                      placeholder={
+                        tokenStatus?.configured
+                          ? tr("已保存，输入新令牌可替换", "Saved; enter a new token to replace it")
+                          : tr("粘贴管理员发放的激活令牌", "Paste the activation token from your administrator")
+                      }
+                      value={tokenInput}
+                      onChange={(e) => setTokenInput(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="primary"
+                      data-fd-id="settings-ai-token-save"
+                      disabled={tokenBusy || !tokenInput.trim()}
+                      onClick={saveToken}
+                    >
+                      {tokenBusy ? tr("保存中…", "Saving…") : tr("保存令牌", "Save token")}
+                    </button>
+                    {tokenStatus?.configured && (
+                      <button
+                        type="button"
+                        className="danger-text"
+                        data-fd-id="settings-ai-token-clear"
+                        disabled={tokenBusy}
+                        onClick={clearToken}
+                      >
+                        {tr("清除", "Clear")}
+                      </button>
+                    )}
+                  </div>
+                  <p className="hint">
+                    {tr(
+                      "令牌只用于本机访问铸文 AI 网关，不会写入数据库、日志或导出文件。",
+                      "The token is only used for this device to reach the Zhuwen AI gateway; it is never written to the database, logs, or exports.",
+                    )}
+                  </p>
+                </>
+              )}
             </div>
             {!edit.locked && (
               <div className="settings-provider-fields" data-fd-id="settings-provider-fields">

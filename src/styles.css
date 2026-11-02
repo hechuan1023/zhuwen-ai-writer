@@ -1626,6 +1626,7 @@ button.danger-text:not(:disabled):hover {
 .connection-managed-copy b { font-size: 13px; font-weight: 650; }
 .connection-managed-copy small { font-size: 11px; line-height: 1.45; }
 .connection-managed-badge,
+.settings-token-badge,
 .settings-generation-heading > span {
   flex: none;
   padding: 4px 8px;
@@ -1636,6 +1637,83 @@ button.danger-text:not(:disabled):hover {
   font-size: 10px;
   font-weight: 650;
   white-space: nowrap;
+}
+/* AI 服务激活卡：未激活时强调可操作入口，已激活时收敛为状态摘要 */
+.settings-token-card {
+  margin-top: 12px;
+  padding: 13px 14px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg, 14px);
+  background: var(--paper);
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.settings-token-card.is-inactive {
+  border-color: color-mix(in srgb, var(--warning) 38%, var(--line));
+  background: linear-gradient(
+    115deg,
+    color-mix(in srgb, var(--warning) 10%, var(--paper)),
+    var(--paper) 76%
+  );
+}
+.settings-token-card.is-active {
+  border-color: color-mix(in srgb, var(--accent) 20%, var(--line));
+}
+.settings-token-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.settings-token-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.settings-token-head b {
+  font-size: 13px;
+  font-weight: 650;
+}
+.settings-token-head small {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.settings-token-card.is-inactive .settings-token-badge {
+  color: color-mix(in srgb, var(--warning) 82%, var(--ink));
+  border-color: color-mix(in srgb, var(--warning) 38%, var(--line));
+  background: color-mix(in srgb, var(--warning) 12%, var(--paper));
+}
+.settings-token-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.settings-token-row input {
+  flex: 1 1 220px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 10px);
+  background: var(--panel-2, var(--paper));
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.settings-token-row input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.settings-token-card .hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
 }
 .connection-option {
   min-width: 145px;

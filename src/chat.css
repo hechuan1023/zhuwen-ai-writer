@@ -301,6 +301,14 @@
 .zchat-notice button {
   margin-top: 8px;
 }
+.zchat-notice-warn {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--warning) 38%, var(--line, #e2ddd2));
+  background: color-mix(in srgb, var(--warning) 10%, var(--paper, #fffdf8));
+}
+.zchat-notice-warn p {
+  color: color-mix(in srgb, var(--warning) 82%, var(--ink, #2a2c28));
+}
 
 /* ── 消息区 ───────────────────────────────────────────────── */
 .zchat-scroll-host {

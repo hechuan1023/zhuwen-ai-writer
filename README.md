@@ -94,19 +94,29 @@ npm run build && npm run test:unit && npm run test && npm run test:ui
 原生 `rename` 返回 `WinError 32（另一个程序正在使用此文件）`。关闭 WorkBuddy 或重启系统后即可清空。
 目录结构已收至最小（仅剩 `resources/` 一层）。
 
-## 测试（最近一次执行：2026-10-19）
+## 测试（最近一次执行：2026-11-03）
 
 | 命令 | 结果 |
 |---|---|
 | build | 通过（双 tsconfig 类型检查 + vite build） |
-| test:unit | **138/138**（20 文件） |
-| test | SMOKE_OK（含 `library_trash`） |
-| test:ui | UI_SMOKE_OK（**40 项**，含 `library_kinds` 8 分类 + 章节细纲字段断言） |
-| 打包应用启动 | `release/win-unpacked/铸文.exe` + `ZHUWEN_UI_SMOKE=1` → 同上 40 项全绿 |
+| test:unit | **185/185**（26 文件） |
+| test | SMOKE_OK（迁移版本 22；含 `library_revisions`、`style_intensity`） |
+| test:ui | UI_SMOKE_OK（**53 项**，含 AI 激活卡、未激活提示条、EPUB 手机视口、8 分类资料库） |
+| 打包应用启动 | `release/win-unpacked/铸文.exe` + `ZHUWEN_UI_SMOKE=1` → 打包时的 40 项全绿（二进制早于本轮新增断言） |
 
-界面冒烟在本机需绕开两个坑：先 `Remove-Item Env:ELECTRON_RUN_AS_NODE`，并带 `--disable-gpu --no-sandbox --disable-gpu-compositing`；`npm run test:ui` 不含这两个开关，直接调用会失败。
+界面冒烟在本机需绕开三个坑：先 `Remove-Item Env:ELECTRON_RUN_AS_NODE`，并带 `--disable-gpu --no-sandbox --disable-gpu-compositing`；`npm run test:ui` 不含这两个开关，直接调用会失败。AI 重试/流式断言需要 `ZHUWEN_AI_ECHO=1`（`test:ui` 已内置，只连本机 127.0.0.1 echo 服务，不访问外网）。冒烟必须在未设置 `ZHUWEN_CLIENT_TOKEN` 的干净环境运行，否则「未激活」相关断言会失败。
+
+IPC 注册数与 `preload.ts` 白名单均为 **109**，由 `tests/ipc-whitelist.test.ts` 做源码级双向校验，漏登记会直接让测试变红。
 
 数据库迁移当前为**版本 15**（v9 为 `ai_messages` 增加 `task_kind`；v10 增加 `selection_from` / `selection_to`；v11 为 AI 引用快照增加来源资料版本号；v12 支持作品组合多张 AI 写作技法卡；v13 建立人物跨章节增量提及索引；v14 为地点和势力建立独立增量提及索引；v15 支持保存可跨作品复用的自定义技法组合）。地点/势力可维护别名，命中片段可跳回章节，匹配仅供作者核对，不会自动改变设定。风格卡覆盖自然叙事、成长推进、贴身求生、群像烟火、追更钩子、悬疑信息差、人物声线和轻喜剧等方法；可按任务控制适用范围，组合规则可在发送前查看；自定义卡可编辑，内置卡按版本升级且不覆盖自定义副本；消息保存任务与规则快照。
+
+## AI 接入与激活（2026-11-03）
+
+- 商用版只保留一个内置「铸文 AI」连接，地址、模型和密钥由服务端统一管理；本机不再提供第二套连接表单。
+- 激活令牌有两种来源：`ZHUWEN_CLIENT_TOKEN` 环境变量（优先级最高，应用内只读）或设置 → AI 助手中的激活卡（写入系统加密凭据 `secrets.json`，不进入数据库、日志或导出文件）。
+- 未激活时 AI 面板顶部显示可关闭的提示条并给出「去激活」入口；设置页激活卡显示未激活/已激活/环境变量三种状态，保存与清除后通过 `zhuwen:token-changed` 事件即时刷新面板，无需重开会话。
+- 令牌校验为纯函数 `electron/ai-token.ts`：去首尾空白、禁止内部空白、8–512 位；`tests/ipc-whitelist.test.ts` 覆盖校验与环境变量优先级。
+- 新增 IPC：`ai:token:status` / `ai:token:save` / `ai:token:clear`，均已登记到 preload 白名单。
 
 ## AI 聊天面板（本轮重构）
 

@@ -29,6 +29,7 @@ import {
 import { FocusTracker } from "./focus-tracker";
 import { DraftStorage, draftKey, DraftRecord } from "./draft-storage";
 import { buildTaskAndStyleInstructions, effectiveStyleRules, normalizeStyleIntensity } from "./ai-style-cards";
+import { describeTokenStatus, normalizeServerToken } from "./ai-token";
 import { parseStyleCompositionBundle } from "./ai-style-bundle";
 import { formatConversationMarkdown, safeConversationFilename } from "./ai-conversation-export";
 
@@ -59,7 +60,9 @@ function closeUiSmokeEchoServer() {
 const ZHUWEN_SERVER_CONNECTION_ID = "zhuwen-server-longcat";
 const ZHUWEN_SERVER_BASE_URL = "http://118.31.220.154/zhuwen-api/v1";
 const ZHUWEN_SERVER_MODEL = "LongCat-2.0";
-const ZHUWEN_SERVER_TOKEN = String(process.env.ZHUWEN_CLIENT_TOKEN || "").trim();
+const ZHUWEN_SERVER_TOKEN_ENV = String(process.env.ZHUWEN_CLIENT_TOKEN || "").trim();
+// 应用内激活令牌存于系统加密凭据文件，环境变量优先（便于开发与运维注入）。
+const ZHUWEN_TOKEN_SECRET_ID = "zhuwen-server-token";
 const ZHUWEN_MAX_CONTEXT_CHARS = 300000;
 const ZHUWEN_MAX_OUTPUT_TOKENS = 20000;
 
@@ -85,10 +88,36 @@ function serverConnection() {
   };
 }
 
+function localServerToken() {
+  if (ZHUWEN_SERVER_TOKEN_ENV) return ZHUWEN_SERVER_TOKEN_ENV;
+  try {
+    return String(
+      readSecret(app.getPath("userData"), ZHUWEN_TOKEN_SECRET_ID) || "",
+    ).trim();
+  } catch {
+    return "";
+  }
+}
+
+function serverTokenStatus() {
+  let local = "";
+  if (!ZHUWEN_SERVER_TOKEN_ENV) {
+    try {
+      local = String(
+        readSecret(app.getPath("userData"), ZHUWEN_TOKEN_SECRET_ID) || "",
+      ).trim();
+    } catch {
+      local = "";
+    }
+  }
+  return describeTokenStatus(ZHUWEN_SERVER_TOKEN_ENV, local);
+}
+
 function requireServerToken() {
-  if (!ZHUWEN_SERVER_TOKEN)
-    throw new Error("铸文 AI 服务未配置运行令牌，请联系管理员完成激活");
-  return ZHUWEN_SERVER_TOKEN;
+  const token = localServerToken();
+  if (!token)
+    throw new Error("铸文 AI 服务尚未激活，请到「设置 → AI 助手」填写激活令牌");
+  return token;
 }
 
 function ensureServerConnection() {
@@ -853,6 +882,10 @@ function createMainWindow() {
           `(()=>{const managed=document.querySelector('[data-fd-id="settings-managed-ai"]');const generation=document.querySelector('[data-fd-id="settings-generation-options"]');const save=document.querySelector('[data-fd-id="settings-ai-save"]');return Boolean(managed&&!document.querySelector('[data-fd-id="settings-provider-fields"]')&&generation&&getComputedStyle(managed).display==='flex'&&getComputedStyle(generation).display==='grid'&&save?.textContent.includes('Save AI settings'))})()`,
         );
         await shot("01a-settings-ai-managed");
+        // AI 激活卡：未配置令牌时应给出可操作入口；空输入时保存按钮禁用
+        const aiTokenCardOk = await js(
+          `(()=>{const card=document.querySelector('[data-fd-id="settings-ai-token"]');if(!card)return false;const input=card.querySelector('input');const save=card.querySelector('[data-fd-id="settings-ai-token-save"]');return Boolean(input&&save&&save.disabled&&/Activate|激活|Inactive|未激活/.test(card.textContent))})()`,
+        );
         // 应用内确认弹窗：原生 confirm/prompt 已全部换成应用内弹窗。
         // 这里验证「恢复默认模板」确实弹出可取消的确认框——点取消，不落地任何改动。
         const dialogTriggeredOk = await js(
@@ -887,6 +920,9 @@ function createMainWindow() {
            })()`,
         );
         await js(`document.querySelector('button[data-view="library"]')?.click()`);
+        const aiTokenNoticeOk = await js(
+          `Boolean(document.querySelector('[data-fd-id="ai-token-missing"]'))`,
+        );
         let translatedLibraryOk = false;
         for (let i = 0; i < 15 && !translatedLibraryOk; i++) {
           translatedLibraryOk = await js(
@@ -982,10 +1018,10 @@ function createMainWindow() {
         await js(`(()=>{document.querySelector('.toolbar-more').open=true;([...document.querySelectorAll('.toolbar-menu button')].find(b=>b.textContent.includes('导入导出与备份')||b.textContent.includes('Import, export & backup')))?.click()})()`);
         let epubExportReady = false;
         for (let i = 0; i < 15 && !epubExportReady; i++) {
-          epubExportReady = await js(`Boolean(document.querySelector('.io-export-actions button:last-child:not(:disabled)'))`);
+          epubExportReady = await js(`Boolean(document.querySelector('[data-fd-id="io-epub-preview"]:not(:disabled)'))`);
           if (!epubExportReady) await wait(120);
         }
-        await js(`document.querySelector('.io-export-actions button:last-child')?.click()`);
+        await js(`document.querySelector('[data-fd-id="io-epub-preview"]')?.click()`);
         let epubPreviewReady = false;
         for (let i = 0; i < 15 && !epubPreviewReady; i++) {
           epubPreviewReady = await js(`Boolean(document.querySelector('.epub-preview-device-control .zw-select-trigger'))`);
@@ -1136,6 +1172,8 @@ function createMainWindow() {
           languageOk,
           translatedSettingsOk,
           translatedAiSettingsOk,
+          aiTokenCardOk,
+          aiTokenNoticeOk,
           managedAiSettingsOk,
           dialogOk,
           translatedAiPanelOk,
@@ -2836,6 +2874,28 @@ function registerIpc(userDir: string) {
   });
 
   ipcMain.handle("connections:list", () => ok([serverConnection()]));
+  ipcMain.handle("ai:token:status", () => ok(serverTokenStatus()));
+  ipcMain.handle("ai:token:save", (_, token) => {
+    try {
+      if (ZHUWEN_SERVER_TOKEN_ENV)
+        throw new Error("当前令牌由运行环境注入，无法在应用内修改");
+      const value = normalizeServerToken(token);
+      saveSecret(userDir, ZHUWEN_TOKEN_SECRET_ID, value);
+      return ok(serverTokenStatus());
+    } catch (e) {
+      return fail(e);
+    }
+  });
+  ipcMain.handle("ai:token:clear", () => {
+    try {
+      if (ZHUWEN_SERVER_TOKEN_ENV)
+        throw new Error("当前令牌由运行环境注入，无法在应用内清除");
+      deleteSecret(userDir, ZHUWEN_TOKEN_SECRET_ID);
+      return ok(serverTokenStatus());
+    } catch (e) {
+      return fail(e);
+    }
+  });
   ipcMain.handle("connections:save", (_, p) => {
     try {
       if (!p || typeof p !== "object") throw new Error("连接配置无效");

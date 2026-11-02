@@ -472,6 +472,7 @@ export function IoPanel({
               {operationBusy === "export:pdf" ? tr("正在生成…", "Generating…") : tr("导出 PDF", "Export PDF")}
             </button>
             <button
+              data-fd-id="io-epub-preview"
               disabled={Boolean(operationBusy) || !scopedChapters.length}
               onClick={() => {
                 if (!scopedChapters.length) return notify(tr("当前范围没有可预览的章节", "No chapters are available in this export scope"));

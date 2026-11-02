@@ -17,7 +17,11 @@ describe("AI 写作风格卡", () => {
     expect(BUILTIN_STYLE_CARDS.find((x) => x.id === "style-urban-workplace-agency")?.rules).toContain("职责边界");
     expect(BUILTIN_STYLE_CARDS.find((x) => x.id === "style-fantasy-social-fusion")?.rules).toContain("世界内部自洽");
     const all = BUILTIN_STYLE_CARDS.map((x) => x.rules).join("\n");
-    expect(all).not.toMatch(/对话.{0,8}(比例|占比)|每章必须|固定.{0,8}(数量|比例)/);
+    // 硬性配额守卫：禁止百分比/数字配额与「每章必须」这类命令式节拍。
+    expect(all).not.toMatch(/\d+\s*(%|％)|每章必须|每节必须|每卷必须/);
+    // 「固定比例 / 固定数量」只有在未被否定时才算违规（「不套固定比例」是正确写法）。
+    for (const m of all.matchAll(/(.{0,4})(固定|统一)(的)?(比例|数量|字数|配额)/g))
+      expect(m[1]).toMatch(/不|勿|免|无|避免|禁止|不必/);
     for (const card of BUILTIN_STYLE_CARDS) expect(effectiveStyleRules(card)).toContain(BASE_STYLE_RULES);
   });
 
