@@ -13,12 +13,6 @@ function localDateKey(d = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
-function addDays(base: Date, n: number) {
-  const d = new Date(base);
-  d.setDate(d.getDate() + n);
-  return d;
-}
-
 function startOfWeek(d: Date) {
   const day = d.getDay();
   const diff = day === 0 ? -6 : 1 - day;
@@ -125,7 +119,8 @@ export function WritingStatsCenter({
     setRange(null);
     Promise.all([
       api<StatsPayload>("writing:stats", { novelId: filter || null, days }),
-      api<StatsPayload>("writing:stats", { novelId: filter || null, days: 120 }),
+      // 本周/本月的起点最多回溯 31 天；不借用趋势选择范围，切换 7/30/90 天时汇总保持稳定。
+      api<StatsPayload>("writing:stats", { novelId: filter || null, days: 31 }),
     ])
       .then(([t, r]) => {
         if (!live || seq !== trendSeq.current) return;
@@ -173,28 +168,16 @@ export function WritingStatsCenter({
       }
       return s;
     };
-    // 连续记录：总净增 ≠ 0 记为活跃日；净增 0 的修改日无法从 writing_activity 识别（仅有非零 delta 会写入）
-    let streak = 0;
-    let cursor = new Date(now);
     const todayVal = rangeMap.get(today) || 0;
-    if (todayVal === 0) cursor = addDays(cursor, -1);
-    for (let i = 0; i < 400; i++) {
-      const key = localDateKey(cursor);
-      if ((rangeMap.get(key) || 0) !== 0) {
-        streak++;
-        cursor = addDays(cursor, -1);
-      } else break;
-    }
-    let active = 0;
-    for (const v of rangeMap.values()) if (v !== 0) active++;
+    const active = trendRows.reduce((count, row) => count + (Number(row.total) !== 0 ? 1 : 0), 0);
     return {
       today: todayVal,
       week: sumFrom(weekStart),
       month: sumFrom(monthStart),
       active,
-      streak,
+      streak: Number(overview?.currentNetStreak) || 0,
     };
-  }, [rangeMap]);
+  }, [rangeMap, trendRows, overview]);
 
   const rangeLabel =
     days === 7 ? tr("近 7 个日历日", "7 calendar days") : days === 90 ? tr("近 90 个日历日", "90 calendar days") : tr("近 30 个日历日", "30 calendar days");

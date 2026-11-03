@@ -2429,6 +2429,17 @@ function registerIpc(userDir: string) {
         totalNet += v;
         if (v > maxDayNet) maxDayNet = v;
       }
+      // 净变化连续天数按全部历史计算，避免受趋势图的 7/30/90 天窗口截断。
+      const todayDate = new Date();
+      todayDate.setHours(12, 0, 0, 0);
+      let netCursor = new Date(todayDate);
+      if ((netBy.get(localDate(netCursor)) || 0) === 0)
+        netCursor.setDate(netCursor.getDate() - 1);
+      let currentNetStreak = 0;
+      while ((netBy.get(localDate(netCursor)) || 0) !== 0) {
+        currentNetStreak++;
+        netCursor.setDate(netCursor.getDate() - 1);
+      }
       let totalFocusMs = 0;
       const focusBy = new Map<string, number>();
       const focusDay = new Set<string>();
@@ -2494,6 +2505,7 @@ function registerIpc(userDir: string) {
         wordCount: Number(wordRow?.total) || 0,
         totalNet,
         maxDayNet,
+        currentNetStreak,
         totalFocusMs,
         maxSessionMs,
         currentStreak,
