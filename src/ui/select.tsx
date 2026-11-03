@@ -426,6 +426,11 @@ export function Combobox({
     [shown],
   );
 
+  useEffect(() => {
+    if (!open || enabledIndexes.includes(active)) return;
+    setActive(enabledIndexes[0] ?? -1);
+  }, [open, enabledIndexes, active]);
+
   function commit(v: string) {
     onValueChange(v);
     setOpen(false);
@@ -476,6 +481,7 @@ export function Combobox({
             return;
           }
           if (!open && (e.key === "ArrowDown" || e.key === "Enter")) {
+            setActive(enabledIndexes[0] ?? -1);
             setOpen(true);
             return;
           }
@@ -512,7 +518,9 @@ export function Combobox({
               aria-selected={o.value === value}
               aria-disabled={o.disabled || undefined}
               className={`zw-select-option ${i === active ? "active" : ""} ${o.value === value ? "selected" : ""} ${o.disabled ? "disabled" : ""}`}
-              onMouseEnter={() => setActive(i)}
+        onMouseEnter={() => {
+          if (!o.disabled) setActive(i);
+        }}
               onMouseDown={(e) => {
                 e.preventDefault();
                 if (o.disabled) return;
