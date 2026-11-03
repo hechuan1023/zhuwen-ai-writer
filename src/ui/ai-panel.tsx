@@ -125,6 +125,7 @@ export function AiPanel({
   const [preparingSend, setPreparingSend] = useState(false);
   const payloadSeq = useRef(0);
   const sendInFlight = useRef(false);
+  const reusePromptInFlight = useRef(false);
   const projectInstructionLoadSeq = useRef(0);
   const [continuationId, setContinuationId] = useState<string | null>(null);
   const [pendingRegenerateConversation, setPendingRegenerateConversation] = useState<string | null>(null);
@@ -1660,10 +1661,18 @@ export function AiPanel({
     [],
   );
   async function reusePrompt(message: AnyRow, regenerate = false) {
-    if (generating) {
-      notify(tr("请等待当前回复完成后再复用提问。", "Wait for the current response to finish before reusing a prompt."));
-      return;
+    if (reusePromptInFlight.current || !message.id) return;
+    reusePromptInFlight.current = true;
+    try {
+      await reusePromptInBranch(message, regenerate);
+    } finally {
+      reusePromptInFlight.current = false;
     }
+  }
+  async function reusePromptInBranch(message: AnyRow, regenerate = false) {
+    const sourceGenerationContinues = Boolean(
+      generating && session?.generatingConversationId === conversation,
+    );
     if (!message.id) return;
     const sourceChapterId = String(message.chapter_id || "");
     if (sourceChapterId && sourceChapterId !== chapterId) {
@@ -1757,7 +1766,9 @@ export function AiPanel({
     }
     if (regenerate) setPendingRegenerateConversation(branchId);
     notify(regenerate
-      ? tr("已在新分支中按原问题与引用重新生成；原对话和回复均保留。", "Regenerating from the original prompt and references in a new branch; the source conversation and reply are preserved.")
+      ? sourceGenerationContinues
+        ? tr("已在新分支中重新生成；原对话的生成会继续在后台运行。", "Retrying in a new branch; the original conversation keeps generating in the background.")
+        : tr("已在新分支中按原问题与引用重新生成；原对话和回复均保留。", "Regenerating from the original prompt and references in a new branch; the source conversation and reply are preserved.")
       : tr(
           `已从此处创建分支，原对话保留；技法卡组合已作为分支专属设置恢复，不会更改作品默认风格。检查问题和引用后发送即可重试。${styleRestoreNotice ? ` ${styleRestoreNotice}` : ""}`,
           `A new branch was created; the original conversation is unchanged. Its technique cards are restored as branch-only settings and won't change the novel default. Review the prompt and references, then send to retry.${styleRestoreNotice ? ` ${styleRestoreNotice}` : ""}`,

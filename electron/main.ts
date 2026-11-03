@@ -3555,9 +3555,6 @@ function registerIpc(userDir: string) {
     );
     if (!target || target.role !== "user") return fail("找不到这条用户提问，无法创建分支");
     if (target.novel_id !== aiSession.novelId) return fail("这条提问不属于当前小说项目");
-    if (aiGenerations.has(String(target.conversation_id)))
-      return fail("请等待这条对话的回复完成后再创建分支");
-
     const sourceRows: any[] = all(
       `SELECT rowid AS source_rowid,* FROM ai_messages
        WHERE conversation_id=? ORDER BY created_at,rowid`,
