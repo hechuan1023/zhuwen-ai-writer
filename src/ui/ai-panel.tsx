@@ -122,10 +122,13 @@ export function AiPanel({
   const [previewMessages, setPreviewMessages] = useState<AnyRow[]>([]);
   const [payloadChars, setPayloadChars] = useState<number | null>(null);
   const [payloadPreviewStatus, setPayloadPreviewStatus] = useState<"idle" | "pending" | "checking" | "ready" | "error">("pending");
+  const [preparingSend, setPreparingSend] = useState(false);
   const payloadSeq = useRef(0);
+  const sendInFlight = useRef(false);
   const projectInstructionLoadSeq = useRef(0);
   const [continuationId, setContinuationId] = useState<string | null>(null);
   const [pendingRegenerateConversation, setPendingRegenerateConversation] = useState<string | null>(null);
+
   const prevGenerating = useRef(false);
   const pendingContinue = useRef(false);
   const sendLatest = useRef<() => void>(() => {});
@@ -269,6 +272,9 @@ export function AiPanel({
   const messages: AnyRow[] = session?.messages || [];
   const messageWindow = session?.messageWindow || { hasEarlier: false, beforeMessageId: null };
   const generating: boolean = Boolean(session?.generating);
+  useEffect(() => {
+    if (generating && preparingSend) setPreparingSend(false);
+  }, [generating, preparingSend]);
   const requestId: string = session?.requestId || "";
   const selectionText: string = session?.selectionText || "";
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -808,15 +814,18 @@ export function AiPanel({
     const resolved = resolveTemplateVars(contexts, ask);
     return { contexts: resolved.contexts, prompt: resolved.prompt, ask };
   }
-  function requestPayloadPreview(plan: { contexts: AnyRow[]; prompt: string }) {
+  function requestPayloadPreview(
+    plan: { contexts: AnyRow[]; prompt: string },
+    snapshot = { conversationId: conversation, novelId, styleIds: activeStyleIds, styleIntensity, taskKind: mode },
+  ) {
     return api<AnyRow[]>("ai:previewRequest", {
-      conversationId: conversation,
-      novelId,
+      conversationId: snapshot.conversationId,
+      novelId: snapshot.novelId,
       contexts: plan.contexts,
       prompt: plan.prompt,
-      styleIds: activeStyleIds,
-      styleIntensity,
-      taskKind: mode,
+      styleIds: snapshot.styleIds,
+      styleIntensity: snapshot.styleIntensity,
+      taskKind: snapshot.taskKind,
     });
   }
   function payloadCharCount(messages: AnyRow[]) {
@@ -878,13 +887,41 @@ export function AiPanel({
   ]);
 
   async function send() {
+    if (sendInFlight.current) return;
+    sendInFlight.current = true;
+    setPreparingSend(true);
+    try {
+      await submitSend();
+    } finally {
+      sendInFlight.current = false;
+      setPreparingSend(false);
+    }
+  }
+  async function submitSend() {
     if (!connection || !chapterId || generating) return;
     flushDraft();
     const continuing = mode === "continue";
     const plan = buildSendPlan();
     if (!plan) return notify(mode === "naturalize" ? tr("请先添加正文选区，再执行自然化润色", "Select a manuscript excerpt before naturalizing") : tr("当前章节还没有正文，无法续写", "The current chapter is empty and cannot be continued"));
     if (!continuing && mode !== "naturalize" && !plan.ask) return;
-    const payloadPreview = await requestPayloadPreview(plan);
+    const snapshot = {
+      conversationId: conversation,
+      novelId,
+      chapterId,
+      connectionId: connection,
+      styleIds: [...activeStyleIds],
+      styleIntensity,
+      taskKind: mode,
+      draftText: draftRef.current,
+      selectionText: plan.contexts.find((x) => x.kind === "selection")?.content || "",
+      selectionFrom: plan.contexts.find((x) => x.kind === "selection")
+        ? (plan.contexts.find((x) => x.kind === "selection")?.from ?? null)
+        : (editor?.state.selection.from ?? null),
+      selectionTo: plan.contexts.find((x) => x.kind === "selection")
+        ? (plan.contexts.find((x) => x.kind === "selection")?.to ?? null)
+        : (editor?.state.selection.to ?? null),
+    };
+    const payloadPreview = await requestPayloadPreview(plan, snapshot);
     if (!payloadPreview.ok) {
       setPayloadPreviewStatus("error");
       return notify(payloadPreview.error || tr("无法核对本次上下文，未发送。", "Could not verify this request's context; nothing was sent."));
@@ -910,7 +947,7 @@ export function AiPanel({
     }
     if (!float && save && !(await save(true))) return;
     const id = crypto.randomUUID();
-    const composerSave = await saveComposerState(draftRef.current, plan.contexts);
+    const composerSave = await saveComposerState(snapshot.draftText, plan.contexts);
     if (!composerSave.ok || composerSave.data?.accepted === false) return;
     if (continuing) {
       pendingContinue.current = true;
@@ -918,28 +955,23 @@ export function AiPanel({
     const r = await api("ai:send", {
       sessionId,
       requestId: id,
-      conversationId: conversation || undefined,
-      novelId,
-      chapterId,
+      conversationId: snapshot.conversationId || undefined,
+      novelId: snapshot.novelId,
+      chapterId: snapshot.chapterId,
       sourceRevision: session?.chapter?.revision ?? chapter?.revision,
-      selectionText:
-        plan.contexts.find((x) => x.kind === "selection")?.content || "",
-      selectionFrom: plan.contexts.find((x) => x.kind === "selection")
-        ? (plan.contexts.find((x) => x.kind === "selection")?.from ?? null)
-        : (editor?.state.selection.from ?? null),
-      selectionTo: plan.contexts.find((x) => x.kind === "selection")
-        ? (plan.contexts.find((x) => x.kind === "selection")?.to ?? null)
-        : (editor?.state.selection.to ?? null),
-      connectionId: connection,
+      selectionText: snapshot.selectionText,
+      selectionFrom: snapshot.selectionFrom,
+      selectionTo: snapshot.selectionTo,
+      connectionId: snapshot.connectionId,
       prompt: plan.prompt,
       contexts: plan.contexts,
-      styleIds: activeStyleIds,
-      styleIntensity,
-      taskKind: mode,
+      styleIds: snapshot.styleIds,
+      styleIntensity: snapshot.styleIntensity,
+      taskKind: snapshot.taskKind,
     });
     if (!r.ok) {
       pendingContinue.current = false;
-      updateDraft(plan.ask, true);
+      if (draftRef.current === snapshot.draftText) updateDraft(plan.ask, true);
       notify(r.error || tr("发送失败，内容已放回输入框，可修改后重试", "Sending failed. Your text was restored to the composer for retrying"));
     } else {
       if (conversation) setCurrentArchived(false);
@@ -1173,12 +1205,14 @@ export function AiPanel({
     : mode === "naturalize"
       ? hasSelectionReference
       : Boolean(draft.trim());
-  const requestCanSend = Boolean(connection && chapterId && !generating && taskCanSend);
+  const requestCanSend = Boolean(connection && chapterId && !generating && !preparingSend && taskCanSend);
   const contextCanSend = payloadPreviewStatus === "ready"
     ? !contextExceeded
     : payloadPreviewStatus === "error" && !contextExceeded;
   const canSend = requestCanSend && contextCanSend;
-  const sendHint = !connection
+  const sendHint = preparingSend
+    ? tr("正在核对并准备本次请求…", "Verifying and preparing this request…")
+    : !connection
     ? tr("请先配置 AI 连接", "Configure an AI connection first")
     : !chapterId
       ? tr("请先选择章节", "Select a chapter first")
@@ -1197,7 +1231,9 @@ export function AiPanel({
                   : payloadPreviewStatus === "error"
                     ? tr("上下文核对失败；点发送可重试，未核对前不会发送", "Context verification failed. Send to retry; nothing is sent until verified")
                     : "";
-  const sendStatusLine = contextExceeded
+  const sendStatusLine = preparingSend
+    ? sendHint
+    : contextExceeded
     ? sendHint
     : payloadPreviewStatus === "pending" || payloadPreviewStatus === "checking" || payloadPreviewStatus === "error"
       ? sendHint
@@ -1819,6 +1855,7 @@ export function AiPanel({
         }
         canToggleSplit={sessionId === "primary" && Boolean(onToggleSplit)}
         splitActive={splitActive}
+        busy={preparingSend}
         onToggleSplit={onToggleSplit}
         onNew={() => selectConversation("")}
         onToggleHistory={() => {
@@ -1836,7 +1873,7 @@ export function AiPanel({
         onCloseFloat={() => api("ai:float:close")}
       />
       {sessionTabs.length > 1 && (
-        <nav className="zchat-session-tabs" aria-label={tr("最近对话", "Recent conversations")}>
+        <nav className="zchat-session-tabs" aria-label={tr("最近对话", "Recent conversations")} inert={preparingSend || undefined}>
           {sessionTabs.map((tab) => (
             <button
               key={tab.id || "new-conversation"}
@@ -1995,6 +2032,7 @@ export function AiPanel({
               )
             : null
         }
+        preparingSend={preparingSend}
         statusLine={(() => {
           const ds = session?.draftState;
           if (!ds || ds.status === "idle") return null;

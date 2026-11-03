@@ -42,12 +42,14 @@ function RefChips({
   language,
   onRemove,
   onPreview,
+  disabled = false,
   maxVisible = 4,
 }: {
   refs: AnyRow[];
   language: string;
   onRemove: (i: number) => void;
   onPreview: (i: number) => void;
+  disabled?: boolean;
   maxVisible?: number;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
@@ -56,7 +58,7 @@ function RefChips({
   const shown = expanded ? refs : refs.slice(0, maxVisible);
   const hidden = refs.length - shown.length;
   return (
-    <div className="zchat-refs" data-fd-id="ai-ref-chips">
+    <div className="zchat-refs" data-fd-id="ai-ref-chips" inert={disabled || undefined}>
       {shown.map((x, i) => {
         const invalid = x.invalid === true;
         const timelineHorizon = String(x.progressionHorizonChapterTitle || "").trim();
@@ -154,6 +156,7 @@ export type ComposerProps = {
   styleControl?: ReactNode;
   /** 续写自动引用提示（可见、可查看范围） */
   autoRefNotice?: string | null;
+  preparingSend?: boolean;
 };
 
 /**
@@ -190,6 +193,7 @@ export function Composer({
   statusLine,
   styleControl,
   autoRefNotice,
+  preparingSend = false,
 }: ComposerProps) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -270,6 +274,7 @@ export function Composer({
         language={language}
         onRemove={onRemoveRef}
         onPreview={onPreviewRef}
+        disabled={preparingSend}
       />
       {autoRefNotice ? (
         <div className="zchat-autoref" data-fd-id="ai-autoref-notice">
@@ -291,6 +296,8 @@ export function Composer({
               : tr("输入问题，或先添加引用资料", "Ask a question, or add references first")
         }
         value={draft}
+        disabled={preparingSend}
+        aria-busy={preparingSend}
         onChange={(e) => onDraftChange(e.target.value)}
         onKeyDown={(e) => {
           const composing = e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229;
@@ -301,7 +308,7 @@ export function Composer({
         }}
       />
       <div className="zchat-composer-bar">
-        <div className="zchat-composer-tools" data-fd-id="ai-composer-tools">
+        <div className="zchat-composer-tools" data-fd-id="ai-composer-tools" inert={preparingSend || undefined}>
           <button
             type="button"
             className="zchat-pill"

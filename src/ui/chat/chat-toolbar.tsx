@@ -33,6 +33,7 @@ export function ChatToolbar({
   onOpenFloat,
   onCloseFloat,
   onToggleSplit,
+  busy = false,
 }: {
   title: string;
   language: string;
@@ -61,6 +62,7 @@ export function ChatToolbar({
   onOpenFloat?: () => void;
   onCloseFloat?: () => void;
   onToggleSplit?: () => void;
+  busy?: boolean;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const items: MenuItem[] = [
@@ -136,7 +138,7 @@ export function ChatToolbar({
   ];
 
   return (
-    <div className="zchat-toolbar" data-fd-id="ai-toolbar">
+    <div className="zchat-toolbar" data-fd-id="ai-toolbar" inert={busy || undefined}>
       <div className="zchat-toolbar-title" title={title}>
         <b className="zchat-ellipsis">{title}</b>
         {generatingLabel ? (
