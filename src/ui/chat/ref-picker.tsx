@@ -35,7 +35,7 @@ export function RefPicker({
   currentPayloadChars: number;
   contextLimitChars: number;
   contextPreviewReady: boolean;
-  onAdd: (item: { label: string; kind: string; content: string; sourceId: string }) => void;
+  onAdd: (item: { label: string; kind: string; content: string; sourceId: string; sourceDataVersion?: number }) => void;
   onAddMany: (items: Array<{ label: string; kind: string; content: string; sourceId: string }>) => void;
   onChooseLocalFile: () => Promise<{ ok: boolean; data: AnyRow | null; error?: string }>;
   onClose: () => void;
@@ -239,6 +239,7 @@ export function RefPicker({
                         kind: suggestion.kind,
                         content: suggestion.content || suggestion.title,
                         sourceId: suggestion.id,
+                        sourceDataVersion: suggestion.dataVersion,
                       })}
                     >
                       <span className="zchat-suggestion-copy">
@@ -441,6 +442,7 @@ export function RefPicker({
                             chapterId,
                           ),
                           sourceId: x.id,
+                          sourceDataVersion: Number.isFinite(Number(x.data_version)) ? Number(x.data_version) : undefined,
                         });
                       }}
                     >

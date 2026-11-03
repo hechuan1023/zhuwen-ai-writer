@@ -5,6 +5,7 @@ export type MaterialSuggestion = {
   kind: string;
   title: string;
   content: string;
+  dataVersion?: number;
   matched: string;
   matchedSnippet?: string;
   count: number;
@@ -450,6 +451,7 @@ export function relevantMaterials(
       kind: item.kind,
       title: item.kind === "relation" ? `${item.from || "?"} 与 ${item.to || "?"}` : title || "未命名资料",
       content: contextContent(item, 6000, context.chapterTitles, context.chapterOrder, context.chapterId),
+      dataVersion: Number.isFinite(Number(item.data_version)) ? Number(item.data_version) : undefined,
       matched: matched || String(item.title || "").trim(),
       matchedSnippet: matchedSnippet || undefined,
       count,

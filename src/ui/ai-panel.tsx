@@ -529,8 +529,28 @@ export function AiPanel({
       sourceId: chapterId || "",
     };
   }
+  function refreshProgressionContexts(nextContexts: AnyRow[]) {
+    const chapterOrder = Object.fromEntries(bookChapters.map((item, index) => [String(item.id), index]));
+    const chapterTitles = Object.fromEntries(bookChapters.map((item) => [String(item.id), String(item.title || "")]));
+    const selectedTimelineChapters = nextContexts
+      .filter((item) => (item.kind === "chapter" || item.kind === "summary") && item.sourceId && chapterOrder[String(item.sourceId)] !== undefined)
+      .map((item) => String(item.sourceId));
+    const horizonChapterId = selectedTimelineChapters.length
+      ? selectedTimelineChapters.sort((left, right) => chapterOrder[left] - chapterOrder[right]).at(-1) || chapterId
+      : chapterId;
+    return nextContexts.map((context) => {
+      if ((context.kind !== "character" && context.kind !== "world") || !context.sourceId || context.sourceDataVersion == null)
+        return context;
+      const source = libraryAll.find((item) => item.kind === context.kind && String(item.id) === String(context.sourceId));
+      if (!source || Number(source.data_version) !== Number(context.sourceDataVersion)) return context;
+      return {
+        ...context,
+        content: materialReferenceContent(source, 6000, chapterTitles, chapterOrder, horizonChapterId),
+      };
+    });
+  }
   function setContexts(updater: (xs: AnyRow[]) => AnyRow[]) {
-    void saveComposerState(draftRef.current, updater(contexts));
+    void saveComposerState(draftRef.current, refreshProgressionContexts(updater(contexts)));
   }
   function selectConversation(id: string) {
     api("ai:session:loadConversation", { conversationId: id, sessionId });
@@ -605,6 +625,7 @@ export function AiPanel({
     kind: string;
     content: string;
     sourceId: string;
+    sourceDataVersion?: number;
   }) {
     setContexts((xs) =>
       xs.some((x) => x.kind === item.kind && x.sourceId === item.sourceId)
@@ -1195,6 +1216,7 @@ export function AiPanel({
     kind: string;
     content: string;
     sourceId: string;
+    sourceDataVersion?: number;
   }) {
     if (item.kind === "__selection__") return addSelection();
     if (item.kind === "__chapter__") return addChapter();
