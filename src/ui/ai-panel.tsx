@@ -1314,6 +1314,18 @@ export function AiPanel({
         "Check typos, punctuation, and grammar in the referenced text. List original vs suggestion; do not restyle.",
       ),
     },
+    ...(chapterId ? [{
+      id: "continuity-audit",
+      kind: "check",
+      label: tr("长篇连续性审校", "Long-form continuity review"),
+      attachChapter: true,
+      appendDraft: true,
+      draft: tr(
+        "请审阅自动引用的当前章节，以及我额外添加的作品资料、细纲和前后章摘要，进行长篇连续性审校。只依据本次引用中能找到的证据，不把计划、传闻、角色猜测或旧版 AI 建议写成已发生事实。检查人物目标与已知信息、时间顺序、地点与行动位置、能力/资源/伤势边界、人物关系变化、伏笔承诺及本章目标兑现。按“明确矛盾 / 连续性风险 / 资料不足”分类；每条附对应章节、资料名或原文短引，并说明影响和最小修正方向。没有证据时标为未知；若只引用了当前章，说明审校范围受限。只输出审校清单，不续写或修改正文，不替作者补设定。",
+        "Review the automatically attached current chapter together with any story-bible entries, outline, and adjacent-chapter summaries I add. Use only evidence available in these references; do not treat plans, rumors, character guesses, or old AI suggestions as events. Check character goals and knowledge, chronology, locations and movement, ability/resource/injury limits, relationship changes, foreshadowing promises, and this chapter's objectives. Classify each finding as contradiction, continuity risk, or insufficient information. Cite the chapter, entry, or a short passage, then explain its impact and the smallest possible fix. Mark unsupported points unknown; if only the current chapter is referenced, state that the review is limited. Return a review checklist only; do not continue or edit the manuscript or invent canon.",
+      ),
+      hint: tr("自动引用当前章；可再添加细纲、人物/世界观资料和前后章摘要。", "Automatically references this chapter; add an outline, story-bible entries, or adjacent-chapter summaries."),
+    }] : []),
     {
       id: "review-style-application",
       kind: "check",
