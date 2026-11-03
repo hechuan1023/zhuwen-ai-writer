@@ -1628,6 +1628,20 @@
 .zchat-style-state.inactive { background: color-mix(in srgb, var(--muted) 12%, var(--paper)); color: var(--muted); }
 .zchat-style-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .zchat-style-toolbar > span { color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+/* Comfortable density follows the workspace preference inside the AI panel too. */
+.density-comfortable .zchat-toolbar { gap: 8px; padding: 10px 12px; }
+.density-comfortable .zchat-toolbar-actions .zchat-icon-btn { width: 34px; height: 34px; }
+.density-comfortable .zchat-session-tab { height: 34px; padding-inline: 12px; }
+.density-comfortable .zchat-scroll-inner { gap: 18px; padding: 18px 16px 10px; }
+.density-comfortable .zchat-msg { gap: 10px; }
+.density-comfortable .zchat-msg-avatar { width: 28px; height: 28px; }
+.density-comfortable .zchat-mark { width: 24px; height: 24px; }
+.density-comfortable .zchat-msg-content { font-size: 15px; line-height: 1.82; }
+.density-comfortable .zchat-composer { margin: 0 12px 12px; gap: 8px; padding: 12px 12px 10px; }
+.density-comfortable .zchat-input { min-height: 64px; line-height: 1.78; }
+.density-comfortable .zchat-pill { height: 34px; padding-inline: 10px; }
+.density-comfortable .zchat-send { width: 34px; height: 34px; }
 .zchat-style-toolbar button { flex: none; display: inline-flex; align-items: center; gap: 6px; }
 .zchat-style-browser { display: grid; gap: 7px; margin: 10px 0 2px; }
 .zchat-style-search { display: flex !important; align-items: center; gap: 8px !important; min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-md, 10px); background: var(--panel); color: var(--muted); }
