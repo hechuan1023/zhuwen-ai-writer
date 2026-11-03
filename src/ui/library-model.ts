@@ -1,5 +1,5 @@
 import { parseJson, parseTags } from "./shared";
-import { normalizeSceneCustomFields, normalizeSceneManuscriptLink, normalizeSceneTargetWords, normalizeSceneWritingStatus } from "../scene-fields";
+import { normalizeSceneAiContextIds, normalizeSceneCustomFields, normalizeSceneManuscriptLink, normalizeSceneTargetWords, normalizeSceneWritingStatus } from "../scene-fields";
 
 /** DB content_json → 编辑模型 */
 export function libraryContentToEditor(row: {
@@ -29,6 +29,7 @@ export function libraryContentToEditor(row: {
     next.plotlinesText = Array.isArray(c.plotlines) ? c.plotlines.join("，") : String(c.plotlines || "");
     next.customFields = normalizeSceneCustomFields(c.customFields);
     next.manuscriptLink = normalizeSceneManuscriptLink(c.manuscriptLink);
+    next.aiContextIds = normalizeSceneAiContextIds(c.aiContextIds);
     next.targetWords = normalizeSceneTargetWords(c.targetWords) ?? "";
     next.writingStatus = normalizeSceneWritingStatus(c.writingStatus);
   }
@@ -67,6 +68,7 @@ export function editorToLibraryContent(kind: string, editing: any): any {
         .slice(0, 20),
       customFields: normalizeSceneCustomFields(editing.customFields),
       manuscriptLink: normalizeSceneManuscriptLink(editing.manuscriptLink),
+      aiContextIds: normalizeSceneAiContextIds(editing.aiContextIds),
       targetWords: normalizeSceneTargetWords(editing.targetWords),
       writingStatus: normalizeSceneWritingStatus(editing.writingStatus),
       archivedAt: String(editing.archivedAt || "") || null,

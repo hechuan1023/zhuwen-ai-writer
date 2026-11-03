@@ -421,9 +421,17 @@ export function AiPanel({
         content_json: scene.content_json || JSON.stringify(scene),
       }),
     };
+    const linkedAiContexts = Array.isArray(scene.linkedAiContexts)
+      ? scene.linkedAiContexts.filter((item: AnyRow) => item?.kind && item?.sourceId && String(item.content || "").trim())
+      : [];
+    const linkedKeys = new Set(linkedAiContexts.map((item: AnyRow) => `${item.kind}:${item.sourceId}`));
     patch({
       contexts: [
-        ...(session?.contexts || []).filter((item: AnyRow) => !(item.kind === "scene" && item.sourceId === sceneContext.sourceId)),
+        ...(session?.contexts || []).filter((item: AnyRow) =>
+          !(item.kind === "scene" && item.sourceId === sceneContext.sourceId) &&
+          !linkedKeys.has(`${item.kind}:${item.sourceId}`),
+        ),
+        ...linkedAiContexts,
         sceneContext,
       ],
     });

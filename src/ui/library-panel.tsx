@@ -9,7 +9,8 @@ import {
   scanLibraryHealth,
 } from "./library-model";
 import { Select } from "./select";
-import { normalizeSceneManuscriptLink, sceneExcerptFingerprint, sceneManuscriptExcerptWords, SCENE_WRITING_STATUSES, normalizeSceneWritingStatus, verifySceneManuscriptLink } from "../scene-fields";
+import { materialReferenceContent } from "../relevant";
+import { normalizeSceneAiContextIds, normalizeSceneManuscriptLink, sceneExcerptFingerprint, sceneManuscriptExcerptWords, SCENE_WRITING_STATUSES, normalizeSceneWritingStatus, verifySceneManuscriptLink } from "../scene-fields";
 import { ScenePlanner } from "./scene-planner";
 
 function formatSceneRevision(row: AnyRow, language: UiLanguage) {
@@ -195,6 +196,7 @@ export function LibraryPanel({
   const [sceneHistoryCompareOpen, setSceneHistoryCompareOpen] = useState(false);
   const [sceneRestoreOpen, setSceneRestoreOpen] = useState(false);
   const [sceneRelinkBusyId, setSceneRelinkBusyId] = useState("");
+  const [sceneContextSearch, setSceneContextSearch] = useState("");
   const draftVersion = useRef(0);
   const listSeq = useRef(0);
   const presenceDetailSeq = useRef(0);
@@ -225,6 +227,12 @@ export function LibraryPanel({
         return state === "missing" && Number(chapter.revision || 0) <= manuscriptLink.chapterRevision ? "pending" : state;
       })()
     : manuscriptLink ? "other_chapter" : null;
+  const sceneContextIds = normalizeSceneAiContextIds(editing?.aiContextIds);
+  const sceneContextCandidates = allItems.filter((item) => {
+    if (!item.id || item.deleted_at || item.id === editing?.id || !["character", "world", "scene", "outline", "inspiration", "timeline", "foreshadow", "relation"].includes(String(item.kind || ""))) return false;
+    const query = sceneContextSearch.trim().toLocaleLowerCase();
+    return !query || `${item.title || ""} ${kindLabel(String(item.kind || ""))}`.toLocaleLowerCase().includes(query);
+  });
   const sceneHistoryPreviewText = sceneHistoryPreview
     ? formatSceneRevision(sceneHistoryPreview, language)
     : "";
@@ -1007,6 +1015,34 @@ export function LibraryPanel({
               <datalist id="scene-pov-names">
                 {[...new Set(allItems.filter((item) => item.kind === "scene").map((item) => String(parseJson(item.content_json).pov || "").trim()).filter(Boolean))].map((pov) => <option key={pov} value={pov} />)}
               </datalist>
+              <fieldset className="scene-ai-context" data-fd-id="scene-ai-context">
+                <legend>{tr("场景 AI 资料", "Scene AI context")}</legend>
+                <small>{tr("固定在本场细纲中的人物、设定或其他资料；点击“用 AI 起草”时自动加入引用，仍可在发送前检查和移除。", "Keep story materials attached to this scene. They are added as references when drafting and can still be reviewed or removed before sending.")}</small>
+                <input
+                  type="search"
+                  value={sceneContextSearch}
+                  placeholder={tr("搜索人物、设定、场景…", "Search characters, settings, scenes…")}
+                  aria-label={tr("搜索场景 AI 资料", "Search scene AI context")}
+                  onChange={(event) => setSceneContextSearch(event.target.value)}
+                />
+                <div className="scene-ai-context-list">
+                  {sceneContextCandidates.map((item) => {
+                    const selected = sceneContextIds.includes(String(item.id));
+                    return <label key={`${item.kind}:${item.id}`}>
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        disabled={!selected && sceneContextIds.length >= 24}
+                        onChange={(event) => updateEditing({ aiContextIds: normalizeSceneAiContextIds(event.target.checked ? [...sceneContextIds, String(item.id)] : sceneContextIds.filter((id) => id !== String(item.id))) })}
+                      />
+                      <span>{item.title || tr("未命名资料", "Untitled material")}</span>
+                      <small>{kindLabel(String(item.kind || ""))}</small>
+                    </label>;
+                  })}
+                  {!sceneContextCandidates.length && <span className="scene-ai-context-empty">{tr("没有匹配的资料卡。", "No matching story materials.")}</span>}
+                </div>
+                <small className="scene-ai-context-count">{tr(`${sceneContextIds.length} / 24 项已绑定`, `${sceneContextIds.length} / 24 linked`)}</small>
+              </fieldset>
               <Select
                 language={language}
                 value={editing.chapter_id || ""}
@@ -1447,11 +1483,32 @@ export function LibraryPanel({
           language={language}
           onClose={() => setPlannerOpen(false)}
           onOpenScene={(scene) => openEditor(scene)}
-          onDraftScene={(scene) => {
+          onDraftScene={async (scene) => {
             const targetChapter = chapters.find((item) => item.id === scene.chapter_id);
             if (targetChapter) {
-              onDraftScene?.(scene, targetChapter);
+              const contextIds = new Set(normalizeSceneAiContextIds(parseJson(scene.content_json).aiContextIds));
+              const latestMaterials = await api<AnyRow[]>("library:listAll", novel.id);
+              if (!latestMaterials.ok) {
+                notify(latestMaterials.error || tr("无法读取场景绑定的故事资料，暂未打开起草面板。", "Could not load this scene's linked story materials; the draft panel was not opened."));
+                return;
+              }
+              const sourceMaterials = latestMaterials.data || [];
+              const foundIds = new Set(sourceMaterials.map((item) => String(item.id)));
+              const missingCount = [...contextIds].filter((id) => !foundIds.has(id)).length;
+              const chapterTitles = Object.fromEntries(chapters.map((item) => [item.id, item.title]));
+              const chapterOrder = Object.fromEntries(chapters.map((item, index) => [item.id, index]));
+              const linkedAiContexts = sourceMaterials
+                .filter((item) => contextIds.has(String(item.id)) && !item.deleted_at)
+                .map((item) => ({
+                  label: item.title || tr("未命名资料", "Untitled material"),
+                  kind: String(item.kind || ""),
+                  sourceId: String(item.id || ""),
+                  content: materialReferenceContent(item, 6000, chapterTitles, chapterOrder, targetChapter.id),
+                }))
+                .filter((item) => item.content.trim());
+              onDraftScene?.({ ...scene, linkedAiContexts }, targetChapter);
               setPlannerOpen(false);
+              if (missingCount) notify(tr(`${missingCount} 条场景绑定资料已不可用，已跳过；可在细纲中更新绑定。`, `${missingCount} linked materials are unavailable and were skipped; update them in the scene outline.`));
             }
           }}
           onCreateScene={(targetChapter) => openEditor(null, targetChapter ? { chapter_id: targetChapter.id } : {})}

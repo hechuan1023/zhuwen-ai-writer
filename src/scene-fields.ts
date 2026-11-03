@@ -12,6 +12,17 @@ export type SceneManuscriptLink = {
   chapterRevision: number;
 };
 
+export function normalizeSceneAiContextIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap((entry) => {
+    const id = typeof entry === "string" ? entry.trim().slice(0, 160) : "";
+    if (!id || seen.has(id)) return [];
+    seen.add(id);
+    return [id];
+  }).slice(0, 24);
+}
+
 export function normalizeSceneManuscriptLink(value: unknown): SceneManuscriptLink | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const link = value as Partial<SceneManuscriptLink>;
