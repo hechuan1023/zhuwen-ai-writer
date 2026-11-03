@@ -1,17 +1,20 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Modal, UiLanguage } from "./shared";
 
 export function Onboarding({
   language,
   close,
   onPickTheme,
+  initialTheme = "warm",
 }: {
   language: UiLanguage;
   close: () => void;
-  onPickTheme: (t: "warm" | "light" | "dark") => void;
+  onPickTheme: (t: "warm" | "light" | "dark") => Promise<boolean> | void;
+  initialTheme?: "warm" | "light" | "dark";
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
-  const [theme, setTheme] = useState<"warm" | "light" | "dark">("warm");
+  const [theme, setTheme] = useState<"warm" | "light" | "dark">(initialTheme);
+  const pickSeq = useRef(0);
   return (
     <Modal title={tr("欢迎使用铸文", "Welcome to Zhuwen")} close={close}>
       <div className="onboard-card">
@@ -61,8 +64,12 @@ export function Onboarding({
                 key={key}
                 className={theme === key ? "primary" : ""}
                 onClick={() => {
+                  const seq = ++pickSeq.current;
+                  const previous = theme;
                   setTheme(key);
-                  onPickTheme(key);
+                  void Promise.resolve(onPickTheme(key)).then((saved) => {
+                    if (saved === false && pickSeq.current === seq) setTheme(previous);
+                  });
                 }}
               >
                 {label}

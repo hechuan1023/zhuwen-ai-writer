@@ -23,6 +23,7 @@ export default function App() {
   const [shelfLoading, setShelfLoading] = useState(true);
   const [onboarding, setOnboarding] = useState(false);
   const [homeAppearance, setHomeAppearance] = useState<AnyRow>({});
+  const onboardingThemeWriteSeq = useRef(0);
   const notify = useCallback((s: string) => {
     setToast(s);
     // 错误类提示多停留一会儿，避免还没读完就被抹掉
@@ -47,32 +48,39 @@ export default function App() {
   }, [loadShelf]);
   useEffect(() => {
     if (page !== "shelf") return;
-    api<AnyRow>("preferences:get", "appearance").then((result) => {
-      if (!result.ok || !result.data) return;
-      setHomeAppearance(result.data);
-      if (result.data.language === "en" || result.data.language === "zh-CN")
-        setLanguage(result.data.language);
-      const theme =
-        result.data.theme === "light" || result.data.theme === "dark"
-          ? result.data.theme
-          : "warm";
-      document.documentElement.classList.remove(
-        "theme-light",
-        "theme-dark",
-        "theme-warm",
-      );
-      document.documentElement.classList.add(`theme-${theme}`);
-      document.documentElement.style.colorScheme =
-        theme === "dark" ? "dark" : "light";
-      document.documentElement.classList.toggle(
-        "reduce-transparency",
-        Boolean(result.data.reduceTransparency),
-      );
-      applyReduceMotion(Boolean(result.data.reduceMotion));
+    let live = true;
+    Promise.all([
+      api<AnyRow>("preferences:get", "appearance"),
+      api<AnyRow>("preferences:get", "onboarding"),
+    ]).then(([appearanceResult, onboardingResult]) => {
+      if (!live) return;
+      if (appearanceResult.ok && appearanceResult.data) {
+        const value = appearanceResult.data;
+        setHomeAppearance(value);
+        if (value.language === "en" || value.language === "zh-CN")
+          setLanguage(value.language);
+        const theme =
+          value.theme === "light" || value.theme === "dark"
+            ? value.theme
+            : "warm";
+        document.documentElement.classList.remove(
+          "theme-light",
+          "theme-dark",
+          "theme-warm",
+        );
+        document.documentElement.classList.add(`theme-${theme}`);
+        document.documentElement.style.colorScheme =
+          theme === "dark" ? "dark" : "light";
+        document.documentElement.classList.toggle(
+          "reduce-transparency",
+          Boolean(value.reduceTransparency),
+        );
+        applyReduceMotion(Boolean(value.reduceMotion));
+      }
+      if (onboardingResult.ok && !onboardingResult.data?.done)
+        setOnboarding(true);
     });
-    api<AnyRow>("preferences:get", "onboarding").then((r) => {
-      if (r.ok && !r.data?.done) setOnboarding(true);
-    });
+    return () => { live = false; };
   }, [page]);
   useEffect(
     () =>
@@ -92,6 +100,30 @@ export default function App() {
       setPage("work");
     }
   }
+  async function pickOnboardingTheme(theme: "warm" | "light" | "dark") {
+    const seq = ++onboardingThemeWriteSeq.current;
+    const previous = document.documentElement.classList.contains("theme-dark")
+      ? "dark"
+      : document.documentElement.classList.contains("theme-light")
+        ? "light"
+        : "warm";
+    const applyTheme = (value: string) => {
+      document.documentElement.classList.remove("theme-light", "theme-dark", "theme-warm");
+      document.documentElement.classList.add(`theme-${value}`);
+      document.documentElement.style.colorScheme = value === "dark" ? "dark" : "light";
+    };
+    applyTheme(theme);
+    setHomeAppearance((current) => ({ ...current, theme }));
+    const result = await patchAppearance({ theme });
+    if (seq !== onboardingThemeWriteSeq.current) return true;
+    if (!result.ok) {
+      applyTheme(previous);
+      setHomeAppearance((current) => ({ ...current, theme: previous }));
+      notify(result.error || (language === "en" ? "Could not save theme; the previous setting was restored" : "主题保存失败，已恢复原设置"));
+      return false;
+    }
+    return true;
+  }
   if (page === "shelf")
     return (
       <UiLanguageContext.Provider value={language}>
@@ -99,6 +131,12 @@ export default function App() {
         <CreativeHome
           language={language}
           setLanguage={setLanguage}
+          appearanceTheme={
+            homeAppearance.theme === "light" || homeAppearance.theme === "dark"
+              ? homeAppearance.theme
+              : "warm"
+          }
+          onAppearanceChange={(over) => setHomeAppearance((current) => ({ ...current, ...over }))}
           novels={novels}
           loading={shelfLoading}
           sort={sort}
@@ -112,15 +150,12 @@ export default function App() {
         {onboarding && (
           <Onboarding
             language={language}
-            onPickTheme={(t) => {
-              document.documentElement.classList.remove(
-                "theme-light",
-                "theme-dark",
-                "theme-warm",
-              );
-              document.documentElement.classList.add(`theme-${t}`);
-              void patchAppearance({ theme: t });
-            }}
+            initialTheme={
+              homeAppearance.theme === "light" || homeAppearance.theme === "dark"
+                ? homeAppearance.theme
+                : "warm"
+            }
+            onPickTheme={pickOnboardingTheme}
             close={() => {
               setOnboarding(false);
               void markOnboardingDone().then((r) => {

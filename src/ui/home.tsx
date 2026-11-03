@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, fmt, time, Empty, Modal, ConfirmDialog, AnyRow, UiLanguage } from "./shared";
 import { CreateNovel, NovelTrash } from "./shelf";
 import { NovelEdit } from "./novel-edit";
@@ -11,6 +11,8 @@ import { Select } from "./select";
 type Props = {
   language: UiLanguage;
   setLanguage: (l: UiLanguage) => void;
+  appearanceTheme?: "warm" | "light" | "dark";
+  onAppearanceChange?: (over: AnyRow) => void;
   novels: AnyRow[];
   loading?: boolean;
   sort: string;
@@ -25,6 +27,8 @@ type Props = {
 export function CreativeHome({
   language,
   setLanguage,
+  appearanceTheme,
+  onAppearanceChange,
   novels,
   loading,
   sort,
@@ -48,12 +52,15 @@ export function CreativeHome({
   const [dailyGoal, setDailyGoal] = useState(0);
   const [appearance, setAppearance] = useState<AnyRow>({});
   const [theme, setTheme] = useState<"warm" | "light" | "dark">("warm");
+  const themeWriteSeq = useRef(0);
+  const languageWriteSeq = useRef(0);
 
   useEffect(() => {
+    const themeSeq = themeWriteSeq.current;
     api<AnyRow>("preferences:get", "appearance").then((r) => {
       if (!r.ok || !r.data) return;
       setAppearance(r.data);
-      if (r.data.theme === "light" || r.data.theme === "dark" || r.data.theme === "warm")
+      if (themeSeq === themeWriteSeq.current && (r.data.theme === "light" || r.data.theme === "dark" || r.data.theme === "warm"))
         setTheme(r.data.theme);
       document.documentElement.classList.toggle(
         "reduce-transparency",
@@ -66,6 +73,10 @@ export function CreativeHome({
         setDailyGoal(Math.max(0, Math.floor(r.data.dailyGoal)));
     });
   }, []);
+
+  useEffect(() => {
+    if (appearanceTheme) setTheme(appearanceTheme);
+  }, [appearanceTheme]);
 
   useEffect(() => {
     document.documentElement.classList.remove("theme-light", "theme-dark", "theme-warm");
@@ -109,12 +120,34 @@ export function CreativeHome({
   async function cycleTheme() {
     const next = theme === "warm" ? "light" : theme === "light" ? "dark" : "warm";
     const prev = theme;
+    const seq = ++themeWriteSeq.current;
     setTheme(next);
     setAppearance((a) => ({ ...a, theme: next }));
+    onAppearanceChange?.({ theme: next });
     const r = await patchAppearance({ theme: next });
+    if (seq !== themeWriteSeq.current) return;
     if (!r.ok) {
       setTheme(prev);
-      notify(r.error || tr("主题保存失败", "Could not save theme"));
+      setAppearance((a) => ({ ...a, theme: prev }));
+      onAppearanceChange?.({ theme: prev });
+      notify(r.error || tr("主题保存失败，已恢复原设置", "Could not save theme; the previous setting was restored"));
+    }
+  }
+
+  async function cycleLanguage() {
+    const prev = language;
+    const next: UiLanguage = prev === "en" ? "zh-CN" : "en";
+    const seq = ++languageWriteSeq.current;
+    setLanguage(next);
+    setAppearance((a) => ({ ...a, language: next }));
+    onAppearanceChange?.({ language: next });
+    const r = await patchAppearance({ language: next });
+    if (seq !== languageWriteSeq.current) return;
+    if (!r.ok) {
+      setLanguage(prev);
+      setAppearance((a) => ({ ...a, language: prev }));
+      onAppearanceChange?.({ language: prev });
+      notify(r.error || (prev === "en" ? "Could not save language; the previous setting was restored" : "语言保存失败，已恢复原设置"));
     }
   }
 
@@ -130,7 +163,7 @@ export function CreativeHome({
             <button onClick={cycleTheme} title={tr("切换主题", "Switch theme")}>
               {theme === "warm" ? tr("暖纸", "Warm") : theme === "light" ? tr("雾白", "Mist") : tr("墨夜", "Ink")}
             </button>
-            <button onClick={() => setLanguage(language === "en" ? "zh-CN" : "en")}>
+            <button onClick={() => void cycleLanguage()}>
               {language === "en" ? "中文" : "EN"}
             </button>
             <button onClick={() => setTrashOpen(true)}>{tr("回收站", "Trash")}</button>
