@@ -1744,3 +1744,14 @@ button.zchat-style-saved-apply:not(.primary):not(.danger):not(.danger-text):not(
   .zchat-style-state { display: none; }
   .zchat-composer-tools { grid-template-columns: 30px minmax(0, 1fr) 30px minmax(80px, 1fr); }
 }
+/* Wide chat composers use one continuous footer; narrow writing sidebars keep the two-row control layout. */
+@container ai-composer (min-width: 700px) {
+  .zchat-composer-bar { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
+  .zchat-composer-tools { flex: 1 1 auto; }
+  .zchat-composer-actions { flex: 0 0 auto; }
+  .zchat-composer-actions .zchat-pill.context { max-width: min(300px, 38cqi); }
+  .zchat-enter-hint { display: none; }
+}
+@container ai-composer (min-width: 900px) {
+  .zchat-enter-hint { display: inline; }
+}
