@@ -549,7 +549,7 @@ export function buildTaskAndStyleInstructions(
   intensity: StyleIntensity = "balanced",
 ) {
   const cards = (Array.isArray(card) ? card : card ? [card] : []).filter(Boolean);
-  const styleCards = task === "chat" || task === "check"
+  const styleCards = task === "chat"
     ? []
     : cards.filter((item) => item.tasks.includes(task) || (task === "naturalize" && item.tasks.includes("polish")));
   const specificRules = styleCards

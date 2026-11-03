@@ -1536,7 +1536,7 @@ export function AiPanel({
     }
     let draftStyleIds: string[] | null = null;
     let styleRestoreNotice = "";
-    if (message.task_kind && !["chat", "check"].includes(String(message.task_kind))) {
+    if (message.task_kind && message.task_kind !== "chat") {
       const cardResult = await api<StyleCard[]>("ai:styles:list");
       if (cardResult.ok) {
         setStyleCards(cardResult.data || []);

@@ -264,7 +264,7 @@ export function StyleCardPanel({
       ? styleLabel(selected[0], language).name
       : tr(`组合 ${selected.length} 种技法`, `${selected.length} techniques`);
   const appliesToTask = (card: StyleCard) =>
-    taskKind !== "chat" && taskKind !== "check" &&
+    taskKind !== "chat" &&
     (card.tasks.includes(taskKind) || (taskKind === "naturalize" && card.tasks.includes("polish")));
   const applicableSelected = selected.filter(appliesToTask);
   const [open, setOpen] = useState(false);

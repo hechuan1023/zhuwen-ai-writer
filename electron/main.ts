@@ -1493,7 +1493,7 @@ function requestStyle(p: any) {
     : p?.styleId ? [p.styleId] : [];
   const ids: string[] = [...new Set<string>(requestedIds.map((id: unknown) => String(id || "").trim()).filter((id: string) => Boolean(id)))].slice(0, 6);
   const task = String(p?.taskKind || "chat");
-  const cards = task === "chat" || task === "check"
+  const cards = task === "chat"
     ? []
     : ids.map((id) => styleCardRow(id)).filter((card: any) =>
         card && (card.tasks.includes(task) || (task === "naturalize" && card.tasks.includes("polish"))),
