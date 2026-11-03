@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, parseJson, UiLanguage } from "./shared";
 import { Select, type SelectOption } from "./select";
+import { IconSparkle } from "./chat/icons";
 import { normalizeSceneManuscriptLink, normalizeSceneTargetWords, normalizeSceneWritingStatus, sceneManuscriptExcerptWords, sceneManuscriptLinkSegments, SCENE_WRITING_STATUSES, verifySceneManuscriptLink } from "../scene-fields";
 import { buildPlotlineMatrix, filterScenesByPov, filterScenesByTrack, groupScenesForTimeline, sceneCustomFields, scenePlotlines, scenePovOptions, sceneTags, sceneTrackOptions } from "./scene-planner-model";
 
@@ -369,7 +370,7 @@ export function ScenePlanner({
                       {normalizeSceneTargetWords(data.targetWords) != null && <div className="scene-timeline-target" title={tr("相对条表示该场景目标字数占本章所有已规划场景目标字数的比例，不是写作进度", "The bar shows this scene's share of all planned scene targets in this chapter, not writing progress")}><span>{tr("目标", "Target")} {formatWords(normalizeSceneTargetWords(data.targetWords) || 0)} {tr("字", "words")}</span><span>{targetShare(scene)}%</span><i aria-hidden="true"><b style={{ width: `${targetShare(scene)}%` }} /></i></div>}
                       {data.body && <p>{data.body}</p>}
                       {(data.coolPoint || data.hook) && <small>{data.coolPoint && `${tr("回报", "Payoff")}: ${data.coolPoint}`}{data.coolPoint && data.hook ? " · " : ""}{data.hook && `${tr("章末钩子", "Hook")}: ${data.hook}`}</small>}
-                      <footer><span>{data.cast ? data.cast.split(/[,，、;；]+/).filter(Boolean).slice(0, 4).join(" · ") : tr("未记录出场人物", "No cast notes")}</span><button type="button" title={tr("把细纲带入 AI 面板，检查后再发送", "Bring outline to AI for review")} onClick={() => onDraftScene(scene)}>{tr("✦ AI 起草", "✦ Draft with AI")}</button></footer>
+                      <footer><span>{data.cast ? data.cast.split(/[,，、;；]+/).filter(Boolean).slice(0, 4).join(" · ") : tr("未记录出场人物", "No cast notes")}</span><button type="button" title={tr("把细纲带入 AI 面板，检查后再发送", "Bring outline to AI for review")} onClick={() => onDraftScene(scene)}><IconSparkle size={13} />{tr("AI 起草", "Draft with AI")}</button></footer>
                     </div>
                   </article>;
                 })}
@@ -505,7 +506,7 @@ function SceneCard({
       {scene.cast && <div className="scene-card-cast">{scene.cast.split(/[,，、;；]+/).filter(Boolean).slice(0, 4).map((person: string) => <span key={person}>{person.trim()}</span>)}</div>}
       {(scenePlotlines(scene).length > 0 || sceneTags(scene).length > 0 || sceneCustomFields(scene).length > 0) && <div className="scene-card-tags">{scenePlotlines(scene).slice(0, 2).map((plotline) => <span className="plotline" key={`plotline:${plotline}`} title={tr("剧情线", "Plotline")}>{plotline}</span>)}{sceneTags(scene).slice(0, 2).map((tag) => <span key={`tag:${tag}`} title={tr("场景标签", "Scene tag")}>{tag}</span>)}{sceneCustomFields(scene).slice(0, 2).map((field) => <span className="custom" key={`custom:${field.key}`} title={`${field.key}: ${field.value}`}>{field.key}: {field.value}</span>)}</div>}
       {scene.when && <small className="scene-card-when">{scene.when}</small>}
-      <button className="scene-card-draft" type="button" disabled={!canDraft} title={!canDraft ? tr("请先把场景分配到章节", "Assign this scene to a chapter first") : tr("把细纲带入 AI 面板，检查后再发送", "Bring this outline to AI; review before sending")} onClick={(event) => { event.stopPropagation(); onDraft(); }}>{tr("✦ 用 AI 起草", "✦ Draft with AI")}</button>
+      <button className="scene-card-draft" type="button" disabled={!canDraft} title={!canDraft ? tr("请先把场景分配到章节", "Assign this scene to a chapter first") : tr("把细纲带入 AI 面板，检查后再发送", "Bring this outline to AI; review before sending")} onClick={(event) => { event.stopPropagation(); onDraft(); }}><IconSparkle size={14} />{tr("用 AI 起草", "Draft with AI")}</button>
     </article>
   );
 }
