@@ -635,11 +635,16 @@
   border: 1px solid var(--line, #e2ddd2);
   border-radius: var(--r-lg, 14px);
   background: var(--paper, #fff);
+  box-shadow: var(--shadow-sm, 0 4px 16px rgba(0,0,0,.06));
   padding: 10px 10px 8px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+  transition: border-color var(--dur, 180ms) var(--ease, ease), box-shadow var(--dur, 180ms) var(--ease, ease), background-color var(--dur, 180ms) var(--ease, ease);
+}
+.zchat-composer:hover:not(:focus-within) {
+  border-color: var(--line-strong, var(--line, #e2ddd2));
 }
 .zchat-composer:focus-within {
   border-color: var(--accent, #4d7a68);
@@ -811,7 +816,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 30px;
+  height: var(--ctl-h, 34px);
   padding: 0 9px;
   border: 1px solid var(--line, #e2ddd2);
   border-radius: var(--r-md, 10px);
@@ -906,8 +911,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: var(--ctl-h, 34px);
+  height: var(--ctl-h, 34px);
   flex: none;
   border: none;
   border-radius: 50%;
@@ -1772,12 +1777,12 @@ button.zchat-style-saved-apply:not(.primary):not(.danger):not(.danger-text):not(
 @container ai-composer (max-width: 360px) {
   .zchat-composer-tools {
     display: grid;
-    grid-template-columns: 30px minmax(0, 1fr) 30px minmax(88px, 1.15fr);
+    grid-template-columns: var(--ctl-h, 34px) minmax(0, 1fr) var(--ctl-h, 34px) minmax(88px, 1.15fr);
     gap: 4px;
   }
   .zchat-composer-tools > .zchat-pill {
-    width: 30px;
-    min-width: 30px;
+    width: var(--ctl-h, 34px);
+    min-width: var(--ctl-h, 34px);
     justify-content: center;
     padding: 0;
   }
@@ -1803,9 +1808,9 @@ button.zchat-style-saved-apply:not(.primary):not(.danger):not(.danger-text):not(
     flex: none;
   }
   .zchat-composer-tools .prompt-template-trigger {
-    width: 30px;
-    min-width: 30px;
-    max-width: 30px;
+    width: var(--ctl-h, 34px);
+    min-width: var(--ctl-h, 34px);
+    max-width: var(--ctl-h, 34px);
     justify-content: center;
     padding: 0;
   }
@@ -1826,7 +1831,7 @@ button.zchat-style-saved-apply:not(.primary):not(.danger):not(.danger-text):not(
 }
 @container ai-composer (max-width: 300px) {
   .zchat-style-state { display: none; }
-  .zchat-composer-tools { grid-template-columns: 30px minmax(0, 1fr) 30px minmax(80px, 1fr); }
+  .zchat-composer-tools { grid-template-columns: var(--ctl-h, 34px) minmax(0, 1fr) var(--ctl-h, 34px) minmax(80px, 1fr); }
 }
 /* Wide chat composers use one continuous footer; narrow writing sidebars keep the two-row control layout. */
 @container ai-composer (min-width: 700px) {
