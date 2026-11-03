@@ -853,9 +853,9 @@
 
 .zchat-context-ring {
   --context-progress: 0%;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
   display: inline-grid;
   place-items: center;
   border-radius: 50%;
@@ -865,13 +865,28 @@
 }
 .zchat-context-ring::after {
   content: "";
-  width: 10px;
-  height: 10px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--panel, #f8f5ef);
 }
+.zchat-context-ring i {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  font-size: 6px;
+  font-style: normal;
+  font-weight: 750;
+  line-height: 1;
+  color: var(--muted, #8a8577);
+}
 .zchat-context-ring.over { background: conic-gradient(#c84b4b 100%, rgba(127, 127, 127, .18) 0); }
 .zchat-context-ring.warn { background: conic-gradient(var(--warning, #a67c3a) var(--context-progress), rgba(127, 127, 127, .18) 0); }
+.zchat-context-ring.warn i { color: var(--warning, #a67c3a); }
+.zchat-context-ring.over i { color: #c84b4b; }
 .zchat-context-limit { flex: none; opacity: .72; font-size: 10px; margin-left: -2px; }
 .zchat-send {
   display: inline-flex;

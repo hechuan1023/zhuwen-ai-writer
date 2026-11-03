@@ -356,7 +356,7 @@ export function Composer({
               style={{ "--context-progress": `${Math.min(100, Math.max(0, contextPercent))}%` } as React.CSSProperties}
               aria-hidden="true"
             >
-              <i />
+              <i>{contextExceeded ? "!" : contextPercent > 99 ? "99+" : `${Math.round(contextPercent)}%`}</i>
             </span>
             <span className="zchat-context-summary" data-fd-id="ai-context-summary">{contextSummary}</span>
             {contextLimitLabel ? <small className="zchat-context-limit">{contextLimitLabel}</small> : null}
