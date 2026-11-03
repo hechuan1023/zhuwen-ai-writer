@@ -10,6 +10,9 @@ export type SceneManuscriptLink = {
   chapterId: string;
   chapterTitle: string;
   chapterRevision: number;
+  /** Short exact-match anchors; the manuscript excerpt itself is never stored. */
+  anchorStart?: string;
+  anchorEnd?: string;
 };
 
 export function normalizeSceneAiContextIds(value: unknown): string[] {
@@ -33,6 +36,12 @@ export function normalizeSceneManuscriptLink(value: unknown): SceneManuscriptLin
   const fingerprint = typeof link.fingerprint === "string" ? link.fingerprint : "";
   if (!chapterId || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || !Number.isSafeInteger(characterCount) || start < 0 || end <= start || end - start > 40_000 || characterCount < 1 || characterCount > Math.min(40_000, end - start) || !/^[0-9a-f]{16}$/u.test(fingerprint)) return null;
   const revision = Math.floor(Number(link.chapterRevision) || 0);
+  const validAnchor = (anchor: unknown) => typeof anchor === "string" && Array.from(anchor).length <= 240 && anchor.length <= 480;
+  const anchorsValid = link.anchorStart == null && link.anchorEnd == null
+    ? false
+    : validAnchor(link.anchorStart) && Boolean(link.anchorStart) && (link.anchorEnd == null || validAnchor(link.anchorEnd));
+  const anchorStart = anchorsValid ? link.anchorStart as string : "";
+  const anchorEnd = anchorsValid && typeof link.anchorEnd === "string" ? link.anchorEnd : "";
   return {
     start,
     end,
@@ -41,7 +50,39 @@ export function normalizeSceneManuscriptLink(value: unknown): SceneManuscriptLin
     chapterId,
     chapterTitle: typeof link.chapterTitle === "string" ? link.chapterTitle.slice(0, 300) : "",
     chapterRevision: Math.max(0, Number.isSafeInteger(revision) ? revision : 0),
+    ...(anchorStart ? { anchorStart, anchorEnd } : {}),
   };
+}
+
+/** Keep only short exact-match boundaries so a scene can be relocated after edits. */
+export function sceneManuscriptAnchors(value: unknown): { anchorStart: string; anchorEnd: string } {
+  const points = Array.from(String(value || ""));
+  if (points.length <= 240) return { anchorStart: points.join(""), anchorEnd: "" };
+  return { anchorStart: points.slice(0, 120).join(""), anchorEnd: points.slice(-120).join("") };
+}
+
+/** Return a range only when the saved boundaries identify exactly one excerpt. */
+export function findUniqueSceneManuscriptAnchor(text: unknown, linkValue: unknown): { start: number; end: number } | null {
+  const link = normalizeSceneManuscriptLink(linkValue);
+  const body = String(text || "");
+  if (!link?.anchorStart || !body) return null;
+  const matches: Array<{ start: number; end: number }> = [];
+  let start = body.indexOf(link.anchorStart);
+  while (start !== -1) {
+    if (!link.anchorEnd) {
+      matches.push({ start, end: start + link.anchorStart.length });
+    } else {
+      let endAnchor = body.indexOf(link.anchorEnd, start + link.anchorStart.length);
+      while (endAnchor !== -1 && endAnchor + link.anchorEnd.length - start <= 40_000) {
+        matches.push({ start, end: endAnchor + link.anchorEnd.length });
+        if (matches.length > 1) return null;
+        endAnchor = body.indexOf(link.anchorEnd, endAnchor + 1);
+      }
+    }
+    if (matches.length > 1) return null;
+    start = body.indexOf(link.anchorStart, start + 1);
+  }
+  return matches.length === 1 ? matches[0] : null;
 }
 
 export function sceneExcerptFingerprint(value: unknown): string {

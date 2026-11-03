@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api, time, parseJson, parseTags, Empty, ConfirmDialog, DiffModal, Modal, kinds, AnyRow, UiLanguage, CloseIcon } from "./shared";
 import {
@@ -10,7 +10,7 @@ import {
 } from "./library-model";
 import { Select } from "./select";
 import { materialReferenceContent } from "../relevant";
-import { normalizeSceneAiContextIds, normalizeSceneManuscriptLink, sceneExcerptFingerprint, sceneManuscriptExcerptWords, SCENE_WRITING_STATUSES, normalizeSceneWritingStatus, verifySceneManuscriptLink } from "../scene-fields";
+import { findUniqueSceneManuscriptAnchor, normalizeSceneAiContextIds, normalizeSceneManuscriptLink, sceneExcerptFingerprint, sceneManuscriptAnchors, sceneManuscriptExcerptWords, SCENE_WRITING_STATUSES, normalizeSceneWritingStatus, verifySceneManuscriptLink } from "../scene-fields";
 import { ScenePlanner } from "./scene-planner";
 
 function formatSceneRevision(row: AnyRow, language: UiLanguage) {
@@ -228,6 +228,10 @@ export function LibraryPanel({
         return state === "missing" && Number(chapter.revision || 0) <= manuscriptLink.chapterRevision ? "pending" : state;
       })()
     : manuscriptLink ? "other_chapter" : null;
+  const manuscriptLinkCandidate = useMemo(() => {
+    if (!editing || kind !== "scene" || dirty || !chapter?.id || !chapterSaved || !manuscriptLink || manuscriptLinkState !== "missing" || chapter.id !== manuscriptLink.chapterId) return null;
+    return findUniqueSceneManuscriptAnchor(chapter.plain_text, manuscriptLink);
+  }, [Boolean(editing), kind, dirty, chapter?.id, chapter?.plain_text, chapterSaved, manuscriptLink?.chapterId, manuscriptLink?.anchorStart, manuscriptLink?.anchorEnd, manuscriptLinkState]);
   const sceneContextIds = normalizeSceneAiContextIds(editing?.aiContextIds);
   const sceneContextCandidates = allItems.filter((item) => {
     if (!item.id || item.deleted_at || item.id === editing?.id || !["character", "world", "scene", "outline", "inspiration", "timeline", "foreshadow", "relation"].includes(String(item.kind || ""))) return false;
@@ -498,6 +502,7 @@ export function LibraryPanel({
           end: selectedText.end,
           characterCount: sceneManuscriptExcerptWords(selectedText.text),
           fingerprint: sceneExcerptFingerprint(selectedText.text),
+          ...sceneManuscriptAnchors(selectedText.text),
           chapterId: chapter.id,
           chapterTitle: chapter.title || "",
           chapterRevision: chapter.revision || 0,
@@ -1060,7 +1065,7 @@ export function LibraryPanel({
               <section className="scene-manuscript-link" data-fd-id="scene-manuscript-link">
                 <header>
                   <b>{tr("正文片段", "Manuscript excerpt")}</b>
-                  <small>{tr("选中章节正文后，可把该片段关联到此细纲；只保存正文位置与校验指纹，不复制或改写正文。", "Select text in the chapter and link it here. Only its position and verification fingerprint are saved; the manuscript is not copied or changed.")}</small>
+                  <small>{tr("选中章节正文后，可把该片段关联到此细纲；只保存位置、校验指纹和最多首尾各 120 字的定位锚点，不复制正文。", "Select text in the chapter to link it here. Only its position, verification fingerprint, and up to 120 characters from each end are saved as location anchors; the passage is not copied.")}</small>
                 </header>
                 {manuscriptLink ? (
                   <div className={`scene-manuscript-link-state state-${manuscriptLinkState}`}>
@@ -1071,11 +1076,32 @@ export function LibraryPanel({
                         : manuscriptLinkState === "unsaved"
                           ? tr("章节有未保存修改；保存后再核对实写进度。", "The chapter has unsaved changes; save it to verify writing progress.")
                         : manuscriptLinkState === "missing"
-                          ? tr("正文片段位置已变化或内容已修改，请重新选择该片段关联。", "The excerpt moved or changed; select it again to relink.")
+                          ? tr("正文片段位置已变化或内容已修改。", "The excerpt moved or changed.")
                           : tr(`已关联《${manuscriptLink.chapterTitle || "其他章节"}》的片段；切换到该章可核对。`, `Linked to ${manuscriptLink.chapterTitle || "another chapter"}; open it to verify.`)}</span>
                     <button type="button" className="icon" aria-label={tr("移除正文关联", "Remove manuscript link")} title={tr("移除关联", "Remove link")} onClick={() => updateEditing({ manuscriptLink: null })}><CloseIcon size={14} /></button>
                   </div>
                 ) : <p className="scene-manuscript-link-empty">{tr("尚未关联正文片段。", "No manuscript excerpt linked.")}</p>}
+                {manuscriptLinkState === "missing" && manuscriptLinkCandidate && manuscriptLink && chapter ? (
+                  <div className="scene-manuscript-link-recovery">
+                    <small>{tr("找到唯一首尾锚点匹配。确认后会更新关联位置；保存细纲后生效。", "A unique match for both passage anchors was found. Confirm to update the link; save the scene outline to apply it.")}</small>
+                    <button
+                      type="button"
+                      className="secondary scene-manuscript-link-action"
+                      onClick={() => {
+                        const excerpt = String(chapter.plain_text || "").slice(manuscriptLinkCandidate.start, manuscriptLinkCandidate.end);
+                        updateEditing({ manuscriptLink: {
+                          ...manuscriptLink,
+                          ...manuscriptLinkCandidate,
+                          characterCount: sceneManuscriptExcerptWords(excerpt),
+                          fingerprint: sceneExcerptFingerprint(excerpt),
+                          chapterTitle: chapter.title || manuscriptLink.chapterTitle,
+                          chapterRevision: chapter.revision || 0,
+                          ...sceneManuscriptAnchors(excerpt),
+                        } });
+                      }}
+                    >{tr("确认唯一匹配并更新位置", "Confirm unique match and update link")}</button>
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   className="secondary scene-manuscript-link-action"
@@ -1092,6 +1118,7 @@ export function LibraryPanel({
                         end: selectedText.end,
                         characterCount: sceneManuscriptExcerptWords(excerpt),
                         fingerprint: sceneExcerptFingerprint(excerpt),
+                        ...sceneManuscriptAnchors(excerpt),
                         chapterId: chapter.id,
                         chapterTitle: chapter.title || "",
                         chapterRevision: chapter.revision || 0,
