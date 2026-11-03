@@ -638,7 +638,11 @@ function StyleEditor({ card, language, connectionAvailable, onGenerateRules, onC
     setError("");
     try {
       const generated = await onGenerateRules(sample.trim(), language);
-      if (generated.trim()) setRules(generated.trim());
+      if (generated.trim()) {
+        setRules((current) => current.trim()
+          ? `${current.trim()}\n\n${generated.trim()}`
+          : generated.trim());
+      }
       else setError(tr("没有提炼出可用规则，请调整样文后重试。", "No usable rules were returned. Revise the sample and try again."));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -682,6 +686,7 @@ function StyleEditor({ card, language, connectionAvailable, onGenerateRules, onC
               "Example: Let the viewpoint character act on available evidence; don't invent a new rule to escape a contradiction.",
             )}
             value={rules}
+            disabled={analyzing}
             onChange={(event) => setRules(event.target.value)}
             maxLength={20000}
             rows={8}
@@ -702,6 +707,7 @@ function StyleEditor({ card, language, connectionAvailable, onGenerateRules, onC
               "Paste a short passage of your own writing whose voice you want to carry forward",
             )}
             value={sample}
+            disabled={analyzing}
             onChange={(event) => setSample(event.target.value)}
             maxLength={8000}
             rows={5}
@@ -710,7 +716,7 @@ function StyleEditor({ card, language, connectionAvailable, onGenerateRules, onC
         <div className="zchat-style-sample-actions">
           <button type="button" className="secondary" disabled={!connectionAvailable || !sample.trim() || analyzing || saving} onClick={() => void generateRules()}>
             <IconSparkle size={14} />
-            {analyzing ? tr("正在分析样文…", "Analyzing sample…") : tr("从样文提炼规则", "Derive rules from sample")}
+            {analyzing ? tr("正在分析样文…", "Analyzing sample…") : tr("提炼并追加规则", "Derive and append rules")}
           </button>
           <small>{connectionAvailable ? tr("样文会发送到当前 AI 连接；规则只填入草稿，不会自动保存。", "The sample is sent to the current AI connection. Rules are added as a draft and are not saved automatically.") : tr("请先配置 AI 连接。", "Configure an AI connection first.")}</small>
         </div>
