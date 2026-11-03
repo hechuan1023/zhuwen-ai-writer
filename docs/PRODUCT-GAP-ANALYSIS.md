@@ -28,6 +28,7 @@
 - 自定义写作风格卡新增可选的作者个人样文参考；样文与规则共同受 20,000 字上限约束，明确只抽取表达特征、不复用文本内容，并沿用既有卡片导入导出及历史规则快照。
 - 为新增的规则怪谈、重生因果、年代市井、古言家族博弈、宇宙恐怖、诸界漫游与温柔向情感技法卡补齐英文名称和一键组合；组合保留单卡可增删的现有流程，不要求每章固定节拍。
 - 新增“高概念谜题与逻辑兑现”技法卡和“高概念悬疑与逻辑爽感”组合：将线索公平性、人物主动验证、合理误判、答案对核心异常的解释及阶段性后果组成可预览的写作规则。依据 2026 年用户调查提炼一般叙事机制；不将偏好数据解释为题材成功保证，也不复刻具体作品。
+- 新增“长篇主线与整体结构”技法卡及“长篇连载结构校准”组合：把全书核心、当前阶段与本章目标分层；约束支线/角色/设定扩张，要求局部回报影响后续行动并跟踪作者确认的伏笔和关系变化。该卡回应《2025中国网络文学蓝皮书》对长篇整体叙事失焦问题的观察；是可选规划方法，不替作者决定终局，也不承诺市场表现。
 - 风格快捷菜单按当前任务展示最多 6 张适用卡，并保留所有已选卡以便快速调整；完整卡库仍可从“管理/搜索风格卡”进入，使用搜索、任务筛选和组合管理，避免把整个卡库塞进窄下拉框。
 - 工作区章节栏与 AI 面板分隔条支持键盘方向键调整及双击复位；左右停靠时分隔条移动到编辑器一侧，展开聊天后宽度仍可拖动调整。
 - 引用选择器新增“全书正文”：按章节顺序读取尚未引用的完整正文，依据已核对的当前请求字符数与 30 万字上限，仅加入可容纳的完整章节；超出部分不截断，读取失败会汇报，当前编辑章节取编辑器中的最新文本，每章仍可单独移除。
@@ -151,6 +152,7 @@
 - Novelcrafter：[功能总览](https://www.novelcrafter.com/features)，公开列出 Smart Highlighting、Usage Frequency 与重复表达审阅能力；铸文采用离线本章复核与现有查找定位的轻量实现。
 - Novelcrafter：[功能总览](https://www.novelcrafter.com/features)，明确列出用于标记草稿/完成场景的 Scene Labels；[Plan 视图说明](https://www.novelcrafter.com/help/docs/plan/plan-views)列出 Grid、Matrix 与大纲视图。
 - Novelcrafter：[小说导出说明](https://www.novelcrafter.com/help/docs/export/novel)，官方说明支持 Word `.docx` 与 Markdown 导出。
+- 中国作家协会网络文学中心：《[2025中国网络文学蓝皮书](https://wyb.chinawriter.com.cn/content/202608/10/content84876.html)》，讨论长篇整体叙事失焦、类型创新和博弈型叙事等创作趋势。
 - Novelcrafter：[功能总览](https://www.novelcrafter.com/features)，官方导入说明列出 Word、Markdown 与 HTML；铸文新增 HTML 文字提取式导入，不保留网页排版和媒体。
 - Novelcrafter：[AI 聊天界面说明](https://www.novelcrafter.com/help/docs/chat/the-chat-interface)，列出对话置顶、分屏、复制/导出、归档与删除等会话管理入口。
 - OpenAI：[Projects in ChatGPT](https://help.openai.com/en/articles/10169521-projects-in-chatgpt)，说明项目中的聊天会继承项目指令和文件上下文，可从项目聊天、文件与自定义指令共同取用信息。

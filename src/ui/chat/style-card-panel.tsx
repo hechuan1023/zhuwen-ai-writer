@@ -54,6 +54,7 @@ function styleLabel(card: StyleCard, language: string) {
     "style-resource-management-loop": ["Resource & settlement loop", "Connect investment, work, visible gains, costs, and the next bottleneck."],
     "style-relationship-progression": ["Relationship progression", "Use goals, boundaries, choices, and concrete actions to move relationships."],
     "style-rule-instance-progression": ["Rule-based instances", "Use verifiable rules, active testing, staged payoffs, and a persistent arc."],
+    "style-longform-architecture-focus": ["Long-form architecture & focus", "Keep the main arc, stage goals, side plots, and chapter payoffs working together."],
     "style-short-form-closure": ["Short-form closure & pacing", "Focus causal progression and a satisfying resolution within a bounded length."],
     "style-authorial-genre-bending": ["Genre-bending & authorial voice", "Keep the genre promise while breaking formula through character choices and story-world causality."],
     "style-road-journey-healing": ["Road journey & gradual healing", "Connect episodic stops, evolving relationships, and slow, earned change through a journey."],
@@ -91,6 +92,12 @@ const TECHNIQUE_PRESETS = [
     name: ["公路漫游疗愈", "Road journey & gradual healing"],
     description: ["旅途单元 + 群像关系 + 生活肌理", "Episodic journey + ensemble relationships + lived detail"],
     cardIds: ["style-road-journey-healing", "style-human-ensemble", "style-lived-realism"],
+  },
+  {
+    id: "genre-longform-serial-architecture",
+    name: ["长篇连载结构校准", "Long-form serial architecture"],
+    description: ["全书主线 + 阶段成长 + 章节兑现", "Novel-wide focus + staged growth + chapter payoff"],
+    cardIds: ["style-longform-architecture-focus", "style-growth-progression", "style-serial-hook-payoff"],
   },
   {
     id: "genre-short-form-closure",
