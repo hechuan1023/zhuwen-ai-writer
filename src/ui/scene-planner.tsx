@@ -48,6 +48,16 @@ export function ScenePlanner({
   onRelinkManuscript: (scene: SceneRow) => Promise<boolean>;
 }) {
   const tr = (zh: string, en: string) => language === "en" ? en : zh;
+  const openLinkedChapter = (scene: SceneRow) => {
+    const link = normalizeSceneManuscriptLink(dataFor(scene).manuscriptLink);
+    const source = chapters.find((item) => item.id === link?.chapterId);
+    if (!source) {
+      notify(tr("找不到原关联章节；请先在场景细纲中重新选择所属章节。", "The source chapter is unavailable. Choose the scene's chapter again in its outline."));
+      return;
+    }
+    onOpenChapter(source);
+    notify(tr("已打开原关联章节。选中该场景的正文片段后，回到规划板点击“重新关联选区”。", "Opened the source chapter. Select the scene passage, then return to the planner and choose “Relink selection”."));
+  };
   const [volumeFilter, setVolumeFilter] = useState(currentChapter?.volume_id || "all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sceneStatusFilter, setSceneStatusFilter] = useState("all");
@@ -283,7 +293,7 @@ export function ScenePlanner({
               <span className="scene-lane-count">{unassigned.length}</span>
             </header>
             <div className="scene-lane-cards">
-                  {unassigned.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} writingStatusOptions={writingStatusOptions} targetShare={null} manuscriptMetric={manuscriptMetricFor(scene)} canRelinkSelection={false} onRelinkManuscript={() => Promise.resolve(false)} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft={false} writingStatusBusy={Boolean(sceneStatusBusyId)} onWritingStatusChange={(status) => void updateSceneStatus(scene, status)} language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, null, scene.id)} />)}
+                  {unassigned.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} writingStatusOptions={writingStatusOptions} targetShare={null} manuscriptMetric={manuscriptMetricFor(scene)} canRelinkSelection={false} onRelinkManuscript={() => Promise.resolve(false)} onOpenSourceChapter={() => openLinkedChapter(scene)} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft={false} writingStatusBusy={Boolean(sceneStatusBusyId)} onWritingStatusChange={(status) => void updateSceneStatus(scene, status)} language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, null, scene.id)} />)}
               {!unassigned.length && <div className="scene-lane-empty">{canReorderVisible ? tr("把未安排的场景拖到这里", "Drop unassigned scenes here") : tr("当前筛选下没有待安排场景", "No unassigned scenes match these filters")}</div>}
             </div>
             <button className="scene-lane-add" onClick={() => onCreateScene()}>{tr("＋ 添加场景", "+ Add scene")}</button>
@@ -322,7 +332,7 @@ export function ScenePlanner({
                   />
                 </div>
                 <div className="scene-lane-cards">
-                  {laneScenes.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} writingStatusOptions={writingStatusOptions} targetShare={targetShare(scene)} manuscriptMetric={manuscriptMetricFor(scene)} canRelinkSelection={canRelinkSelection && currentChapter?.id === chapter.id} onRelinkManuscript={() => onRelinkManuscript(scene)} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft writingStatusBusy={Boolean(sceneStatusBusyId)} onWritingStatusChange={(status) => void updateSceneStatus(scene, status)} language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, chapter.id, scene.id)} />)}
+                  {laneScenes.map((scene) => <SceneCard key={scene.id} scene={dataFor(scene)} writingStatusOptions={writingStatusOptions} targetShare={targetShare(scene)} manuscriptMetric={manuscriptMetricFor(scene)} canRelinkSelection={canRelinkSelection && currentChapter?.id === chapter.id} onRelinkManuscript={() => onRelinkManuscript(scene)} onOpenSourceChapter={() => openLinkedChapter(scene)} dragging={draggingId === scene.id} canReorder={canReorderVisible} canDraft writingStatusBusy={Boolean(sceneStatusBusyId)} onWritingStatusChange={(status) => void updateSceneStatus(scene, status)} language={language} onOpen={() => onOpenScene(scene)} onDraft={() => onDraftScene(scene)} onDragStart={(event) => { setDraggingId(scene.id); event.dataTransfer.setData("text/plain", scene.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggingId("")} onDrop={(event) => dropOn(event, chapter.id, scene.id)} />)}
                   {!laneScenes.length && <div className="scene-lane-empty">{povFilter === "all" && trackFilter === "all" ? tr("拖入一个场景，开始拆解本章推进", "Drop a scene here to plan this chapter") : tr("当前筛选下暂无场景", "No scenes match these filters")}</div>}
                 </div>
                 <button className="scene-lane-add" onClick={() => onCreateScene(chapter)}>{tr("＋ 添加到本章", "+ Add to chapter")}</button>
@@ -410,6 +420,7 @@ function SceneCard({
   manuscriptMetric,
   canRelinkSelection,
   onRelinkManuscript,
+  onOpenSourceChapter,
   dragging,
   canReorder,
   language,
@@ -428,6 +439,7 @@ function SceneCard({
   manuscriptMetric: { state: string; words: number; chapterTitle: string } | null;
   canRelinkSelection: boolean;
   onRelinkManuscript: () => Promise<boolean>;
+  onOpenSourceChapter: () => void;
   dragging: boolean;
   canReorder: boolean;
   language: UiLanguage;
@@ -484,7 +496,7 @@ function SceneCard({
           <span>{targetWords != null ? tr(`正文 ${formatSceneWords(manuscriptMetric.words)} / ${formattedTarget} 字`, `Text ${formatSceneWords(manuscriptMetric.words)} / ${formattedTarget} words`) : tr(`正文已核对 · ${formatSceneWords(manuscriptMetric.words)} 字`, `Text verified · ${formatSceneWords(manuscriptMetric.words)} words`)}</span>
           {targetWords != null && <><small>{Math.min(100, Math.round(manuscriptMetric.words / targetWords * 100))}%</small><i aria-hidden="true"><b style={{ width: `${Math.min(100, Math.round(manuscriptMetric.words / targetWords * 100))}%` }} /></i></>}
         </> : <span>{manuscriptMetric.state === "missing" ? tr("正文位置或内容已变化", "Excerpt moved or changed") : manuscriptMetric.state === "pending" ? tr("选区已关联 · 保存正文后核对", "Selection linked · save the manuscript to verify") : manuscriptMetric.state === "unsaved" ? tr("正文有未保存修改 · 保存后核对进度", "Manuscript has unsaved edits · save to verify progress") : manuscriptMetric.state === "moved" ? tr(`场景已换章 · 正文关联仍在《${manuscriptMetric.chapterTitle || "原章节"}》`, `Scene moved · excerpt remains in ${manuscriptMetric.chapterTitle || "source chapter"}`) : tr(`正文片段关联 · ${formatSceneWords(manuscriptMetric.words)} 字 · 打开《${manuscriptMetric.chapterTitle || "来源章节"}》核对`, `Excerpt linked · ${formatSceneWords(manuscriptMetric.words)} words · open ${manuscriptMetric.chapterTitle || "source chapter"} to verify`)}</span>}
-        {(manuscriptMetric.state === "missing" || manuscriptMetric.state === "moved") && <button type="button" className="scene-card-relink" disabled={!canRelinkSelection} title={!canRelinkSelection ? tr("请先在当前章节保存正文并选中要关联的片段", "Save the current chapter and select the passage to link") : tr("将当前正文选区重新关联到此场景", "Relink the current manuscript selection to this scene")} onClick={(event) => { event.stopPropagation(); void onRelinkManuscript(); }}>{tr("重新关联选区", "Relink selection")}</button>}
+        {(manuscriptMetric.state === "missing" || manuscriptMetric.state === "moved") && <button type="button" className="scene-card-relink" title={canRelinkSelection ? tr("将当前正文选区重新关联到此场景", "Relink the current manuscript selection to this scene") : tr("打开原关联章节，选中正确片段后再重新关联", "Open the source chapter, select the correct passage, then relink") } onClick={(event) => { event.stopPropagation(); if (canRelinkSelection) void onRelinkManuscript(); else onOpenSourceChapter(); }}>{canRelinkSelection ? tr("重新关联选区", "Relink selection") : tr("打开原关联章节", "Open source chapter")}</button>}
       </div>}
       {scene.plotRole && <p className="scene-card-role">{scene.plotRole}</p>}
       {scene.body && <p className="scene-card-body">{scene.body}</p>}

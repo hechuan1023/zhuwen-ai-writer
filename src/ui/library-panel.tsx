@@ -1455,7 +1455,7 @@ export function LibraryPanel({
             }
           }}
           onCreateScene={(targetChapter) => openEditor(null, targetChapter ? { chapter_id: targetChapter.id } : {})}
-          onOpenChapter={(targetChapter) => onSelectChapter?.(targetChapter)}
+          onOpenChapter={(targetChapter) => { setPlannerOpen(false); onSelectChapter?.(targetChapter); }}
           onChapterStatusChange={(chapterId, status) => onChapterStatusChange?.(chapterId, status)}
           onSceneWritingStatusChange={saveSceneWritingStatus}
           onSceneArchiveChange={saveSceneArchiveStatus}
