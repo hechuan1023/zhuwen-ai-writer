@@ -18,8 +18,8 @@ export function Onboarding({
         <h2>{tr("安静写作，安心保存", "Quiet writing, safe manuscripts")}</h2>
         <p className="hint">
           {tr(
-            "作品保存在本机。只有你主动发送时，所选内容才会发到你配置的 AI 服务。",
-            "Your work stays on this computer. Only content you explicitly attach is sent to your AI provider.",
+            "作品保存在本机。发送 AI 请求时，消息和你添加的引用会发送到铸文 AI 服务；不会自动上传整本作品。",
+            "Your work stays on this computer. When you send an AI request, your message and added references go to Zhuwen AI; the whole novel is never uploaded automatically.",
           )}
         </p>
         <div className="onboard-steps">
@@ -40,8 +40,8 @@ export function Onboarding({
           <div className="onboard-step">
             <b>3</b>
             <p>
-              <strong>{tr("接入 AI（可选）", "Connect AI (optional)")}</strong>
-              {tr("设置 → AI API 连接；引用内容需你手动添加后才发送。", "Settings → AI API. References are never auto-sent.")}
+              <strong>{tr("启用铸文 AI（可选）", "Enable Zhuwen AI (optional)")}</strong>
+              {tr("设置 → AI 模型，输入管理员发放的激活令牌。引用内容只会随你发送的请求提交。", "Settings → AI models, then enter an activation token from your administrator. References are sent only with a request you submit.")}
             </p>
           </div>
         </div>

@@ -319,7 +319,7 @@ export function Settings({
         )}
         {tab === "ai" && (
           <section>
-            <h3>{tr("AI API 连接", "AI API connections")}</h3>
+            <h3>{tr("AI 助手", "AI assistant")}</h3>
             <p className="hint">
               {tr(
                 "铸文 AI 服务已启用。服务地址、模型和密钥由软件统一管理，无需选择连接；下方可调整思考深度、随机程度、输出上限、超时和流式回复。",
