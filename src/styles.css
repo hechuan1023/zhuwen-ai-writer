@@ -980,7 +980,7 @@ button.danger-text:not(:disabled):hover {
 .scene-ai-context-count { justify-self: end; }
 .scene-custom-field-add { justify-self: start; }
 .character-progression-row { display: grid; gap: 7px; min-width: 0; padding: var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper); }
-.character-progression-heading { display: grid; grid-template-columns: minmax(0, 1fr) 30px; gap: 6px; align-items: center; }
+.character-progression-heading { display: grid; grid-template-columns: minmax(0, 1fr) 32px; gap: 6px; align-items: center; }
 .character-progression-heading .zw-select-trigger { min-width: 0; width: 100%; }
 .character-progression-row textarea { min-height: 54px; resize: vertical; }
 .character-progression-add { justify-self: start; display: inline-flex; align-items: center; gap: 5px; }
@@ -1108,13 +1108,12 @@ button.danger-text:not(:disabled):hover {
   color: var(--ink);
 }
 .modal > header button {
-  font-size: 20px;
   border: 0;
   background: transparent;
   color: var(--muted);
   min-height: 32px;
   min-width: 32px;
-  padding: 0 8px;
+  padding: 0;
 }
 .modal > header button:hover {
   color: var(--ink);

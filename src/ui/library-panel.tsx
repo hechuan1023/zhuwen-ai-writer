@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { api, time, parseJson, parseTags, Empty, ConfirmDialog, DiffModal, Modal, kinds, AnyRow, UiLanguage } from "./shared";
+import { api, time, parseJson, parseTags, Empty, ConfirmDialog, DiffModal, Modal, kinds, AnyRow, UiLanguage, CloseIcon } from "./shared";
 import {
   editorToLibraryContent,
   libraryContentToEditor,
@@ -99,7 +99,7 @@ function ProgressionsEditor({
               title={tr("移除记录", "Remove record")}
               aria-label={tr("移除记录", "Remove record")}
               onClick={() => updateEditing({ progressions: entries.filter((_: AnyRow, i: number) => i !== index) })}
-            >×</button>
+            ><CloseIcon /></button>
           </div>
           <input
             placeholder={isWorld ? tr("变化摘要（如：由议会接管北门）", "Change (e.g. council takes control of the north gate)") : tr("变化摘要（如：由戒备转为暂时合作）", "Change (e.g. guarded → temporary alliance)")}
@@ -750,7 +750,7 @@ export function LibraryPanel({
           <div className="modal" style={{ width: "min(480px, 92vw)" }}>
             <header>
               <h2>{tr("资料体检", "Story bible health")}</h2>
-              <button onClick={() => setHealthOpen(false)} aria-label={tr("关闭", "Close")}>×</button>
+              <button type="button" className="icon" onClick={() => setHealthOpen(false)} aria-label={tr("关闭", "Close")}><CloseIcon /></button>
             </header>
             <div className="modal-content">
               <p className="hint">{tr("仅检查资料字段，不读取或修改正文。", "Checks story-bible fields only; manuscript untouched.")}</p>
@@ -773,7 +773,7 @@ export function LibraryPanel({
           <div className="modal" style={{ width: "min(420px, 92vw)" }}>
             <header>
               <h2>{tr("灵感命名", "Name generator")}</h2>
-              <button onClick={() => setNameOpen(false)} aria-label={tr("关闭", "Close")}>×</button>
+              <button type="button" className="icon" onClick={() => setNameOpen(false)} aria-label={tr("关闭", "Close")}><CloseIcon /></button>
             </header>
             <div className="modal-content">
               <div className="row" style={{ marginBottom: 10 }}>
@@ -831,7 +831,7 @@ export function LibraryPanel({
               <small>{tr("小说资料库", "Story Bible")}</small>
               <strong>{editing.id ? tr("编辑", "Edit ") : tr("新建", "New ")}{kindLabel(kind, kinds.find((x) => x[0] === kind)?.[1])}</strong>
             </div>
-            <button className="icon" title={tr("关闭资料编辑", "Close editor")} aria-label={tr("关闭资料编辑", "Close editor")} onClick={() => closeEditor()}>×</button>
+            <button type="button" className="icon" title={tr("关闭资料编辑", "Close editor")} aria-label={tr("关闭资料编辑", "Close editor")} onClick={() => closeEditor()}><CloseIcon /></button>
           </header>
           <div className="library-edit">
           <input
@@ -1003,7 +1003,7 @@ export function LibraryPanel({
                       value={field.value || ""}
                       onChange={(event) => updateEditing({ customFields: fields.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item) })}
                     />
-                    <button type="button" className="icon" aria-label={tr("移除自定义属性", "Remove custom property")} title={tr("移除属性", "Remove property")} onClick={() => updateEditing({ customFields: fields.filter((_, itemIndex) => itemIndex !== index) })}>×</button>
+                    <button type="button" className="icon" aria-label={tr("移除自定义属性", "Remove custom property")} title={tr("移除属性", "Remove property")} onClick={() => updateEditing({ customFields: fields.filter((_, itemIndex) => itemIndex !== index) })}><CloseIcon size={14} /></button>
                   </div>
                 ))}
                 <button
@@ -1073,7 +1073,7 @@ export function LibraryPanel({
                         : manuscriptLinkState === "missing"
                           ? tr("正文片段位置已变化或内容已修改，请重新选择该片段关联。", "The excerpt moved or changed; select it again to relink.")
                           : tr(`已关联《${manuscriptLink.chapterTitle || "其他章节"}》的片段；切换到该章可核对。`, `Linked to ${manuscriptLink.chapterTitle || "another chapter"}; open it to verify.`)}</span>
-                    <button type="button" className="icon" aria-label={tr("移除正文关联", "Remove manuscript link")} title={tr("移除关联", "Remove link")} onClick={() => updateEditing({ manuscriptLink: null })}>×</button>
+                    <button type="button" className="icon" aria-label={tr("移除正文关联", "Remove manuscript link")} title={tr("移除关联", "Remove link")} onClick={() => updateEditing({ manuscriptLink: null })}><CloseIcon size={14} /></button>
                   </div>
                 ) : <p className="scene-manuscript-link-empty">{tr("尚未关联正文片段。", "No manuscript excerpt linked.")}</p>}
                 <button
@@ -1251,7 +1251,7 @@ export function LibraryPanel({
                             })),
                           ]}
                         />
-                        <button type="button" className="icon" title={tr("移除阶段变化", "Remove progression")} aria-label={tr("移除阶段变化", "Remove progression")} onClick={() => updateEditing({ progressions: progressions.filter((_: AnyRow, entryIndex: number) => entryIndex !== index) })}>×</button>
+                        <button type="button" className="icon" title={tr("移除阶段变化", "Remove progression")} aria-label={tr("移除阶段变化", "Remove progression")} onClick={() => updateEditing({ progressions: progressions.filter((_: AnyRow, entryIndex: number) => entryIndex !== index) })}><CloseIcon size={14} /></button>
                       </div>
                       <input
                         placeholder={tr("变化摘要（如：由戒备转为暂时合作）", "Change (e.g. guarded → temporary alliance)")}
@@ -1672,7 +1672,7 @@ export function LibraryPanel({
         <section className="library-detail-surface relation-detail" aria-label={tr("人物关系图", "Relationship graph")}>
           <header>
             <div><small>{tr("小说资料库", "Story Bible")}</small><strong>{tr("人物关系图", "Relationship graph")}</strong></div>
-            <button className="icon" title={tr("关闭关系图", "Close relationship graph")} aria-label={tr("关闭关系图", "Close relationship graph")} onClick={() => setGraphOpen(false)}>×</button>
+            <button type="button" className="icon" title={tr("关闭关系图", "Close relationship graph")} aria-label={tr("关闭关系图", "Close relationship graph")} onClick={() => setGraphOpen(false)}><CloseIcon /></button>
           </header>
           <RelationGraph relations={items.map(parsed)} large language={language} />
         </section>,

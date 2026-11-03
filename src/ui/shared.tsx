@@ -10,6 +10,24 @@ import {
 } from "react";
 
 export type AnyRow = Record<string, any>;
+export function CloseIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
 type Result<T = any> = {
   ok: boolean;
   data: T;
@@ -457,7 +475,7 @@ export function Modal({
       >
         <header>
           <h2 id={titleId}>{title}</h2>
-          <button onClick={close} aria-label={language === "en" ? `Close ${title}` : `关闭${title}`}>×</button>
+          <button type="button" className="icon" onClick={close} aria-label={language === "en" ? `Close ${title}` : `关闭${title}`}><CloseIcon /></button>
         </header>
         <div className="modal-content">{children}</div>
       </div>
