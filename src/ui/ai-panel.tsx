@@ -1321,6 +1321,16 @@ export function AiPanel({
       hint: tr("需引用目标回复与生成规则；从回复菜单启动可自动准备。", "Attach the response and its rules; launching from a reply prepares both."),
     },
     {
+      id: "extract-scene-from-reply",
+      kind: "outline",
+      label: tr("提取场景候选", "Extract scene candidate"),
+      draft: tr(
+        "请只根据引用的原始提问与 AI 回复，整理一个供作者审阅的场景细纲候选。标明哪些信息来自原始提问、哪些是回复提出的创作建议；不要把建议写成已经发生的事实。按场景目标、冲突/阻碍、关键转折、人物行动与动机、结果/回报、与前后剧情的衔接、章末钩子列出；引用中没有依据的字段标“待作者补充”，不要自行补设定或续写正文。最后指出 1–3 个需要作者确认的问题。此结果只是候选，不自动写入大纲或正文。",
+        "Using only the referenced original request and AI response, prepare a scene-outline candidate for the author to review. Distinguish details from the request from creative suggestions in the response; never present suggestions as events that already happened. List scene goal, conflict/obstacle, turning point, character actions and motives, outcome/payoff, continuity, and ending hook. Mark unsupported fields for the author to fill in; do not invent canon or draft prose. End with 1–3 questions for the author. This is only a candidate and will not be saved to the outline or manuscript automatically.",
+      ),
+      hint: tr("从回复菜单启动会自动引用原提问和回复，并在独立分支中准备草稿。", "Launching from a reply references its original prompt and response in a separate branch."),
+    },
+    {
       id: "ground-setting",
       kind: "check",
       label: tr("设定奠基", "Ground setting"),
@@ -1442,6 +1452,47 @@ export function AiPanel({
     window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-fd-id="ai-input"]')?.focus());
     notify(tr("已在独立分支中准备好风格核对。确认引用与问题后再发送，不会自动改写正文。", "A separate style-review branch is ready. Review its references and prompt before sending; no manuscript text is changed automatically."));
   }
+  async function prepareSceneCandidate(reply: AnyRow, sourcePrompt: AnyRow) {
+    const branched = await api<{ conversationId: string; title?: string }>("ai:conversation:branch", String(sourcePrompt.id || ""));
+    if (!branched.ok || !branched.data?.conversationId) {
+      notify(branched.error || tr("无法为场景候选创建独立分支。", "Could not create a separate branch for the scene candidate."));
+      return;
+    }
+    const branchId = String(branched.data.conversationId);
+    const loaded = await api("ai:session:loadConversation", { conversationId: branchId, sessionId });
+    if (!loaded.ok) {
+      notify(loaded.error || tr("分支已创建，但暂时无法打开。", "The branch was created, but could not be opened."));
+      return;
+    }
+    const sceneContexts = [
+      {
+        label: tr("原始提问", "Original request"),
+        kind: "scene-candidate-request",
+        content: String(sourcePrompt.content || ""),
+        sourceId: String(sourcePrompt.id || ""),
+      },
+      {
+        label: tr("待整理的 AI 回复", "AI response to extract from"),
+        kind: "scene-candidate-response",
+        content: String(reply.content || ""),
+        sourceId: String(reply.id || ""),
+      },
+    ];
+    const task = tasks.find((item) => item.id === "extract-scene-from-reply");
+    const prompt = String(task?.draft || "");
+    const saved = await saveComposerState(prompt, sceneContexts, branchId, []);
+    if (!saved.ok || saved.data?.accepted === false) {
+      notify(saved.error || tr("场景候选分支已创建，但草稿保存失败。", "The scene-candidate branch was created, but its draft could not be saved."));
+      return;
+    }
+    setMode("outline");
+    setActiveTaskId("extract-scene-from-reply");
+    setCurrentConversationTitle(String(branched.data.title || tr("场景候选提取", "Scene candidate")));
+    setHistoryOpen(false);
+    loadConversations({ offset: 0 });
+    window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-fd-id="ai-input"]')?.focus());
+    notify(tr("已在独立分支准备好场景候选草稿。发送前可编辑问题；结果不会自动写入大纲或正文。", "A scene-candidate draft is ready in a separate branch. You can edit it before sending; results are not added to the outline or manuscript automatically."));
+  }
   const actionsFor = useCallback(
     (m: AnyRow): ReplyActions => {
       const sourcePrompt = findSourcePrompt(messages, m);
@@ -1472,6 +1523,10 @@ export function AiPanel({
       onSegments: () => naturalize ? openComparison() : setSegments({ msg: m }),
       onCompare: openComparison,
       canReviewStyle: hasStyleSnapshot && !m.incomplete,
+      canExtractSceneCandidates: Boolean(sourcePrompt) && !m.incomplete,
+      onExtractSceneCandidates: () => {
+        if (sourcePrompt) void prepareSceneCandidate(m, sourcePrompt);
+      },
       onReviewStyle: () => {
         if (sourcePrompt) void prepareStyleReview(m, sourcePrompt);
       },
@@ -1510,6 +1565,7 @@ export function AiPanel({
       messages,
       novelId,
       notify,
+      prepareSceneCandidate,
       prepareStyleReview,
     ],
   );

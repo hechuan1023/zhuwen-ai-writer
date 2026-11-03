@@ -128,6 +128,8 @@ export type ReplyActions = {
   onSaveInspiration: () => void;
   canReviewStyle: boolean;
   onReviewStyle: () => void;
+  canExtractSceneCandidates: boolean;
+  onExtractSceneCandidates: () => void;
   /** 浮窗内不允许改动正文 */
   floatOnlyHint?: boolean;
   /** 自然化润色必须先走原文/结果差异确认 */
@@ -231,6 +233,16 @@ function AssistantActions({
         : tr("此回复未保存可核对的技法规则", "No saved technique rules for this response"),
       disabled: !actions.canReviewStyle,
       onSelect: actions.onReviewStyle,
+    },
+    {
+      id: "ai-extract-scene-candidate",
+      label: tr("提取场景候选", "Extract scene candidate"),
+      icon: <IconDoc />,
+      hint: actions.canExtractSceneCandidates
+        ? tr("在独立分支中整理为待确认场景细纲", "Prepare an unconfirmed scene outline in a separate branch")
+        : tr("找不到这条回复对应的原始提问", "The original prompt for this reply is unavailable"),
+      disabled: !actions.canExtractSceneCandidates,
+      onSelect: actions.onExtractSceneCandidates,
     },
     {
       id: "ai-more-inspiration",
