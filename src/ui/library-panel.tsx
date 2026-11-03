@@ -80,6 +80,7 @@ function ProgressionsEditor({
               language={language}
               value={String(progression.chapterId || "")}
               aria-label={tr("变化所属章节", "Progression chapter")}
+              missingLabel={tr("原章节已不存在 · 重新选择", "Original chapter unavailable · choose again")}
               onValueChange={(value) => {
                 const linked = chapters.find((candidate) => candidate.id === value);
                 updateEntry(index, { chapterId: value, chapterTitle: linked?.title || "" });
@@ -1237,6 +1238,7 @@ export function LibraryPanel({
                           language={language}
                           value={String(progression.chapterId || "")}
                           aria-label={tr("阶段变化所属章节", "Progression chapter")}
+                          missingLabel={tr("原章节已不存在 · 重新选择", "Original chapter unavailable · choose again")}
                           onValueChange={(value) => {
                             const linked = chapters.find((candidate) => candidate.id === value);
                             patchProgression({ chapterId: value, chapterTitle: linked?.title || "" });

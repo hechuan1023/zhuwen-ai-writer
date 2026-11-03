@@ -309,7 +309,14 @@ function contextContent(
       .filter((entry: any) => {
         const entryChapterId = String(entry.chapterId || "");
         const entryOrder = entryChapterId ? chapterOrder[entryChapterId] : undefined;
-        return currentOrder === undefined || entryOrder === undefined || entryOrder <= currentOrder;
+        // Explicitly unlinked notes remain available. A stale chapter ID is not
+        // treated as unlinked: its position is unknown, so omit it to avoid a
+        // deleted or future chapter's information leaking into the AI context.
+        if (!entryChapterId) return true;
+        if (entryOrder === undefined) return false;
+        if (!currentChapterId) return true;
+        if (currentOrder === undefined) return false;
+        return entryOrder <= currentOrder;
       })
       .sort((left: any, right: any) => {
         const leftOrder = chapterOrder[String(left.chapterId || "")] ?? Number.MAX_SAFE_INTEGER;
