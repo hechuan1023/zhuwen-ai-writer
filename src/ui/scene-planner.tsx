@@ -3,7 +3,7 @@ import { api, parseJson, UiLanguage } from "./shared";
 import { Select, type SelectOption } from "./select";
 import { IconSparkle } from "./chat/icons";
 import { normalizeSceneManuscriptLink, normalizeSceneTargetWords, normalizeSceneWritingStatus, sceneManuscriptExcerptWords, sceneManuscriptLinkSegments, SCENE_WRITING_STATUSES, verifySceneManuscriptLink } from "../scene-fields";
-import { buildPlotlineMatrix, filterScenesByPov, filterScenesByTrack, groupScenesForTimeline, sceneCustomFields, scenePlotlines, scenePovOptions, sceneTags, sceneTrackOptions } from "./scene-planner-model";
+import { buildCharacterSceneMatrix, buildPlotlineMatrix, filterScenesByPov, filterScenesByTrack, groupScenesForTimeline, sceneCustomFields, scenePlotlines, scenePovOptions, sceneTags, sceneTrackOptions } from "./scene-planner-model";
 
 type SceneRow = Record<string, any>;
 
@@ -65,6 +65,7 @@ export function ScenePlanner({
   const [povFilter, setPovFilter] = useState("all");
   const [trackFilter, setTrackFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"board" | "outline" | "timeline" | "matrix" | "archive">("board");
+  const [matrixMode, setMatrixMode] = useState<"plotlines" | "cast">("plotlines");
   const [draggingId, setDraggingId] = useState("");
   const [statusBusyId, setStatusBusyId] = useState("");
   const [sceneStatusBusyId, setSceneStatusBusyId] = useState("");
@@ -220,6 +221,10 @@ export function ScenePlanner({
     () => buildPlotlineMatrix(visibleChapters, visibleScenes),
     [visibleChapters, visibleScenes],
   );
+  const characterMatrix = useMemo(
+    () => buildCharacterSceneMatrix(visibleChapters, visibleScenes),
+    [visibleChapters, visibleScenes],
+  );
   const canReorderVisible = canReorder && povFilter === "all" && trackFilter === "all" && sceneStatusFilter === "all";
   const volumeOptions = [
     { value: "all", label: tr("全部卷", "All volumes") },
@@ -279,7 +284,7 @@ export function ScenePlanner({
           <button type="button" className={viewMode === "matrix" ? "active" : ""} aria-pressed={viewMode === "matrix"} onClick={() => setViewMode("matrix")}>{tr("剧情矩阵", "Matrix")}</button>
           <button type="button" className={viewMode === "archive" ? "active" : ""} aria-pressed={viewMode === "archive"} onClick={() => setViewMode("archive")}>{tr(`已归档 (${archivedScenes.length})`, `Archived (${archivedScenes.length})`)}</button>
         </div>
-        <small>{viewMode === "archive" ? tr("归档场景不会出现在活动规划板与剧情矩阵中；可随时恢复。", "Archived scenes are hidden from active planning and the plot matrix; restore them at any time.") : viewMode === "matrix" ? tr("矩阵按章节汇总剧情线覆盖；点场景标题可打开细纲。", "Matrix summarizes plotline coverage by chapter; click a scene to open its outline.") : viewMode === "outline" ? tr("按章节顺序查看场景元数据；点击列名排序，点击场景名编辑细纲。排序仅影响当前视图。", "Review scene metadata in chapter order. Click a column to sort or a scene to edit; sorting only affects this view.") : canReorderVisible ? tr("拖动卡片可调整章节与顺序 · 点击标题编辑细纲", "Drag to reorder or change chapter · Click a title to edit") : tr("筛选结果仅供查看；清除视角、剧情线、标签或场景进度筛选后可调整顺序。", "Filtered results are view-only; clear POV, plotline, label, or scene progress filters to reorder.")}</small>
+          <small>{viewMode === "archive" ? tr("归档场景不会出现在活动规划板与剧情矩阵中；可随时恢复。", "Archived scenes are hidden from active planning and the plot matrix; restore them at any time.") : viewMode === "matrix" ? matrixMode === "cast" ? tr("人物分布仅依据细纲中作者填写的出场人物；点场景名可编辑人物名单，不会自动推断或修改资料卡。", "Cast distribution uses only the characters authors entered in scene outlines. Open a scene to edit its cast; this does not infer or alter story bible entries.") : tr("矩阵按章节汇总剧情线覆盖；点场景标题可打开细纲。", "Matrix summarizes plotline coverage by chapter; click a scene to open its outline.") : viewMode === "outline" ? tr("按章节顺序查看场景元数据；点击列名排序，点击场景名编辑细纲。排序仅影响当前视图。", "Review scene metadata in chapter order. Click a column to sort or a scene to edit; sorting only affects this view.") : canReorderVisible ? tr("拖动卡片可调整章节与顺序 · 点击标题编辑细纲", "Drag to reorder or change chapter · Click a title to edit") : tr("筛选结果仅供查看；清除视角、剧情线、标签或场景进度筛选后可调整顺序。", "Filtered results are view-only; clear POV, plotline, label, or scene progress filters to reorder.")}</small>
       </div>
 
       {viewMode === "board" ? <div className="scene-board-scroll" data-fd-id="scene-board-columns">
@@ -393,9 +398,15 @@ export function ScenePlanner({
             <button type="button" className="primary" disabled={archiveBusyId === scene.id} onClick={() => void updateSceneArchive(scene, false)}>{archiveBusyId === scene.id ? tr("恢复中…", "Restoring…") : tr("恢复", "Restore")}</button>
           </article>;
         })}</div> : <div className="scene-archive-empty"><b>{tr("归档区为空", "No archived scenes")}</b><span>{tr("从细纲编辑器归档暂时不参与规划的场景；之后可在这里恢复。", "Archive scenes from the outline editor when they are out of active planning. Restore them here later.")}</span></div>}
-      </div> : <div className="scene-matrix-scroll" data-fd-id="scene-plotline-matrix">
-        <div className="scene-matrix-note">{tr("每格列出该章节属于对应剧情线的场景。矩阵只读，未安排到章节的场景不计入；可用上方视角与标签筛选缩小范围。", "Each cell lists scenes in that chapter assigned to the plotline. The matrix is read-only and excludes unassigned scenes; use the POV and label filters above to narrow the view.")}</div>
-        {plotlineMatrix.plotlines.length ? <table className="scene-matrix-table">
+      </div> : <div className="scene-matrix-scroll" data-fd-id="scene-matrix">
+        <div className="scene-matrix-toolbar">
+          <div className="scene-matrix-mode" role="group" aria-label={tr("矩阵内容", "Matrix contents")}>
+            <button type="button" className={matrixMode === "plotlines" ? "active" : ""} aria-pressed={matrixMode === "plotlines"} onClick={() => setMatrixMode("plotlines")}>{tr("剧情线覆盖", "Plotlines")}</button>
+            <button type="button" className={matrixMode === "cast" ? "active" : ""} aria-pressed={matrixMode === "cast"} onClick={() => setMatrixMode("cast")}>{tr("人物出场", "Character appearances")}</button>
+          </div>
+          <span className="scene-matrix-note">{matrixMode === "cast" ? tr(`${characterMatrix.characters.length} 位人物 · ${characterMatrix.rows.length} 个已安排场景；只统计细纲中的作者填写名单。`, `${characterMatrix.characters.length} characters · ${characterMatrix.rows.length} assigned scenes; only author-entered scene cast is counted.`) : tr("每格列出该章节属于对应剧情线的场景。矩阵只读，未安排到章节的场景不计入；可用上方视角与标签筛选缩小范围。", "Each cell lists scenes in that chapter assigned to the plotline. The matrix is read-only and excludes unassigned scenes; use the POV and label filters above to narrow the view.")}</span>
+        </div>
+        {matrixMode === "plotlines" ? plotlineMatrix.plotlines.length ? <table className="scene-matrix-table">
           <thead><tr><th scope="col">{tr("章节", "Chapter")}</th>{plotlineMatrix.plotlines.map((plotline) => <th scope="col" key={plotline}>{plotline}</th>)}</tr></thead>
           <tbody>{plotlineMatrix.rows.map(({ chapter, scenesByPlotline }) => <tr key={chapter.id}>
             <th scope="row"><small>{volumes.find((item) => item.id === chapter.volume_id)?.title || tr("未分卷", "No volume")}</small><b>{chapter.title || tr("未命名章节", "Untitled chapter")}</b></th>
@@ -410,7 +421,21 @@ export function ScenePlanner({
               </td>;
             })}
           </tr>)}</tbody>
-        </table> : <div className="scene-board-no-chapters"><span>{tr("还没有已关联章节的剧情线场景。请在场景细纲中标记剧情线并关联章节。", "No assigned scenes have plotlines yet. Add plotlines to scene outlines and assign them to chapters.")}</span></div>}
+        </table> : <div className="scene-board-no-chapters"><span>{tr("还没有已关联章节的剧情线场景。请在场景细纲中标记剧情线并关联章节。", "No assigned scenes have plotlines yet. Add plotlines to scene outlines and assign them to chapters.")}</span></div> : characterMatrix.characters.length ? <table className="scene-matrix-table scene-cast-matrix-table" data-fd-id="scene-cast-matrix">
+          <thead><tr><th scope="col">{tr("场景 / 章节", "Scene / chapter")}</th><th scope="col">{tr("人数", "Cast")}</th>{characterMatrix.characters.map((character) => <th scope="col" key={character}>{character}</th>)}</tr></thead>
+          <tbody>{characterMatrix.rows.map(({ scene, cast }) => {
+            const chapter = chapters.find((item) => String(item.id) === String(scene.chapter_id || ""));
+            const volume = chapter && volumes.find((item) => String(item.id) === String(chapter.volume_id || ""));
+            return <tr key={scene.id} data-fd-id={`scene-cast-row-${scene.id}`}>
+              <th scope="row"><button type="button" onClick={() => onOpenScene(scene)} title={tr("打开场景细纲", "Open scene outline")}>{scene.title || tr("未命名场景", "Untitled scene")}</button><small>{volume?.title || tr("未分卷", "No volume")} · {chapter?.title || tr("未安排", "Unassigned")}</small></th>
+              <td className="scene-cast-count">{cast.length || "—"}</td>
+              {characterMatrix.characters.map((character) => {
+                const present = cast.some((name: string) => name.toLocaleLowerCase() === character.toLocaleLowerCase());
+                return <td key={character} className={present ? "scene-cast-present" : "scene-matrix-dash"} aria-label={present ? tr(`${character}出现在${scene.title || "未命名场景"}`, `${character} appears in ${scene.title || "untitled scene"}`) : undefined}>{present ? <span aria-hidden="true">●</span> : "—"}</td>;
+              })}
+            </tr>;
+          })}</tbody>
+        </table> : <div className="scene-board-no-chapters"><span>{tr("当前场景没有已填写的出场人物。打开任一场景细纲，在“出场人物”中添加名单后即可查看矩阵。", "No scene cast has been entered yet. Add characters to a scene outline to populate this matrix.")}</span></div>}
       </div>}
     </section>
   );

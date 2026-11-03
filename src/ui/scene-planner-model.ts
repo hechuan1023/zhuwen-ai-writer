@@ -145,6 +145,51 @@ export function buildPlotlineMatrix(chapters: PlannerRow[], scenes: PlannerRow[]
   };
 }
 
+/** Read only author-entered cast metadata; do not infer appearances from manuscript text. */
+export function sceneCast(scene: PlannerRow) {
+  let content: PlannerRow = {};
+  try {
+    const parsed = typeof scene.content_json === "string" ? JSON.parse(scene.content_json || "{}") : scene.content_json;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) content = parsed;
+  } catch {
+    // Keep legacy scene metadata usable when its JSON is malformed.
+  }
+  const raw = scene.cast ?? content.cast ?? "";
+  const values = Array.isArray(raw) ? raw : String(raw || "").split(/[,，、;；\n\r]+/u);
+  const seen = new Set<string>();
+  return values.map((value: unknown) => String(value || "").replace(/\s+/gu, " ").trim())
+    .filter((name: string) => {
+      const key = name.toLocaleLowerCase();
+      if (!name || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+/** Rows are scenes in saved chapter/scene order; columns are author-entered characters. */
+export function buildCharacterSceneMatrix(chapters: PlannerRow[], scenes: PlannerRow[]) {
+  const chapterOrder = new Map(chapters.map((chapter, index) => [String(chapter.id), index]));
+  const knownChapterIds = new Set(chapterOrder.keys());
+  const orderedScenes = scenes
+    .map((scene, index) => ({ scene, index }))
+    .filter(({ scene }) => knownChapterIds.has(String(scene.chapter_id || "")))
+    .sort((a, b) => (chapterOrder.get(String(a.scene.chapter_id || ""))! - chapterOrder.get(String(b.scene.chapter_id || ""))!)
+      || Number(a.scene.sort_order || 0) - Number(b.scene.sort_order || 0)
+      || a.index - b.index)
+    .map(({ scene }) => scene);
+  const collator = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
+  const characterByKey = new Map<string, string>();
+  for (const character of orderedScenes.flatMap(sceneCast)) {
+    const key = character.toLocaleLowerCase();
+    if (!characterByKey.has(key)) characterByKey.set(key, character);
+  }
+  const characters = [...characterByKey.values()].sort(collator.compare);
+  return {
+    characters,
+    rows: orderedScenes.map((scene) => ({ scene, cast: sceneCast(scene) })),
+  };
+}
+
 /** Groups assigned scenes in chapter order and preserves the author's saved scene order. */
 export function groupScenesForTimeline(chapters: PlannerRow[], scenes: PlannerRow[]) {
   const known = new Set(chapters.map((chapter) => chapter.id));
