@@ -34,6 +34,7 @@ function styleLabel(card: StyleCard, language: string) {
   const labels: Record<string, [string, string]> = {
     "style-natural-narrative": ["Natural narrative", "A general-purpose style centered on what characters are doing."],
     "style-growth-progression": ["Growth progression", "For training, resources, and clear short-term goals."],
+    "style-original-xuanhuan-cultivation": ["Original xuanhuan cultivation", "Connect cultivation rules, earned growth, meaningful costs, and character agency without imposing stock tropes."],
     "style-close-survival": ["Close survival", "For travel, danger, investigation, and constrained combat."],
     "style-human-ensemble": ["Lived-in ensemble", "For towns, factions, friends, and intersecting relationships."],
     "style-serial-hook-payoff": ["Serial hooks & payoff", "Connect chapter rewards, unresolved actions, and the next reading impulse."],
@@ -124,6 +125,12 @@ const TECHNIQUE_PRESETS = [
     name: ["国风成长连载", "Guofeng growth serial"],
     description: ["成长推进 + 文化转译 + 追更兑现", "Growth + cultural translation + serial payoff"],
     cardIds: ["style-growth-progression", "style-cultural-modernization", "style-serial-hook-payoff"],
+  },
+  {
+    id: "genre-original-xuanhuan-cultivation",
+    name: ["原创玄幻修炼成长", "Original xuanhuan cultivation"],
+    description: ["修炼因果 + 世界机制 + 人物能动 + 连载兑现", "Cultivation causality + world systems + character agency + serial payoff"],
+    cardIds: ["style-original-xuanhuan-cultivation", "style-fantasy-social-fusion", "style-growth-progression", "style-serial-hook-payoff"],
   },
   {
     id: "genre-grounded-mystery",
