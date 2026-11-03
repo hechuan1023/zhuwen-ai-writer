@@ -302,7 +302,12 @@ export function StyleCardPanel({
       if (cardFilter === "custom" ? Boolean(card.builtin) : cardFilter !== "all" && !(card.tasks.includes(cardFilter) || (cardFilter === "polish" && card.tasks.includes("naturalize")))) return false;
       if (!query) return true;
       const label = styleLabel(card, language);
-      const searchable = [label.name, label.description, ...card.tasks.map((task) => taskLabel(task, language))]
+      const searchable = [
+        label.name,
+        label.description,
+        ...card.tasks.map((task) => taskLabel(task, language)),
+        splitPersonalSample(String(card.rules || "")).rules,
+      ]
         .join(" ")
         .toLocaleLowerCase(locale);
       return searchable.includes(query);
@@ -490,7 +495,7 @@ export function StyleCardPanel({
                 type="search"
                 value={cardSearch}
                 onChange={(event) => setCardSearch(event.target.value)}
-                placeholder={tr("搜索技法名称或用途", "Search techniques or use cases")}
+                placeholder={tr("搜索名称、用途或规则内容", "Search names, use cases, or rule text")}
                 aria-label={tr("搜索写作技法卡", "Search writing techniques")}
               />
             </label>
