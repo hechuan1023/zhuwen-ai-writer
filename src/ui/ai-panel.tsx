@@ -56,6 +56,7 @@ export function AiPanel({
   sceneDraftRequest,
   onSceneDraftRequestConsumed,
   onNavigateSource,
+  onLocateChapterText,
 }: {
   novel: AnyRow;
   chapter: AnyRow | null;
@@ -77,6 +78,7 @@ export function AiPanel({
   sceneDraftRequest?: { nonce: string; chapterId: string; scene: AnyRow } | null;
   onSceneDraftRequestConsumed?: () => void;
   onNavigateSource?: (source: { kind: string; sourceId: string }) => Promise<boolean | void> | boolean | void;
+  onLocateChapterText?: (source: { chapterId: string; text: string }) => Promise<boolean | void> | boolean | void;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const [session, patch] = useAiSessionStore(sessionId);
@@ -1998,6 +2000,10 @@ export function AiPanel({
           onAdd={handleAddFromPicker}
           onAddMany={handleAddManyFromPicker}
           onChooseLocalFile={() => api("ai:reference:chooseFile")}
+          onLocateMatch={(text) => {
+            setPickerOpen(false);
+            if (chapterId && onLocateChapterText) void onLocateChapterText({ chapterId, text });
+          }}
           onClose={() => setPickerOpen(false)}
         />
       )}

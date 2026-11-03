@@ -1148,6 +1148,23 @@ export function Workspace({
     setLeftView("library");
     setSourceNavigationRequest({ nonce: crypto.randomUUID(), kind: source.kind, sourceId: source.sourceId });
   }
+  async function locateAiChapterText(source: { chapterId: string; text: string }): Promise<boolean> {
+    const query = source.text.trim();
+    if (!query) return false;
+    let delay = 60;
+    if (source.chapterId !== chapter?.id) {
+      const targetChapter = chapters.find((item) => item.id === source.chapterId);
+      if (!targetChapter || !(await switchChapter(targetChapter))) return false;
+      delay = 350;
+    }
+    setLeftView("chapters");
+    setFindText(query);
+    setReplaceText("");
+    setShowReplace(false);
+    setFindOpen(true);
+    window.setTimeout(() => findNextRef.current(query), delay);
+    return true;
+  }
   async function addChapter(volumeId?: string) {
     if (!(await save(true))) return;
     setTitleModal({ mode: "create-chapter", volumeId, value: tr("新建章节", "New chapter") });
@@ -2216,6 +2233,7 @@ export function Workspace({
                     sceneDraftRequest={aiSceneDraftRequest}
                     onSceneDraftRequestConsumed={() => setAiSceneDraftRequest(null)}
                     onNavigateSource={(source) => navigateToAiSource(source)}
+                    onLocateChapterText={(source) => locateAiChapterText(source)}
                   />
                 </div>
                 {aiSplit && (
@@ -2235,6 +2253,7 @@ export function Workspace({
                       dockSide={aiDockSide}
                       onDockSideChange={changeAiDockSide}
                       onNavigateSource={(source) => navigateToAiSource(source)}
+                      onLocateChapterText={(source) => locateAiChapterText(source)}
                     />
                   </div>
                 )}

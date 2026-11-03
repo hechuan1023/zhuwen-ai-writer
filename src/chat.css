@@ -1280,14 +1280,30 @@
   cursor: pointer;
   transition: border-color var(--dur, 180ms) var(--ease, ease), background var(--dur, 180ms) var(--ease, ease), transform var(--dur, 180ms) var(--ease, ease);
 }
-.zchat-suggestion-card:hover:not(:disabled) {
+.zchat-suggestion-card:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
   background: var(--accent-soft, var(--accent-2, #dfe9e3));
   transform: translateY(-1px);
 }
-.zchat-suggestion-card:focus-visible {
+.zchat-suggestion-add {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.zchat-suggestion-add:disabled { cursor: default; }
+.zchat-suggestion-add:focus-visible,
+.zchat-suggestion-locate:focus-visible {
   outline: 2px solid var(--accent, #4d7a68);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 .zchat-suggestion-card.added {
   border-color: color-mix(in srgb, var(--success, #3d7a58) 34%, var(--line));
@@ -1335,6 +1351,23 @@
   color: var(--accent, #4d7a68);
   font-size: 10px;
   font-weight: 600;
+}
+.zchat-suggestion-locate {
+  display: inline-grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  flex: 0 0 27px;
+  padding: 0;
+  border: 1px solid var(--line, #e2ddd2);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  color: var(--muted, #8a8577);
+  cursor: pointer;
+}
+.zchat-suggestion-locate:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: var(--accent, #4d7a68);
 }
 .zchat-picker-item-added {
   border-color: color-mix(in srgb, var(--success, #3d7a58) 32%, var(--line)) !important;

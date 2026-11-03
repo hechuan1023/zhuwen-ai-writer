@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnyRow, fmt, kindNameFor, kinds } from "../shared";
-import { IconCheck, IconClose, IconDoc, IconPlus, IconQuote, IconSparkle, IconUser } from "./icons";
+import { IconCheck, IconClose, IconDoc, IconPlus, IconQuote, IconSearch, IconSparkle, IconUser } from "./icons";
 import type { MaterialSuggestion } from "../../relevant";
 import { materialReferenceContent } from "../../relevant";
 
@@ -21,6 +21,7 @@ export function RefPicker({
   onAdd,
   onAddMany,
   onChooseLocalFile,
+  onLocateMatch,
   onClose,
 }: {
   language: string;
@@ -38,6 +39,7 @@ export function RefPicker({
   onAdd: (item: { label: string; kind: string; content: string; sourceId: string; sourceDataVersion?: number }) => void;
   onAddMany: (items: Array<{ label: string; kind: string; content: string; sourceId: string }>) => void;
   onChooseLocalFile: () => Promise<{ ok: boolean; data: AnyRow | null; error?: string }>;
+  onLocateMatch?: (text: string) => void;
   onClose: () => void;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
@@ -226,33 +228,42 @@ export function RefPicker({
                 {suggestions.map((suggestion) => {
                   const added = isAdded(suggestion.kind, suggestion.id);
                   return (
-                    <button
-                      type="button"
-                      key={`${suggestion.kind}:${suggestion.id}`}
-                      className={`zchat-suggestion-card ${added ? "added" : ""}`}
-                      title={suggestion.reasons.join(" · ")}
-                      aria-pressed={added}
-                      disabled={added}
-                      data-fd-id="ai-picker-suggestion"
-                      onClick={() => onAdd({
-                        label: suggestion.title,
-                        kind: suggestion.kind,
-                        content: suggestion.content || suggestion.title,
-                        sourceId: suggestion.id,
-                        sourceDataVersion: suggestion.dataVersion,
-                      })}
-                    >
-                      <span className="zchat-suggestion-copy">
-                        <b className="zchat-ellipsis">{suggestion.title}</b>
-                        <small>{suggestion.reasons.join(" · ") || tr(`正文提及「${suggestion.matched}」`, `Matched "${suggestion.matched}"`)}</small>
-                        {suggestion.matchedSnippet ? (
-                          <small className="zchat-suggestion-excerpt">
-                            <span>{tr("命中片段 · ", "Matched passage · ")}</span>{suggestion.matchedSnippet}
-                          </small>
-                        ) : null}
-                      </span>
-                      <span className="zchat-suggestion-action">{added ? <><IconCheck />{tr("已添加", "Added")}</> : tr("＋ 添加", "+ Add")}</span>
-                    </button>
+                    <div key={`${suggestion.kind}:${suggestion.id}`} className={`zchat-suggestion-card ${added ? "added" : ""}`} title={suggestion.reasons.join(" · ")}>
+                      <button
+                        type="button"
+                        className="zchat-suggestion-add"
+                        aria-pressed={added}
+                        disabled={added}
+                        data-fd-id="ai-picker-suggestion"
+                        onClick={() => onAdd({
+                          label: suggestion.title,
+                          kind: suggestion.kind,
+                          content: suggestion.content || suggestion.title,
+                          sourceId: suggestion.id,
+                          sourceDataVersion: suggestion.dataVersion,
+                        })}
+                      >
+                        <span className="zchat-suggestion-copy">
+                          <b className="zchat-ellipsis">{suggestion.title}</b>
+                          <small>{suggestion.reasons.join(" · ") || tr(`正文提及「${suggestion.matched}」`, `Matched "${suggestion.matched}"`)}</small>
+                          {suggestion.matchedSnippet ? (
+                            <small className="zchat-suggestion-excerpt">
+                              <span>{tr("命中片段 · ", "Matched passage · ")}</span>{suggestion.matchedSnippet}
+                            </small>
+                          ) : null}
+                        </span>
+                        <span className="zchat-suggestion-action">{added ? <><IconCheck />{tr("已添加", "Added")}</> : tr("＋ 添加", "+ Add")}</span>
+                      </button>
+                      {suggestion.matched && onLocateMatch ? (
+                        <button
+                          type="button"
+                          className="zchat-suggestion-locate"
+                          aria-label={tr(`定位正文中的「${suggestion.matched}」`, `Locate “${suggestion.matched}” in the manuscript`)}
+                          title={tr("定位到正文命中处", "Locate this match in the manuscript")}
+                          onClick={() => onLocateMatch(suggestion.matched)}
+                        ><IconSearch /></button>
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>
