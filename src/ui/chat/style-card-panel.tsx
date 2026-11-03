@@ -6,7 +6,7 @@ import { IconCheck, IconChevronDown, IconCopy, IconDoc, IconDownload, IconRename
 export type StyleCard = AnyRow & { tasks: string[]; version: number };
 export type StyleIntensity = "light" | "balanced" | "strong";
 type StyleComposition = { id: string; name: string; description: string; styleIds: string[]; updatedAt?: string };
-type StyleCardFilter = "all" | "continue" | "outline" | "polish" | "naturalize" | "custom";
+type StyleCardFilter = "all" | "continue" | "outline" | "polish" | "naturalize" | "check" | "custom";
 const PERSONAL_SAMPLE_MARKER = "\n\n[ZHUWEN_PERSONAL_STYLE_SAMPLE_V1]\n";
 const PERSONAL_SAMPLE_GUIDE = "作者提供的个人样文，仅用于抽象句长、节奏、视角距离和修辞密度；不得复用原句、人物、设定或情节。";
 
@@ -56,7 +56,7 @@ function styleLabel(card: StyleCard, language: string) {
     "style-rule-instance-progression": ["Rule-based instances", "Use verifiable rules, active testing, staged payoffs, and a persistent arc."],
     "style-longform-architecture-focus": ["Long-form architecture & focus", "Keep the main arc, stage goals, side plots, and chapter payoffs working together."],
     "style-short-form-closure": ["Short-form closure & pacing", "Focus causal progression and a satisfying resolution within a bounded length."],
-    "style-authorial-genre-bending": ["Genre-bending & authorial voice", "Keep the genre promise while breaking formula through character choices and story-world causality."],
+    "style-authorial-genre-bending": ["Genre-bending & authorial voice", "Keep the genre promise while breaking formula through character choices and story-world causality; review it against text evidence."],
     "style-road-journey-healing": ["Road journey & gradual healing", "Connect episodic stops, evolving relationships, and slow, earned change through a journey."],
     "style-rule-horror-uncanny": ["Rule-based horror & everyday distortion", "Make familiar spaces unreliable through verifiable rules that steadily tighten."],
     "style-rebirth-causal-rewrite": ["Rebirth & causal change", "Use incomplete memories to alter choices and create butterfly effects."],
@@ -487,6 +487,7 @@ export function StyleCardPanel({
                 ["outline", tr("构思", "Outline")],
                 ["polish", tr("润色", "Polish")],
                 ["naturalize", tr("自然化", "Naturalize")],
+                ["check", tr("检查", "Review")],
                 ["custom", tr("自定义", "Custom")],
               ] as [StyleCardFilter, string][]).map(([filter, label]) => (
                 <button
@@ -575,6 +576,7 @@ function StyleEditor({ card, language, onCancel, onSaved, onError }: { card: Sty
     ["polish", "润色", "Polish"],
     ["naturalize", "自然化润色", "Naturalize"],
     ["outline", "构思 / 起草", "Outline / Draft"],
+    ["check", "检查", "Review"],
   ];
   const parsedRules = splitPersonalSample(card.rules || "");
   const [name, setName] = useState(card.name);
