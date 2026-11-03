@@ -157,6 +157,11 @@ export function Workspace({
       "chapters" | "library" | "history" | "trash"
     >("chapters"),
     [modal, setModal] = useState<string | null>(null);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<"general" | "editor" | "appearance" | "ai">("general");
+  const openSettings = (tab: "general" | "editor" | "appearance" | "ai" = "general") => {
+    setSettingsInitialTab(tab);
+    setModal("settings");
+  };
   const [saveState, setSaveState] = useState<
       "saved" | "saving" | "dirty" | "error"
     >("saved"),
@@ -1588,7 +1593,7 @@ export function Workspace({
       { label: tr("章节摘要", "Chapter summary"), run: () => setSummaryOpen(true) },
       { label: tr("小说资料", "Novel information"), run: () => setModal("novel") },
       { label: tr("导入导出与备份", "Import, export & backup"), run: () => setModal("io") },
-      { label: tr("打开设置", "Open settings"), run: () => setModal("settings") },
+      { label: tr("打开设置", "Open settings"), run: () => openSettings() },
       {
         label: tr("切换主题", "Switch theme"),
         hint: theme,
@@ -1789,7 +1794,7 @@ export function Workspace({
             <button onClick={() => setModal("novel")}>{tx(language, "novelInfo")}</button>
             <button onClick={openStats}>{tx(language, "statistics")}</button>
             <button onClick={() => setModal("io")}>{tx(language, "transfer")}</button>
-            <button onClick={() => setModal("settings")}>
+            <button onClick={() => openSettings()}>
               {tx(language, "settings")}
             </button>
           </div>
@@ -2357,6 +2362,7 @@ export function Workspace({
                     onSceneDraftRequestConsumed={() => setAiSceneDraftRequest(null)}
                     onNavigateSource={(source) => navigateToAiSource(source)}
                     onLocateChapterText={(source) => locateAiChapterText(source)}
+                    onOpenSettings={() => openSettings("ai")}
                   />
                 </div>
                 {aiSplit && (
@@ -2377,6 +2383,7 @@ export function Workspace({
                       onDockSideChange={changeAiDockSide}
                       onNavigateSource={(source) => navigateToAiSource(source)}
                       onLocateChapterText={(source) => locateAiChapterText(source)}
+                      onOpenSettings={() => openSettings("ai")}
                     />
                   </div>
                 )}
@@ -2514,6 +2521,7 @@ export function Workspace({
           <Suspense fallback={null}>
           <Settings
             notify={notify}
+            initialTab={settingsInitialTab}
             typography={{
               fontFamily: envEffective.fontFamily,
               fontSize: envEffective.fontSize,

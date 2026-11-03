@@ -17,6 +17,7 @@ export type PresetSectionProps = {
 
 export function Settings({
   notify,
+  initialTab = "general",
   typography,
   onChangeTypography,
   dailyGoal,
@@ -28,6 +29,7 @@ export function Settings({
   presetProps,
 }: {
   notify: (s: string) => void;
+  initialTab?: "general" | "editor" | "appearance" | "ai";
   typography: {
     fontFamily: string;
     fontSize: number;
@@ -69,9 +71,7 @@ export function Settings({
     media.addEventListener("change", syncOrientation);
     return () => media.removeEventListener("change", syncOrientation);
   }, []);
-  const [tab, setTab] = useState<"general" | "editor" | "appearance" | "ai">(
-    "general",
-  );
+  const [tab, setTab] = useState<"general" | "editor" | "appearance" | "ai">(initialTab);
   const moveSettingsTab = (event: KeyboardEvent<HTMLButtonElement>, current: typeof tab) => {
     const currentIndex = settingsTabs.findIndex((item) => item.id === current);
     const nextIndex = event.key === "Home"
