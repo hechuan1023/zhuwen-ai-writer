@@ -64,7 +64,7 @@ export function Select({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
-  const [rect, setRect] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+  const [rect, setRect] = useState<{ top: number; left: number; width: number; maxHeight: number; side: "above" | "below" } | null>(null);
   const reducedMotion = usePrefersReducedMotion();
   const typeahead = useRef({ buffer: "", at: 0 });
 
@@ -112,6 +112,7 @@ export function Select({
       left,
       width,
       maxHeight,
+      side: openUp ? "above" : "below",
     });
   }, [options.length]);
 
@@ -269,6 +270,7 @@ export function Select({
       {open && rect && (
         <div
           className={`zw-select-pop ${reducedMotion ? "no-motion" : ""}`}
+          data-side={rect.side}
           style={{
             position: "fixed",
             top: rect.top,
