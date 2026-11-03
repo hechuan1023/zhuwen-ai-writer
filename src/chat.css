@@ -177,12 +177,13 @@
   display: flex;
   flex-direction: column;
   padding: 4px;
-  background: var(--paper, #fff);
-  border: 1px solid var(--line, #e2ddd2);
+  background: color-mix(in srgb, var(--paper, #fff) 96%, var(--accent-soft, var(--panel, #fff)));
+  border: 1px solid color-mix(in srgb, var(--line, #e2ddd2) 76%, var(--accent, #4d7a68));
   border-radius: var(--r-lg, 14px);
-  box-shadow: var(--shadow, 0 14px 40px rgba(0, 0, 0, 0.18));
+  box-shadow: var(--shadow, 0 14px 40px rgba(0, 0, 0, 0.18)), 0 3px 10px color-mix(in srgb, var(--ink, #292a28) 7%, transparent);
   backdrop-filter: blur(var(--glass-blur, 12px));
   -webkit-backdrop-filter: blur(var(--glass-blur, 12px));
+  animation: zchat-menu-in 130ms var(--ease, ease-out);
 }
 .zchat-menu.prompt-menu .zchat-menu-hint {
   display: none;
@@ -217,9 +218,11 @@
   text-align: left;
   font-size: 13px;
   cursor: pointer;
+  transition: color var(--dur, 180ms) var(--ease, ease), background var(--dur, 180ms) var(--ease, ease), box-shadow var(--dur, 180ms) var(--ease, ease), transform var(--dur, 180ms) var(--ease, ease);
 }
 .zchat-menu-item:hover:not(.disabled) {
   background: var(--accent-soft, var(--accent-2, #dfe9e3));
+  transform: translateX(1px);
 }
 .zchat-menu-item.selected:not(.disabled) {
   color: var(--accent, #4d7a68);
@@ -274,6 +277,10 @@
   color: var(--accent, #4d7a68);
   font-size: 12px;
   font-weight: 700;
+}
+@keyframes zchat-menu-in {
+  from { opacity: 0; transform: translateY(-3px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .zchat-menu.style-technique-menu .zchat-menu-item {
   grid-template-columns: 16px minmax(0, 1fr) auto 16px;
@@ -1546,6 +1553,10 @@
 /* ── 减少动效 / 减少透明 ──────────────────────────────────── */
 .reduce-motion .zchat-cursor {
   animation: none;
+}
+.reduce-motion .zchat-menu { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .zchat-menu { animation: none; }
 }
 .no-motion .zchat-cursor {
   animation: none;
