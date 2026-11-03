@@ -409,12 +409,14 @@ export function AiPanel({
     if (!request || session?.novelId !== novelId || request.chapterId !== chapterId || consumedSceneDraft.current === request.nonce) return;
     consumedSceneDraft.current = request.nonce;
     const scene = request.scene || {};
+    const sceneDraftContextId = String(scene.id || "");
     const sceneContent = parseJson(scene.content_json || "{}");
     const targetWords = normalizeSceneTargetWords(scene.targetWords ?? sceneContent.targetWords);
     const sceneContext = {
       label: `${scene.title || tr("未命名场景", "Untitled scene")} · ${tr("场景细纲", "Scene outline")}`,
       kind: "scene",
-      sourceId: String(scene.id || ""),
+      sourceId: sceneDraftContextId,
+      sceneDraftContextId,
       content: materialReferenceContent({
         ...scene,
         kind: "scene",
@@ -423,11 +425,13 @@ export function AiPanel({
     };
     const linkedAiContexts = Array.isArray(scene.linkedAiContexts)
       ? scene.linkedAiContexts.filter((item: AnyRow) => item?.kind && item?.sourceId && String(item.content || "").trim())
+        .map((item: AnyRow) => ({ ...item, sceneDraftContextId }))
       : [];
     const linkedKeys = new Set(linkedAiContexts.map((item: AnyRow) => `${item.kind}:${item.sourceId}`));
     patch({
       contexts: [
         ...(session?.contexts || []).filter((item: AnyRow) =>
+          !item.sceneDraftContextId &&
           !(item.kind === "scene" && item.sourceId === sceneContext.sourceId) &&
           !linkedKeys.has(`${item.kind}:${item.sourceId}`),
         ),
