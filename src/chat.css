@@ -131,22 +131,26 @@
   align-items: center;
   justify-content: center;
   gap: 5px;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--r-sm, 8px);
   background: transparent;
   color: inherit;
   cursor: pointer;
   flex: none;
+  transition: color var(--dur, 180ms) var(--ease, ease), background var(--dur, 180ms) var(--ease, ease), border-color var(--dur, 180ms) var(--ease, ease), box-shadow var(--dur, 180ms) var(--ease, ease);
 }
 .zchat-icon-btn:hover {
-  background: rgba(0, 0, 0, 0.05);
+  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  color: var(--accent);
 }
 .zchat-icon-btn.active {
-  background: var(--accent2, #dfe9e3);
-  border-color: var(--accent, #4d7a68);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+  background: var(--accent-soft, var(--accent-2, #dfe9e3));
+  color: var(--accent);
 }
 .zchat-icon-btn:focus-visible {
   outline: 2px solid var(--accent, #4d7a68);
@@ -162,7 +166,7 @@
   position: absolute;
   top: calc(100% + 4px);
   z-index: 140;
-  width: 260px;
+  width: 272px;
   min-width: min(210px, calc(100vw - 24px));
   max-width: min(280px, 76vw);
   max-height: min(420px, calc(100vh - 24px));
@@ -174,7 +178,7 @@
   padding: 4px;
   background: var(--paper, #fff);
   border: 1px solid var(--line, #e2ddd2);
-  border-radius: var(--r-md, 10px);
+  border-radius: var(--r-lg, 14px);
   box-shadow: var(--shadow, 0 14px 40px rgba(0, 0, 0, 0.18));
   backdrop-filter: blur(var(--glass-blur, 12px));
   -webkit-backdrop-filter: blur(var(--glass-blur, 12px));
@@ -213,9 +217,10 @@
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  min-height: 34px;
   padding: 7px 9px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--r-sm, 8px);
   background: transparent;
   color: inherit;
   text-align: left;
@@ -223,15 +228,15 @@
   cursor: pointer;
 }
 .zchat-menu-item:hover:not(.disabled) {
-  background: var(--accent2, #dfe9e3);
+  background: var(--accent-soft, var(--accent-2, #dfe9e3));
 }
 .zchat-menu-item.selected:not(.disabled) {
   color: var(--accent, #4d7a68);
-  background: var(--accent-soft, var(--accent2, #dfe9e3));
+  background: var(--accent-soft, var(--accent-2, #dfe9e3));
 }
 .zchat-menu-item:focus-visible {
   outline: none;
-  background: var(--accent-soft, var(--accent2, #dfe9e3));
+  background: var(--accent-soft, var(--accent-2, #dfe9e3));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .zchat-menu-item.danger {
@@ -819,6 +824,7 @@
   cursor: pointer;
   flex: none;
   margin: 0;
+  transition: color var(--dur, 180ms) var(--ease, ease), background var(--dur, 180ms) var(--ease, ease), border-color var(--dur, 180ms) var(--ease, ease), box-shadow var(--dur, 180ms) var(--ease, ease), transform var(--dur, 180ms) var(--ease, ease);
 }
 .zchat-pill > span {
   min-width: 0;
@@ -827,8 +833,9 @@
   text-overflow: ellipsis;
 }
 .zchat-pill:hover {
-  border-color: var(--line-strong, var(--line));
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--line-strong, var(--line)));
   background: var(--accent-soft, color-mix(in srgb, var(--accent) 8%, var(--paper)));
+  color: var(--accent);
 }
 .zchat-pill:focus-visible,
 .zchat-send:focus-visible {
@@ -1251,7 +1258,7 @@
 }
 .zchat-picker-bulk > span svg { flex: none; color: var(--accent, #4d7a68); }
 .zchat-picker-bulk > small { flex: none; color: var(--muted, #8a8577); font-size: 10px; }
-.zchat-picker-bulk:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft, var(--accent2, #dfe9e3)); }
+.zchat-picker-bulk:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft, var(--accent-2, #dfe9e3)); }
 .zchat-picker-bulk:focus-visible { outline: 2px solid var(--accent, #4d7a68); outline-offset: 1px; }
 .zchat-picker-bulk:disabled { opacity: .72; cursor: default; }
 .zchat-picker-empty {
@@ -1284,7 +1291,7 @@
 }
 .zchat-suggestion-card:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-  background: var(--accent-soft, var(--accent2, #dfe9e3));
+  background: var(--accent-soft, var(--accent-2, #dfe9e3));
   transform: translateY(-1px);
 }
 .zchat-suggestion-card:focus-visible {
@@ -1519,7 +1526,7 @@
 .theme-dark .zchat-act:hover,
 .theme-dark .zchat-conv-row:hover,
 .theme-dark .zchat-pill:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--accent-soft, rgba(255, 255, 255, 0.07));
 }
 .theme-dark .zchat-context-bar {
   background: rgba(255, 255, 255, 0.1);
