@@ -862,7 +862,7 @@ function createMainWindow() {
         }
         await js(`document.querySelector('[data-fd-id="ai-style-menu"]')?.click()`);
         await wait(100);
-        await js(`([...document.querySelectorAll('.zchat-menu-item')].find(button=>/查看与管理风格卡|View and manage style cards/.test(button.textContent))?.click())`);
+        await js(`([...document.querySelectorAll('.zchat-menu-item')].find(button=>/查看与管理风格卡|View and manage style cards|管理\/搜索风格卡|Manage \/ search styles/.test(button.textContent))?.click())`);
         await wait(180);
         await js(`document.querySelector('.zchat-style-select')?.click()`);
         await wait(80);
@@ -941,7 +941,7 @@ function createMainWindow() {
           if (!managedAiCardReady) await wait(120);
         }
         const translatedAiSettingsOk = await js(
-          `Boolean([...document.querySelectorAll('.settings h3')].find(h=>h.textContent.includes('AI API connections'))&&[...document.querySelectorAll('.settings h3')].find(h=>h.textContent.includes('Prompt templates')))`,
+          `Boolean([...document.querySelectorAll('.settings h3')].find(h=>h.textContent.includes('AI assistant'))&&[...document.querySelectorAll('.settings h3')].find(h=>h.textContent.includes('Prompt templates')))`,
         );
         const managedAiSettingsOk = managedAiCardReady && await js(
           `(()=>{const managed=document.querySelector('[data-fd-id="settings-managed-ai"]');const generation=document.querySelector('[data-fd-id="settings-generation-options"]');const save=document.querySelector('[data-fd-id="settings-ai-save"]');return Boolean(managed&&!document.querySelector('[data-fd-id="settings-provider-fields"]')&&generation&&getComputedStyle(managed).display==='flex'&&getComputedStyle(generation).display==='grid'&&save?.textContent.includes('Save AI settings'))})()`,
@@ -1104,6 +1104,23 @@ function createMainWindow() {
         await shot("10a-epub-reader-phone");
         await js(`document.querySelector('.epub-preview-dialog')?.closest('.modal')?.querySelector('header button')?.click()`);
         await wait(120);
+        // 发布前自检：读取导出范围内的章节，在本机给出风险词提示
+        const riskAuditOpened = await js(
+          `(()=>{const b=document.querySelector('[data-fd-id="risk-audit-open"]');if(!b)return false;b.click();return true})()`,
+        );
+        let riskAuditReady = false;
+        for (let i = 0; i < 40 && !riskAuditReady; i++) {
+          riskAuditReady = await js(
+            `Boolean(document.querySelector('[data-fd-id="risk-audit-results"]'))&&!document.querySelector('[data-fd-id="risk-audit-progress"]')`,
+          );
+          if (!riskAuditReady) await wait(100);
+        }
+        const riskAuditOk = riskAuditOpened && riskAuditReady && await js(
+          `(()=>{const r=document.querySelector('[data-fd-id="risk-audit-results"]');if(!r)return false;const ta=r.querySelector('textarea');const empty=r.querySelector('[data-fd-id="risk-audit-empty"]');const list=r.querySelector('.risk-audit-list');return Boolean(ta&&(empty||list))})()`,
+        );
+        await shot("10b-risk-audit");
+        await js(`document.querySelector('[data-fd-id="risk-audit-results"]')?.closest('.modal')?.querySelector('header button')?.click()`);
+        await wait(120);
         await js(`document.querySelector('.io')?.closest('.modal')?.querySelector('header button')?.click()`);
         await wait(150);
         await js(`document.querySelector('[data-fd-id="ai-add-ref"]')?.click()`);
@@ -1251,6 +1268,7 @@ function createMainWindow() {
           bookSearchRunOk,
           statsOk,
           epubReaderViewportOk,
+          riskAuditOk,
           homeGoalScopeOk,
           goalScopeOk,
           focusSessionSetupOk,
@@ -1304,7 +1322,7 @@ function createMainWindow() {
         if (shotsFailed.length)
           console.log(`UI_SHOTS_FAIL ${shotsFailed.join(",")}`);
         console.log(
-          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n ai_managed_settings epub_reader_viewport reference_picker typography_settings daily_goal focus_session database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared ai_style_manager_action_icons history_drawer history_archive_scope ai_dock_left ai_dock_restore summary_modal library_kinds relation_graph relation_expand library_detail library_trash ${status} ${out}`,
+          `UI_SMOKE_OK workspace_open editor_input settings_i18n ai_i18n library_i18n ai_managed_settings epub_reader_viewport risk_audit reference_picker typography_settings daily_goal focus_session database_health find_bar book_search book_search_run writing_stats goal_scope_home goal_scope_workspace reduce_motion_independent confirm_dialog ai_float_shared ai_style_manager_action_icons history_drawer history_archive_scope ai_dock_left ai_dock_restore summary_modal library_kinds relation_graph relation_expand library_detail library_trash ${status} ${out}`,
         );
         closeUiSmokeEchoServer();
         app.exit(0);
