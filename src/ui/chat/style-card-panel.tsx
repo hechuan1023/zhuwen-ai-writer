@@ -40,6 +40,7 @@ function styleLabel(card: StyleCard, language: string) {
     "style-serial-hook-payoff": ["Serial hooks & payoff", "Connect chapter rewards, unresolved actions, and the next reading impulse."],
     "style-scene-visual-payoff": ["Visual scene anchors & emotional aftermath", "Sharpen action and spatial clarity while preserving interiority and emotional resonance."],
     "style-suspense-information-control": ["Clues & information control", "Keep clues traceable and reveals consequential."],
+    "style-unreliable-narrator-fair-reveal": ["Unreliable narration & fair reveals", "Let limited knowledge shape suspense while leaving evidence readers can revisit."],
     "style-high-concept-fair-puzzle": ["High-concept puzzles & fair payoff", "Use visible clues, active verification, and a consequential solution."],
     "style-multipov-ensemble": ["Multi-POV ensemble & information gaps", "Use bounded viewpoint shifts to reveal distinct motives, information, and consequences."],
     "style-character-voice-tension": ["Character voice & tension", "Give dialogue a character-specific agenda and subtext."],
@@ -143,6 +144,12 @@ const TECHNIQUE_PRESETS = [
     name: ["高概念悬疑与逻辑爽感", "High-concept mystery & fair-play payoff"],
     description: ["公平线索 + 主动验证 + 逻辑兑现", "Fair clues + active verification + logical payoff"],
     cardIds: ["style-high-concept-fair-puzzle", "style-suspense-information-control", "style-grounded-mystery", "style-serial-hook-payoff"],
+  },
+  {
+    id: "genre-unreliable-narration-short-mystery",
+    name: ["限知叙述与短篇悬疑", "Short mystery with unreliable narration"],
+    description: ["叙述偏差 + 公平线索 + 篇幅闭环", "Narrator bias + fair clues + bounded closure"],
+    cardIds: ["style-unreliable-narrator-fair-reveal", "style-suspense-information-control", "style-short-form-closure"],
   },
   {
     id: "genre-ensemble-comedy",
