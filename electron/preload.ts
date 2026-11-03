@@ -32,6 +32,7 @@ const allowedChannels = new Set([
   'ai:style:export',
   'ai:style:import',
   'ai:style:estimate',
+  'ai:style:analyze',
   'ai:style-compositions:list',
   'ai:style-compositions:save',
   'ai:style-compositions:delete',

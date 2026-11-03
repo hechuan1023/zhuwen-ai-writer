@@ -257,6 +257,8 @@ export function StyleCardPanel({
   taskKind,
   previewRules,
   onReload,
+  connectionAvailable = false,
+  onGenerateRules,
   compact = false,
 }: {
   language: string;
@@ -268,6 +270,8 @@ export function StyleCardPanel({
   taskKind: string;
   previewRules: string;
   onReload: () => void;
+  connectionAvailable?: boolean;
+  onGenerateRules?: (sample: string, language: string) => Promise<string>;
   compact?: boolean;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
@@ -582,13 +586,13 @@ export function StyleCardPanel({
         else setCompositions((current) => current.filter((item) => item.id !== deleteComposition.id));
         setDeleteComposition(null);
       }} />}
-      {edit && <StyleEditor card={edit} language={language} onCancel={() => setEdit(null)} onSaved={() => { setEdit(null); onReload(); }} onError={setError} />}
+      {edit && <StyleEditor card={edit} language={language} connectionAvailable={connectionAvailable} onGenerateRules={onGenerateRules} onCancel={() => setEdit(null)} onSaved={() => { setEdit(null); onReload(); }} onError={setError} />}
       {deleteCard && <ConfirmDialog title={tr("删除自定义风格", "Delete custom style")} message={tr(`删除「${deleteCard.name}」？使用它的作品只会移除此卡，其他已选技法会保留。`, `Delete “${deleteCard.name}”? Novels using it will remove only this card; other selected techniques will remain.`)} confirmLabel={tr("删除", "Delete")} cancelLabel={tr("取消", "Cancel")} danger onCancel={() => setDeleteCard(null)} onConfirm={async () => { const r = await api("ai:style:delete", deleteCard.id); setDeleteCard(null); if (!r.ok) setError(r.error || "Delete failed"); else { setCompositions((current) => current.flatMap((item) => { const styleIds = item.styleIds.filter((id) => id !== deleteCard.id); return styleIds.length ? [{ ...item, styleIds }] : []; })); onReload(); } }} />}
     </div>
   );
 }
 
-function StyleEditor({ card, language, onCancel, onSaved, onError }: { card: StyleCard; language: string; onCancel: () => void; onSaved: () => void; onError: (s: string) => void }) {
+function StyleEditor({ card, language, connectionAvailable, onGenerateRules, onCancel, onSaved, onError }: { card: StyleCard; language: string; connectionAvailable: boolean; onGenerateRules?: (sample: string, language: string) => Promise<string>; onCancel: () => void; onSaved: () => void; onError: (s: string) => void }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const taskOptions: [string, string, string][] = [
     ["continue", "续写", "Continuation"],
@@ -605,6 +609,7 @@ function StyleEditor({ card, language, onCancel, onSaved, onError }: { card: Sty
   const [tasks, setTasks] = useState(card.tasks.filter((task) => taskOptions.some(([id]) => id === task)));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const storedRules = joinPersonalSample(rules, sample);
   const overLimit = storedRules.length > 20000;
 
@@ -624,6 +629,21 @@ function StyleEditor({ card, language, onCancel, onSaved, onError }: { card: Sty
       const message = result.error || tr("保存失败", "Save failed");
       setError(message);
       onError(message);
+    }
+  }
+
+  async function generateRules() {
+    if (!onGenerateRules || !sample.trim() || analyzing || saving) return;
+    setAnalyzing(true);
+    setError("");
+    try {
+      const generated = await onGenerateRules(sample.trim(), language);
+      if (generated.trim()) setRules(generated.trim());
+      else setError(tr("没有提炼出可用规则，请调整样文后重试。", "No usable rules were returned. Revise the sample and try again."));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setAnalyzing(false);
     }
   }
 
@@ -687,6 +707,13 @@ function StyleEditor({ card, language, onCancel, onSaved, onError }: { card: Sty
             rows={5}
           />
         </label>
+        <div className="zchat-style-sample-actions">
+          <button type="button" className="secondary" disabled={!connectionAvailable || !sample.trim() || analyzing || saving} onClick={() => void generateRules()}>
+            <IconSparkle size={14} />
+            {analyzing ? tr("正在分析样文…", "Analyzing sample…") : tr("从样文提炼规则", "Derive rules from sample")}
+          </button>
+          <small>{connectionAvailable ? tr("样文会发送到当前 AI 连接；规则只填入草稿，不会自动保存。", "The sample is sent to the current AI connection. Rules are added as a draft and are not saved automatically.") : tr("请先配置 AI 连接。", "Configure an AI connection first.")}</small>
+        </div>
         <small className={overLimit ? "zchat-style-rule-count error" : "zchat-style-rule-count"}>
           {tr("总计", "Total")} {storedRules.length.toLocaleString(language === "en" ? "en-US" : "zh-CN")} / 20,000
           {overLimit ? tr(" · 超出上限", " · over the limit") : ""}

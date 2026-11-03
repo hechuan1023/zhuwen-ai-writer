@@ -2021,6 +2021,12 @@ export function AiPanel({
             taskKind={mode}
             previewRules={stylePreviewRules}
             onReload={() => void reloadStyleCards()}
+            connectionAvailable={Boolean(connection)}
+            onGenerateRules={async (sample, outputLanguage) => {
+              const result = await api<{ rules: string }>("ai:style:analyze", { connectionId: connection, sample, language: outputLanguage });
+              if (!result.ok) throw new Error(result.error || tr("样文分析失败", "Could not analyze the sample"));
+              return result.data.rules;
+            }}
             compact
           />
         }
