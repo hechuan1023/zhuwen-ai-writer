@@ -162,6 +162,7 @@ export function IoPanel({
     [riskBusy, setRiskBusy] = useState(false),
     [riskProgress, setRiskProgress] = useState({ done: 0, total: 0 }),
     [riskSources, setRiskSources] = useState<RiskSource[]>([]),
+    [expandedRiskFindings, setExpandedRiskFindings] = useState<Set<string>>(() => new Set()),
     [riskCustom, setRiskCustom] = useState(""),
     [riskCustomDraft, setRiskCustomDraft] = useState("");
   useEffect(() => {
@@ -1087,7 +1088,10 @@ export function IoPanel({
                       {tr(`${hit.count} 处`, `${hit.count}×`)}
                     </span>
                     <span className="risk-audit-source">
-                      {hit.sources.slice(0, 3).map((label, index) => {
+                      {(expandedRiskFindings.has(`${hit.category}:${hit.term}`)
+                        ? hit.sources
+                        : hit.sources.slice(0, 3)
+                      ).map((label, index) => {
                         const chapterId = hit.sourceIds?.[index];
                         return chapterId && onLocateChapterText ? (
                           <button
@@ -1102,7 +1106,22 @@ export function IoPanel({
                         ) : <span key={`${label}:${index}`}>{label}</span>;
                       })}
                       {hit.sources.length > 3
-                        ? <small>{tr(`等 ${hit.sources.length} 章`, `+${hit.sources.length - 3} more`)}</small>
+                        ? <button
+                            type="button"
+                            className="risk-audit-source-toggle"
+                            aria-expanded={expandedRiskFindings.has(`${hit.category}:${hit.term}`)}
+                            onClick={() => setExpandedRiskFindings((previous) => {
+                              const next = new Set(previous);
+                              const key = `${hit.category}:${hit.term}`;
+                              if (next.has(key)) next.delete(key);
+                              else next.add(key);
+                              return next;
+                            })}
+                          >
+                            {expandedRiskFindings.has(`${hit.category}:${hit.term}`)
+                              ? tr("收起章节", "Show fewer")
+                              : tr(`展开其余 ${hit.sources.length - 3} 章`, `Show ${hit.sources.length - 3} more`)}
+                          </button>
                         : null}
                     </span>
                   </li>

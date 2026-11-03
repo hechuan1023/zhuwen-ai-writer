@@ -1370,6 +1370,25 @@ button.danger-text:not(:disabled):hover {
   background: var(--accent-soft);
   color: var(--accent);
 }
+.risk-audit-source-toggle {
+  min-height: 0;
+  margin: 0 2px;
+  padding: 1px 5px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent);
+  font-size: inherit;
+}
+.risk-audit-source-toggle:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.risk-audit-source-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
 .risk-audit-source-link:focus-visible {
   outline: none;
   box-shadow: var(--focus);
