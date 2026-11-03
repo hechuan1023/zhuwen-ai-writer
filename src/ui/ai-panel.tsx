@@ -88,6 +88,7 @@ export function AiPanel({
     [conversations, setConversations] = useState<AnyRow[]>([]),
     [libraryAll, setLibraryAll] = useState<AnyRow[]>([]),
     [bookChapters, setBookChapters] = useState<AnyRow[]>([]),
+    [bookVolumes, setBookVolumes] = useState<AnyRow[]>([]),
     [styleCards, setStyleCards] = useState<StyleCard[]>([]),
     [pickerOpen, setPickerOpen] = useState(false),
     [compare, setCompare] = useState<{ msg: AnyRow; original: string } | null>(
@@ -355,9 +356,11 @@ export function AiPanel({
       setStyleIds(r.data?.styleIds || (r.data?.styleId ? [r.data.styleId] : []));
       setStyleIntensity(r.data?.styleIntensity || "balanced");
     });
-    api("novels:open", novelId).then(
-      (r) => r.ok && setBookChapters(r.data.chapters),
-    );
+    api("novels:open", novelId).then((r) => {
+      if (!r.ok) return;
+      setBookChapters(r.data.chapters);
+      setBookVolumes(r.data.volumes || []);
+    });
     api("library:listAll", novelId).then((r) => r.ok && setLibraryAll(r.data));
     return () => {
       if (projectInstructionLoadSeq.current === loadSeq)
@@ -629,6 +632,36 @@ export function AiPanel({
         sourceId: chapterId,
       },
     ]);
+  }
+  function addPreviousChapterSummaries(limit: number) {
+    if (!chapterId || limit <= 0) return;
+    const volumeOrder = new Map(bookVolumes.map((item, index) => [String(item.id), index + 1]));
+    const ordered = bookChapters.slice().sort((a, b) => {
+      const volumeA = a.volume_id ? (volumeOrder.get(String(a.volume_id)) ?? 0) : 0;
+      const volumeB = b.volume_id ? (volumeOrder.get(String(b.volume_id)) ?? 0) : 0;
+      return volumeA - volumeB || Number(a.sort_order || 0) - Number(b.sort_order || 0);
+    });
+    const currentIndex = ordered.findIndex((item) => String(item.id) === chapterId);
+    if (currentIndex <= 0) return;
+    const previous = ordered.slice(0, currentIndex).filter((item) => {
+      const summary = String(item.summary || "").trim();
+      const revision = Number(item.revision || 0);
+      return summary && Number.isFinite(Number(item.summary_revision)) && Number(item.summary_revision) === revision;
+    }).slice(-limit);
+    if (!previous.length) return;
+    setContexts((current) => {
+      const next = [...current];
+      for (const item of previous) {
+        if (next.some((context) => context.kind === "summary" && String(context.sourceId) === String(item.id))) continue;
+        next.push({
+          label: `${item.title || tr("前章", "Previous chapter")} · ${tr("摘要", "Summary")}`,
+          kind: "summary",
+          content: String(item.summary || ""),
+          sourceId: String(item.id),
+        });
+      }
+      return next;
+    });
   }
   function addContext(item: {
     label: string;
@@ -1319,12 +1352,13 @@ export function AiPanel({
       kind: "check",
       label: tr("长篇连续性审校", "Long-form continuity review"),
       attachChapter: true,
+      attachPreviousSummaries: 2,
       appendDraft: true,
       draft: tr(
         "请审阅自动引用的当前章节，以及我额外添加的作品资料、细纲和前后章摘要，进行长篇连续性审校。只依据本次引用中能找到的证据，不把计划、传闻、角色猜测或旧版 AI 建议写成已发生事实。检查人物目标与已知信息、时间顺序、地点与行动位置、能力/资源/伤势边界、人物关系变化、伏笔承诺及本章目标兑现。按“明确矛盾 / 连续性风险 / 资料不足”分类；每条附对应章节、资料名或原文短引，并说明影响和最小修正方向。没有证据时标为未知；若只引用了当前章，说明审校范围受限。只输出审校清单，不续写或修改正文，不替作者补设定。",
         "Review the automatically attached current chapter together with any story-bible entries, outline, and adjacent-chapter summaries I add. Use only evidence available in these references; do not treat plans, rumors, character guesses, or old AI suggestions as events. Check character goals and knowledge, chronology, locations and movement, ability/resource/injury limits, relationship changes, foreshadowing promises, and this chapter's objectives. Classify each finding as contradiction, continuity risk, or insufficient information. Cite the chapter, entry, or a short passage, then explain its impact and the smallest possible fix. Mark unsupported points unknown; if only the current chapter is referenced, state that the review is limited. Return a review checklist only; do not continue or edit the manuscript or invent canon.",
       ),
-      hint: tr("自动引用当前章；可再添加细纲、人物/世界观资料和前后章摘要。", "Automatically references this chapter; add an outline, story-bible entries, or adjacent-chapter summaries."),
+      hint: tr("自动引用当前章和最近两章中与正文版本一致的摘要；可再添加细纲和人物/世界观资料。", "Automatically references this chapter and up to two recent summaries matching their chapter revisions; add an outline or story-bible entries."),
     }] : []),
     {
       id: "review-style-application",
@@ -1912,6 +1946,7 @@ export function AiPanel({
           const task = tasks.find((t) => t.id === id);
           if (!task) return;
           if (task.attachChapter) addChapter();
+          if (task.attachPreviousSummaries) addPreviousChapterSummaries(task.attachPreviousSummaries);
           setActiveTaskId(id);
           setMode(task.kind as typeof mode);
           if (task?.draft) {

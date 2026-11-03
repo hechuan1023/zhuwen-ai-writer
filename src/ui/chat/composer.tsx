@@ -22,6 +22,8 @@ export type ComposerTask = {
   draft?: string;
   /** 选中时将当前章节加入本次引用 */
   attachChapter?: boolean;
+  /** 选中时加入最近 N 个摘要仍对应当前正文修订的前章 */
+  attachPreviousSummaries?: number;
   /** 草稿非空时追加任务要求，避免覆盖作者正在编辑的内容 */
   appendDraft?: boolean;
   hint?: string;
