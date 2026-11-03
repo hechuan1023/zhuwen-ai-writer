@@ -348,7 +348,7 @@ export function StyleCardPanel({
       <ChatMenu
         ariaLabel={tr("写作风格", "Writing style")}
         dataFdId="ai-style-menu"
-        menuClassName="open-up style-technique-menu"
+        menuClassName="style-technique-menu"
         trigger={
           <>
             <IconSparkle />

@@ -315,7 +315,7 @@ export function Composer({
             ariaLabel={tr("提示词模板", "Prompt templates")}
             dataFdId="ai-prompt-template-menu"
             wrapClassName="prompt-template-menu"
-            menuClassName="prompt-menu open-up"
+            menuClassName="prompt-menu"
             trigger={
               <>
                 <IconCopy size={14} />
@@ -328,7 +328,6 @@ export function Composer({
           <ChatMenu
             ariaLabel={tr("任务类型", "Task type")}
             dataFdId="ai-task-menu"
-            menuClassName="open-up"
             trigger={
               <>
                 <IconSparkle />

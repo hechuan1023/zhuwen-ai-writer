@@ -163,8 +163,9 @@
   display: inline-flex;
 }
 .zchat-menu {
-  position: absolute;
-  top: calc(100% + 4px);
+  position: fixed;
+  top: 0;
+  left: 0;
   z-index: 140;
   width: 272px;
   min-width: min(210px, calc(100vw - 24px));
@@ -182,16 +183,6 @@
   box-shadow: var(--shadow, 0 14px 40px rgba(0, 0, 0, 0.18));
   backdrop-filter: blur(var(--glass-blur, 12px));
   -webkit-backdrop-filter: blur(var(--glass-blur, 12px));
-}
-.zchat-menu.align-end {
-  right: 0;
-}
-.zchat-menu.align-start {
-  left: 0;
-}
-.zchat-menu.open-up {
-  top: auto;
-  bottom: calc(100% + 4px);
 }
 .zchat-menu.prompt-menu .zchat-menu-hint {
   display: none;

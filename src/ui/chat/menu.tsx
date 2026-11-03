@@ -3,10 +3,12 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 
 export type MenuItem = {
   id: string;
@@ -55,10 +57,12 @@ export function ChatMenu({
   const [active, setActive] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const openAtEndRef = useRef(false);
   const typeaheadRef = useRef("");
   const typeaheadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
 
   useEffect(() => () => {
     if (typeaheadTimerRef.current) clearTimeout(typeaheadTimerRef.current);
@@ -69,6 +73,7 @@ export function ChatMenu({
   const close = useCallback(
     (restoreFocus = true) => {
       setOpen(false);
+      setMenuPosition(null);
       typeaheadRef.current = "";
       if (typeaheadTimerRef.current) clearTimeout(typeaheadTimerRef.current);
       if (restoreFocus) triggerRef.current?.focus();
@@ -79,7 +84,8 @@ export function ChatMenu({
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) close(false);
+      const target = e.target as Node;
+      if (!wrapRef.current?.contains(target) && !menuRef.current?.contains(target)) close(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -95,6 +101,42 @@ export function ChatMenu({
       window.removeEventListener("keydown", onKey, true);
     };
   }, [open, close]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const updatePosition = () => {
+      const triggerRect = triggerRef.current?.getBoundingClientRect();
+      const menu = menuRef.current;
+      if (!triggerRect || !menu) return;
+      const gutter = 12;
+      const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+      const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+      const width = Math.min(272, Math.max(0, viewportWidth - gutter * 2));
+      const maxHeight = Math.min(420, Math.max(0, viewportHeight - gutter * 2));
+      const below = viewportHeight - triggerRect.bottom - gutter - 4;
+      const above = triggerRect.top - gutter - 4;
+      const placeBelow = below >= 180 || (below >= above && below >= 72);
+      const availableOnSide = Math.max(72, placeBelow ? below : above);
+      const sideMaxHeight = Math.min(maxHeight, availableOnSide);
+      const sideHeight = Math.min(menu.scrollHeight, sideMaxHeight);
+      const top = placeBelow
+        ? Math.min(viewportHeight - gutter - sideHeight, triggerRect.bottom + 4)
+        : Math.max(gutter, triggerRect.top - sideHeight - 4);
+      const actualWidth = menu.getBoundingClientRect().width || width;
+      const preferredLeft = align === "start" ? triggerRect.left : triggerRect.right - actualWidth;
+      const left = Math.max(gutter, Math.min(viewportWidth - gutter - actualWidth, preferredLeft));
+      setMenuPosition((current) => current && current.top === top && current.left === left && current.width === width && current.maxHeight === sideMaxHeight
+        ? current
+        : { top, left, width, maxHeight: sideMaxHeight });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    document.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      document.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open, align, items]);
 
   useEffect(() => {
     if (open) {
@@ -143,25 +185,39 @@ export function ChatMenu({
         aria-label={ariaLabel}
         title={ariaLabel}
         data-fd-id={dataFdId}
-        onClick={() => (open ? close() : setOpen(true))}
+        onClick={() => {
+          if (open) close();
+          else { setMenuPosition(null); setOpen(true); }
+        }}
         onKeyDown={(e) => {
           if (!open && ["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) {
             e.preventDefault();
             openAtEndRef.current = e.key === "ArrowUp";
+            setMenuPosition(null);
             setOpen(true);
           }
         }}
       >
         {trigger ?? label}
       </button>
-      {open && (
+      {open && typeof document !== "undefined" ? createPortal(
         <div
+          ref={menuRef}
           className={`zchat-menu align-${align} ${menuClassName}`}
           role="menu"
           id={id}
           aria-label={ariaLabel}
+          style={{
+            position: "fixed",
+            top: menuPosition?.top ?? 0,
+            left: menuPosition?.left ?? 0,
+            width: menuPosition?.width ?? 272,
+            maxHeight: menuPosition?.maxHeight ?? 0,
+            visibility: menuPosition ? "visible" : "hidden",
+          }}
           onBlur={(e) => {
-            if (!wrapRef.current?.contains(e.relatedTarget as Node | null)) close(false);
+            const target = e.relatedTarget as Node | null;
+            if (!wrapRef.current?.contains(target) && !menuRef.current?.contains(target)) close(false);
           }}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") {
@@ -259,7 +315,7 @@ export function ChatMenu({
             </Fragment>
           ))}
         </div>
-      )}
+      , document.body) : null}
     </div>
   );
 }
