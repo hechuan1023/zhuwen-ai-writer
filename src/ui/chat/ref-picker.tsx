@@ -20,6 +20,7 @@ export function RefPicker({
   contextPreviewReady,
   onAdd,
   onAddMany,
+  onChooseLocalFile,
   onClose,
 }: {
   language: string;
@@ -36,6 +37,7 @@ export function RefPicker({
   contextPreviewReady: boolean;
   onAdd: (item: { label: string; kind: string; content: string; sourceId: string }) => void;
   onAddMany: (items: Array<{ label: string; kind: string; content: string; sourceId: string }>) => void;
+  onChooseLocalFile: () => Promise<{ ok: boolean; data: AnyRow | null; error?: string }>;
   onClose: () => void;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
@@ -47,6 +49,7 @@ export function RefPicker({
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(0);
   const [bulkMessage, setBulkMessage] = useState("");
+  const [localFileMessage, setLocalFileMessage] = useState("");
   const isAdded = (kind: string, sourceId?: string) =>
     selectedSources.some((source) => source.kind === kind && source.sourceId === sourceId);
 
@@ -154,6 +157,21 @@ export function RefPicker({
     }
   }
 
+  async function chooseLocalFile() {
+    setLocalFileMessage("");
+    const result = await onChooseLocalFile();
+    if (!result.ok) {
+      setLocalFileMessage(result.error || tr("读取文件失败", "Could not read file"));
+      return;
+    }
+    if (!result.data) return;
+    onAdd(result.data as { label: string; kind: string; content: string; sourceId: string });
+    setLocalFileMessage(tr(
+      `已添加「${result.data.label}」；点击发送后才会交给 AI。`,
+      `Added “${result.data.label}”. It is sent to AI only when you send your message.`,
+    ));
+  }
+
   return (
     <>
       <div className="zchat-picker-scrim" onMouseDown={onClose} />
@@ -185,6 +203,18 @@ export function RefPicker({
           )}
         </p>
         <div className="zchat-picker-body">
+          <section>
+            <h4><IconDoc /> {tr("本地文件", "Local files")}</h4>
+            <p className="zchat-picker-match-note">
+              {tr("选择 TXT、Markdown、HTML 或 DOCX，提取正文作为本次可见引用；不会自动发送。", "Choose a TXT, Markdown, HTML, or DOCX file to add its text as a visible reference. Nothing is sent automatically.")}
+            </p>
+            <div className="zchat-picker-grid">
+              <button type="button" data-fd-id="ai-picker-local-file" onClick={() => void chooseLocalFile()}>
+                <IconPlus /> {tr("选择本地文件", "Choose local file")}
+              </button>
+            </div>
+            {localFileMessage ? <p className="zchat-picker-match-note" role="status">{localFileMessage}</p> : null}
+          </section>
           <section>
             <h4>
               <IconSparkle /> {tr("本地匹配 · 相关资料", "Local matches · related materials")}

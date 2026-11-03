@@ -4,7 +4,7 @@ import { parseStyleCompositionBundle } from "../electron/ai-style-bundle";
 
 describe("AI 写作风格卡", () => {
   it("提供稳定 ID 的内置技法卡，覆盖通用叙事、现实职场与幻想融合且不包含硬性配额", () => {
-    expect(BUILTIN_STYLE_CARDS.length).toBeGreaterThanOrEqual(12);
+    expect(BUILTIN_STYLE_CARDS.length).toBeGreaterThanOrEqual(30);
     expect(new Set(BUILTIN_STYLE_CARDS.map((x) => x.id)).size).toBe(BUILTIN_STYLE_CARDS.length);
     expect(BUILTIN_STYLE_CARDS.map((x) => x.id)).toEqual(expect.arrayContaining([
       "style-natural-narrative",
@@ -13,9 +13,24 @@ describe("AI 写作风格卡", () => {
       "style-lived-realism",
       "style-urban-workplace-agency",
       "style-fantasy-social-fusion",
+      "style-rule-horror-uncanny",
+      "style-rebirth-causal-rewrite",
+      "style-period-market-texture",
+      "style-court-intrigue-negotiation",
+      "style-cosmic-dread-liminal",
+      "style-episodic-world-hopping",
+      "style-sweet-romance-pull",
     ]));
     expect(BUILTIN_STYLE_CARDS.find((x) => x.id === "style-urban-workplace-agency")?.rules).toContain("职责边界");
     expect(BUILTIN_STYLE_CARDS.find((x) => x.id === "style-fantasy-social-fusion")?.rules).toContain("世界内部自洽");
+    // 近年高热题材卡要落到可执行机制，而不是只贴题材标签
+    expect(BUILTIN_STYLE_CARDS.find((x) => x.id === "style-rule-horror-uncanny")?.rules).toContain("临时改规则");
+    expect(BUILTIN_STYLE_CARDS.find((x) => x.id === "style-rebirth-causal-rewrite")?.rules).toContain("蝴蝶效应");
+    expect(BUILTIN_STYLE_CARDS.find((x) => x.id === "style-period-market-texture")?.rules).toContain("票证");
+    expect(BUILTIN_STYLE_CARDS.find((x) => x.id === "style-court-intrigue-negotiation")?.rules).toContain("证据链");
+    expect(BUILTIN_STYLE_CARDS.find((x) => x.id === "style-cosmic-dread-liminal")?.rules).toContain("认知代价");
+    expect(BUILTIN_STYLE_CARDS.find((x) => x.id === "style-episodic-world-hopping")?.rules).toContain("局部闭环");
+    expect(BUILTIN_STYLE_CARDS.find((x) => x.id === "style-sweet-romance-pull")?.rules).toContain("明确同意");
     const all = BUILTIN_STYLE_CARDS.map((x) => x.rules).join("\n");
     // 硬性配额守卫：禁止百分比/数字配额与「每章必须」这类命令式节拍。
     expect(all).not.toMatch(/\d+\s*(%|％)|每章必须|每节必须|每卷必须/);

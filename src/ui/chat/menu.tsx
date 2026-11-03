@@ -15,6 +15,8 @@ export type MenuItem = {
   danger?: boolean;
   disabled?: boolean;
   selected?: boolean;
+  /** 多选状态；与 selected 的单选语义区分 */
+  checked?: boolean;
   /** 次要说明，如快捷键或作用范围 */
   hint?: string;
   /** 可选分组标题；分组标题不是可聚焦菜单项 */
@@ -96,7 +98,7 @@ export function ChatMenu({
 
   useEffect(() => {
     if (open) {
-      const selectedIndex = items.findIndex((item, index) => item.selected && enabled.includes(index));
+      const selectedIndex = items.findIndex((item, index) => (item.selected || item.checked) && enabled.includes(index));
       const initial = openAtEndRef.current
         ? enabled[enabled.length - 1]
         : selectedIndex >= 0
@@ -234,10 +236,10 @@ export function ChatMenu({
                   itemRefs.current[i] = el;
                 }}
                 type="button"
-                role={typeof it.selected === "boolean" ? "menuitemradio" : "menuitem"}
+                role={typeof it.checked === "boolean" ? "menuitemcheckbox" : typeof it.selected === "boolean" ? "menuitemradio" : "menuitem"}
                 tabIndex={i === active ? 0 : -1}
-                className={`zchat-menu-item ${it.danger ? "danger" : ""} ${it.disabled ? "disabled" : ""} ${it.selected ? "selected" : ""}`}
-                aria-checked={typeof it.selected === "boolean" ? it.selected : undefined}
+                className={`zchat-menu-item ${it.danger ? "danger" : ""} ${it.disabled ? "disabled" : ""} ${it.selected || it.checked ? "selected" : ""}`}
+                aria-checked={typeof it.checked === "boolean" ? it.checked : typeof it.selected === "boolean" ? it.selected : undefined}
                 aria-disabled={it.disabled || undefined}
                 title={it.label}
                 disabled={it.disabled}
@@ -252,7 +254,7 @@ export function ChatMenu({
                 {it.icon ? <span className="zchat-menu-icon">{it.icon}</span> : null}
                 <span className="zchat-menu-label">{it.label}</span>
                 {it.hint ? <small className="zchat-menu-hint">{it.hint}</small> : null}
-                {typeof it.selected === "boolean" ? <span className="zchat-menu-check" aria-hidden="true">{it.selected ? "✓" : ""}</span> : null}
+                {typeof it.checked === "boolean" || typeof it.selected === "boolean" ? <span className="zchat-menu-check" aria-hidden="true">{it.checked || it.selected ? "✓" : ""}</span> : null}
               </button>
             </Fragment>
           ))}

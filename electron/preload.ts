@@ -18,6 +18,7 @@ const allowedChannels = new Set([
   'ai:float:close',
   'ai:float:open',
   'ai:previewRequest',
+  'ai:reference:chooseFile',
   'ai:send',
   'ai:session:get',
   'ai:session:loadConversation',

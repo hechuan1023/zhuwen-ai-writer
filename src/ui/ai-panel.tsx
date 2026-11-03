@@ -5,7 +5,7 @@ import sanitizeHtml from "sanitize-html";
 import { joinSegments, splitSegments } from "../segments";
 import { materialReferenceContent, relevantMaterials } from "../relevant";
 import { normalizeSceneTargetWords } from "../scene-fields";
-import { api, useAiSessionStore, fmt, kindNameFor, promptNameFor, parseJson, Empty, Modal, DiffModal, ConfirmDialog, PromptDialog, AnyRow, UiLanguage, aiDraftFlusher } from "./shared";
+import { api, useAiSessionStore, fmt, kindNameFor, promptNameFor, parseJson, Empty, Modal, DiffModal, ConfirmDialog, PromptDialog, AnyRow, UiLanguage, registerAiDraftFlusher } from "./shared";
 import { ChatToolbar } from "./chat/chat-toolbar";
 import { HistoryDrawer } from "./chat/history-drawer";
 import { MessageList, type ReplyActions } from "./chat/message-list";
@@ -43,6 +43,10 @@ export function AiPanel({
   save,
   notify,
   float,
+  sessionId = "primary",
+  autoSelectConversation = true,
+  splitActive = false,
+  onToggleSplit,
   onOpenSettings,
   language = "zh-CN",
   expanded,
@@ -59,6 +63,10 @@ export function AiPanel({
   save?: (x?: boolean) => Promise<boolean>;
   notify: (s: string) => void;
   float?: boolean;
+  sessionId?: string;
+  autoSelectConversation?: boolean;
+  splitActive?: boolean;
+  onToggleSplit?: () => void;
   onOpenSettings?: () => void;
   language?: UiLanguage;
   /** 主窗口内展开聊天区（与独立浮窗区分） */
@@ -71,7 +79,7 @@ export function AiPanel({
   onNavigateSource?: (source: { kind: string; sourceId: string }) => Promise<boolean | void> | boolean | void;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
-  const [session, patch] = useAiSessionStore();
+  const [session, patch] = useAiSessionStore(sessionId);
   const [connections, setConnections] = useState<AnyRow[]>([]),
     [tokenState, setTokenState] = useState<{ configured: boolean } | null>(null),
     [prompts, setPrompts] = useState<AnyRow[]>([]),
@@ -131,6 +139,7 @@ export function AiPanel({
   const draftTimer = useRef<number | undefined>(undefined);
   const draftVersionRef = useRef(0);
   const draftConvRef = useRef(conversation);
+  const flushDraftRef = useRef<() => void>(() => {});
   useEffect(() => {
     // 会话切换：取消待提交任务，以服务端草稿与版本号为准
     if (draftConvRef.current !== conversation) {
@@ -147,7 +156,28 @@ export function AiPanel({
     draftRef.current = text;
     setDraft(text);
   }, [text]);
-  useEffect(() => () => window.clearTimeout(draftTimer.current), []);
+  useEffect(() => () => {
+    const pending = draftTimer.current !== undefined;
+    window.clearTimeout(draftTimer.current);
+    if (pending) flushDraftRef.current();
+  }, []);
+  useEffect(() => {
+    if (sessionId === "primary" || !session || !novel?.id) return;
+    const nextChapter = chapter
+      ? {
+          id: String(chapter.id || ""),
+          title: String(chapter.title || ""),
+          plain_text: String(chapter.plain_text || ""),
+          revision: Number(chapter.revision || 0),
+        }
+      : null;
+    if (session.novelId !== novel.id) {
+      patch({ novelId: novel.id, chapter: nextChapter, selectionText: "" });
+      return;
+    }
+    if (session.chapter?.id !== nextChapter?.id || session.chapter?.revision !== nextChapter?.revision)
+      patch({ chapter: nextChapter });
+  }, [sessionId, session?.novelId, session?.chapter?.id, session?.chapter?.revision, novel?.id, chapter?.id, chapter?.revision, patch]);
   // 设置页保存/清除令牌后立即刷新提示，不必等重开会话
   useEffect(() => {
     const refresh = () =>
@@ -165,14 +195,11 @@ export function AiPanel({
     return () => editor.off("update", onEditorUpdate);
   }, [editor]);
   // 退出前由 App 调用：立即提交 400ms 防抖中未发送的草稿
-  const flushDraftRef = useRef<() => void>(() => {});
   flushDraftRef.current = flushDraft;
   useEffect(() => {
-    aiDraftFlusher.current = () => flushDraftRef.current();
-    return () => {
-      aiDraftFlusher.current = () => {};
-    };
-  }, []);
+    const flush = () => flushDraftRef.current();
+    return registerAiDraftFlusher(sessionId, flush);
+  }, [sessionId]);
   function patchDraft(value: string, convId: string, version: number, nextContexts?: AnyRow[], nextStyleIds?: string[] | null) {
     return patch({
       text: value,
@@ -433,7 +460,7 @@ export function AiPanel({
     return off;
   }, [novelId, historyQuery, historyArchived, conversations.length, conversation, loadConversations]);
   useEffect(() => {
-    if (!session) return;
+    if (!session || !autoSelectConversation) return;
     if (autoSelected.current === novelId) return;
     if (session.conversationId) {
       autoSelected.current = novelId;
@@ -441,9 +468,9 @@ export function AiPanel({
     }
     if (conversations.length) {
       autoSelected.current = novelId;
-      api("ai:session:loadConversation", conversations[0].id);
+      api("ai:session:loadConversation", { conversationId: conversations[0].id, sessionId });
     }
-  }, [session, conversations, novelId]);
+  }, [session, conversations, novelId, autoSelectConversation]);
   useEffect(() => {
     if (connections.length && !connection)
       patch({ connectionId: connections[0].id });
@@ -494,7 +521,7 @@ export function AiPanel({
     void saveComposerState(draftRef.current, updater(contexts));
   }
   function selectConversation(id: string) {
-    api("ai:session:loadConversation", id);
+    api("ai:session:loadConversation", { conversationId: id, sessionId });
   }
   function renameConversation() {
     if (!conversation) return;
@@ -811,6 +838,7 @@ export function AiPanel({
       pendingContinue.current = true;
     }
     const r = await api("ai:send", {
+      sessionId,
       requestId: id,
       conversationId: conversation || undefined,
       novelId,
@@ -1326,7 +1354,7 @@ export function AiPanel({
       return;
     }
     const branchId = String(branched.data.conversationId);
-    const loaded = await api("ai:session:loadConversation", branchId);
+    const loaded = await api("ai:session:loadConversation", { conversationId: branchId, sessionId });
     if (!loaded.ok) {
       notify(loaded.error || tr("分支已创建，但暂时无法打开。", "The branch was created, but could not be opened."));
       return;
@@ -1491,12 +1519,12 @@ export function AiPanel({
       return;
     }
     const branchId = String(branched.data.conversationId);
-    const loaded = await api("ai:session:loadConversation", branchId);
+    const loaded = await api("ai:session:loadConversation", { conversationId: branchId, sessionId });
     if (!loaded.ok) {
       notify(loaded.error || tr("分支已创建，但暂时无法打开。", "The branch was created, but could not be opened."));
       return;
     }
-    const currentSession = await api<AnyRow>("ai:session:get");
+    const currentSession = await api<AnyRow>("ai:session:get", sessionId);
     if (currentSession.ok) {
       draftConvRef.current = branchId;
       draftVersionRef.current = Number(currentSession.data?.draftVersion || 0);
@@ -1595,12 +1623,27 @@ export function AiPanel({
     return true;
   }
   return (
-    <div className={`zchat ${expanded ? "expanded" : ""}`} data-fd-id="ai-panel">
+    <div
+      className={`zchat ${expanded ? "expanded" : ""}`}
+      data-fd-id="ai-panel"
+      onKeyDownCapture={(e) => {
+        if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!historyOpen) loadConversations();
+          setHistoryOpen(true);
+          const panel = e.currentTarget;
+          window.requestAnimationFrame(() =>
+            panel.querySelector<HTMLInputElement>('[data-fd-id="ai-history-search"]')?.focus(),
+          );
+        }
+      }}
+    >
       <ChatToolbar
         title={currentTitle}
         language={language}
         float={float}
-        canExpand={!float}
+        canExpand={!float && !splitActive}
         expanded={expanded}
         canRenameDelete={Boolean(conversation)}
         canExport={Boolean(conversation && messages.length)}
@@ -1620,6 +1663,9 @@ export function AiPanel({
               )
             : null
         }
+        canToggleSplit={sessionId === "primary" && Boolean(onToggleSplit)}
+        splitActive={splitActive}
+        onToggleSplit={onToggleSplit}
         onNew={() => selectConversation("")}
         onToggleHistory={() => {
           if (!historyOpen) loadConversations();
@@ -1845,6 +1891,7 @@ export function AiPanel({
           contextPreviewReady={payloadChars != null && (payloadPreviewStatus === "ready" || payloadPreviewStatus === "idle")}
           onAdd={handleAddFromPicker}
           onAddMany={handleAddManyFromPicker}
+          onChooseLocalFile={() => api("ai:reference:chooseFile")}
           onClose={() => setPickerOpen(false)}
         />
       )}
@@ -2153,7 +2200,7 @@ export function AiPanel({
             setDeleteOpen(false);
             const r = await api("ai:conversation:trash", conversation);
             if (r.ok) {
-              await api("ai:session:loadConversation", "");
+              await api("ai:session:loadConversation", { conversationId: "", sessionId });
               loadConversations();
             } else
               notify(

@@ -169,6 +169,7 @@ export function HistoryDrawer({
             <IconSearch />
             <input
               ref={searchRef}
+              data-fd-id="ai-history-search"
               placeholder={tr("搜索历史对话", "Search conversations")}
               aria-label={tr("搜索历史对话", "Search conversations")}
               value={query}

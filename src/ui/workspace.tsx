@@ -150,6 +150,7 @@ export function Workspace({
     [right, setRight] = useState(true),
     /** 主窗口内展开聊天区：会话/草稿/生成状态保留，仅改变宽度 */
     [aiExpanded, setAiExpanded] = useState(false),
+    [aiSplit, setAiSplit] = useState(false),
     [expandedAiWidth, setExpandedAiWidth] = useState(() => Math.min(900, Math.max(420, Math.round(window.innerWidth / 2)))),
     [focus, setFocus] = useState(false),
     [leftView, setLeftView] = useState<
@@ -643,12 +644,17 @@ export function Workspace({
   }, []);
   useEffect(() => {
     const clampExpandedWidth = () => {
+      if (aiSplit) {
+        const { min, max } = resizeBounds("right");
+        setExpandedAiWidth((current) => Math.max(min, Math.min(current, max)));
+        return;
+      }
       const max = Math.min(900, Math.max(420, window.innerWidth - 420));
       setExpandedAiWidth((current) => Math.min(current, max));
     };
     window.addEventListener("resize", clampExpandedWidth);
     return () => window.removeEventListener("resize", clampExpandedWidth);
-  }, []);
+  }, [aiSplit, left, focus, leftWidth, envEffective.leftWidth]);
   useEffect(
     () =>
       window.zhuwen.onSearchProgress((progress) => {
@@ -1239,10 +1245,26 @@ export function Workspace({
       load();
     }
   }
+  function splitAiBounds() {
+    const reservedLeft = left && !focus
+      ? Number(envEffective.leftWidth ?? leftWidth)
+      : 0;
+    const editorReserve = Math.min(360, Math.max(220, Math.round(window.innerWidth * 0.28)));
+    const max = Math.min(1200, Math.max(320, window.innerWidth - reservedLeft - editorReserve));
+    return { min: Math.min(600, max), max };
+  }
   function resizeBounds(side: "left" | "right") {
     if (side === "left") return { min: 260, max: 520 };
+    if (aiSplit) return splitAiBounds();
     if (aiExpanded) return { min: 380, max: Math.min(900, Math.max(420, window.innerWidth - 420)) };
     return { min: 300, max: 520 };
+  }
+  function toggleAiSplit() {
+    if (!aiSplit) {
+      setAiExpanded(true);
+      setExpandedAiWidth(splitAiBounds().max);
+    }
+    setAiSplit((current) => !current);
   }
   function resizeValue(side: "left" | "right") {
     return side === "left" ? leftWidth : aiExpanded ? expandedAiWidth : rightWidth;
@@ -2156,8 +2178,8 @@ export function Workspace({
         </main>
         {right && !focus && (
           <aside
-            className="right-panel"
-            style={{ width: aiExpanded ? expandedAiWidth : (envEffective.rightWidth ?? rightWidth) }}
+            className={`right-panel ${aiSplit ? "ai-split" : ""}`}
+            style={{ width: aiSplit ? Math.max(splitAiBounds().min, Math.min(splitAiBounds().max, expandedAiWidth)) : aiExpanded ? expandedAiWidth : (envEffective.rightWidth ?? rightWidth) }}
             data-fd-id="workspace-ai-panel"
           >
             <div
@@ -2176,21 +2198,47 @@ export function Workspace({
               onDoubleClick={() => resetResize("right")}
             />
             <Suspense fallback={<Empty title={tr("正在载入助手", "Loading assistant")} text={tr("请稍候……", "Please wait…")} />}>
-              <AiPanel
-                novel={novel}
-                chapter={chapter}
-                editor={editor}
-                save={save}
-                notify={notify}
-                language={language}
-                expanded={aiExpanded}
-                onToggleExpand={setAiExpanded}
-                dockSide={aiDockSide}
-                onDockSideChange={changeAiDockSide}
-                sceneDraftRequest={aiSceneDraftRequest}
-                onSceneDraftRequestConsumed={() => setAiSceneDraftRequest(null)}
-                onNavigateSource={(source) => navigateToAiSource(source)}
-              />
+              <div className={`ai-panel-layout ${aiSplit ? "split" : ""}`}>
+                <div className="ai-panel-slot">
+                  <AiPanel
+                    novel={novel}
+                    chapter={chapter}
+                    editor={editor}
+                    save={save}
+                    notify={notify}
+                    language={language}
+                    expanded={aiExpanded}
+                    onToggleExpand={setAiExpanded}
+                    splitActive={aiSplit}
+                    onToggleSplit={toggleAiSplit}
+                    dockSide={aiDockSide}
+                    onDockSideChange={changeAiDockSide}
+                    sceneDraftRequest={aiSceneDraftRequest}
+                    onSceneDraftRequestConsumed={() => setAiSceneDraftRequest(null)}
+                    onNavigateSource={(source) => navigateToAiSource(source)}
+                  />
+                </div>
+                {aiSplit && (
+                  <div className="ai-panel-slot">
+                    <AiPanel
+                      novel={novel}
+                      chapter={chapter}
+                      editor={editor}
+                      save={save}
+                      notify={notify}
+                      language={language}
+                      sessionId="secondary"
+                      autoSelectConversation={false}
+                      expanded
+                      splitActive
+                      onToggleSplit={toggleAiSplit}
+                      dockSide={aiDockSide}
+                      onDockSideChange={changeAiDockSide}
+                      onNavigateSource={(source) => navigateToAiSource(source)}
+                    />
+                  </div>
+                )}
+              </div>
             </Suspense>
             <button
               className="collapse-right"

@@ -147,6 +147,112 @@ function indexedContentKeywords(material: Material): string[] {
   return terms;
 }
 
+type MaterialTermType = "title" | "alias" | "tag" | "person" | "plotline" | "custom" | "keyword";
+type MaterialIndexEntry = {
+  material: Material;
+  key: string;
+  terms: Map<string, MaterialTermType>;
+};
+type MaterialSearchIndex = {
+  entries: MaterialIndexEntry[];
+  byBigram: Map<string, Set<MaterialIndexEntry>>;
+  keywordDocumentFrequency: Map<string, number>;
+  keywordDocumentCount: number;
+  sourceRows: Array<{ row: Material; fields: unknown[] }>;
+};
+
+const materialSearchIndexCache = new WeakMap<Material[], MaterialSearchIndex>();
+
+function firstBigram(term: string) {
+  return Array.from(term).slice(0, 2).join("");
+}
+
+/** Build once per immutable library snapshot; edits from IPC produce a new row array. */
+function materialSearchIndex(items: Material[]): MaterialSearchIndex {
+  const cached = materialSearchIndexCache.get(items);
+  if (cached && cached.sourceRows.length === items.length && cached.sourceRows.every(({ row, fields }, index) => {
+    const current = items[index];
+    return row === current && fields[0] === current?.kind && fields[1] === current?.id &&
+      fields[2] === current?.deleted_at && fields[3] === current?.title &&
+      fields[4] === current?.content_json && fields[5] === current?.tags_json &&
+      fields[6] === current?.from && fields[7] === current?.to && fields[8] === current?.chapter_id;
+  })) return cached;
+
+  const entries: MaterialIndexEntry[] = [];
+  const byBigram = new Map<string, Set<MaterialIndexEntry>>();
+  const keywordDocumentFrequency = new Map<string, number>();
+  const sourceRows = items.map((row) => ({
+    row,
+    fields: [row?.kind, row?.id, row?.deleted_at, row?.title, row?.content_json, row?.tags_json, row?.from, row?.to, row?.chapter_id],
+  }));
+  let keywordDocumentCount = 0;
+
+  for (const material of items) {
+    if (!material || material.deleted_at || !material.id) continue;
+    const key = `${material.kind}:${material.id}`;
+    const content = parseObject(material.content_json);
+    const participantTerms = material.kind === "relation"
+      ? [String(material.from || "").trim(), String(material.to || "").trim()]
+      : material.kind === "scene"
+        ? [String(content.pov || "").trim(), ...String(content.cast || "").split(/[,，、;；]+/).map((s) => s.trim())]
+        : [];
+    const plotlines = material.kind === "scene"
+      ? (Array.isArray(content.plotlines) ? content.plotlines : String(content.plotlines || "").split(/[,，、;；\n]+/))
+          .map((value: unknown) => String(value || "").trim()).filter(Boolean)
+      : [];
+    const customFields = material.kind === "scene" ? normalizeSceneCustomFields(content.customFields) : [];
+    const aliases = material.kind === "character" || material.kind === "world" ? parseAliases(material.content_json) : [];
+    const tags = parseTags(material.tags_json);
+    const terms = new Map<string, MaterialTermType>();
+    const addTerm = (raw: string, type: MaterialTermType) => {
+      const term = String(raw || "").trim();
+      if (term.length >= 2 && !terms.has(term)) terms.set(term, type);
+    };
+
+    addTerm(String(material.title || ""), "title");
+    for (const term of aliases) addTerm(term, "alias");
+    for (const term of participantTerms) addTerm(term, "person");
+    for (const term of plotlines) addTerm(term, "plotline");
+    for (const field of customFields) {
+      addTerm(field.key, "custom");
+      addTerm(field.value, "custom");
+    }
+    for (const term of tags) addTerm(term, "tag");
+
+    const keywordTerms = indexedContentKeywords(material);
+    if (keywordTerms.length) {
+      keywordDocumentCount += 1;
+      for (const rawTerm of keywordTerms) {
+        const term = normalize(rawTerm);
+        if (!terms.has(rawTerm)) terms.set(rawTerm, "keyword");
+        keywordDocumentFrequency.set(term, (keywordDocumentFrequency.get(term) || 0) + 1);
+      }
+    }
+
+    const entry = { material, key, terms };
+    entries.push(entry);
+    for (const term of terms.keys()) {
+      const bigram = firstBigram(normalize(term));
+      if (!bigram) continue;
+      let posting = byBigram.get(bigram);
+      if (!posting) byBigram.set(bigram, (posting = new Set()));
+      posting.add(entry);
+    }
+  }
+
+  const index = { entries, byBigram, keywordDocumentFrequency, keywordDocumentCount, sourceRows };
+  materialSearchIndexCache.set(items, index);
+  return index;
+}
+
+function textBigrams(value: string) {
+  const grams = new Set<string>();
+  const chars = Array.from(value);
+  for (const char of chars) grams.add(char);
+  for (let i = 0; i < chars.length - 1; i += 1) grams.add(chars.slice(i, i + 2).join(""));
+  return grams;
+}
+
 function chinesePhraseCounts(text: string): Map<string, number> {
   const counts = new Map<string, number>();
   for (const match of text.matchAll(/[\p{Script=Han}]+/gu)) {
@@ -251,45 +357,23 @@ export function relevantMaterials(
   const selectionChinesePhrases = chinesePhraseCounts(selection);
   const out: MaterialSuggestion[] = [];
   const seen = new Set<string>();
-  const keywordTermsByMaterial = new Map<string, string[]>();
-  const keywordDocumentFrequency = new Map<string, number>();
-  for (const material of items) {
-    if (!material || material.deleted_at || !material.id) continue;
-    const key = `${material.kind}:${material.id}`;
-    const terms = indexedContentKeywords(material);
-    if (!terms.length) continue;
-    keywordTermsByMaterial.set(key, terms);
-    for (const term of terms) keywordDocumentFrequency.set(term, (keywordDocumentFrequency.get(term) || 0) + 1);
+  const index = materialSearchIndex(items);
+  const queryBigrams = new Set([...textBigrams(text), ...textBigrams(selection)]);
+  const candidates = new Set<MaterialIndexEntry>();
+  for (const bigram of queryBigrams) {
+    for (const entry of index.byBigram.get(bigram) || []) candidates.add(entry);
   }
-  const keywordDocumentCount = keywordTermsByMaterial.size;
-  for (const item of items) {
-    if (!item || item.deleted_at || !item.id) continue;
+  // Chapter-linked scenes are useful even when their outline wording does not appear in the manuscript.
+  if (context.chapterId) {
+    for (const entry of index.entries) {
+      if (entry.material.kind === "scene" && entry.material.chapter_id === context.chapterId) candidates.add(entry);
+    }
+  }
+  for (const entry of index.entries) {
+    if (!candidates.has(entry)) continue;
+    const item = entry.material;
     const content = parseObject(item.content_json);
     const title = String(item.title || "").trim();
-    const participantTerms = item.kind === "relation"
-      ? [String(item.from || "").trim(), String(item.to || "").trim()]
-      : item.kind === "scene"
-        ? [String(content.pov || "").trim(), ...String(content.cast || "").split(/[,，、;；]+/).map((s) => s.trim())]
-        : [];
-    const plotlines = item.kind === "scene"
-      ? (Array.isArray(content.plotlines) ? content.plotlines : String(content.plotlines || "").split(/[,，、;；\n]+/))
-          .map((value: unknown) => String(value || "").trim()).filter(Boolean)
-      : [];
-    const customFields = item.kind === "scene" ? normalizeSceneCustomFields(content.customFields) : [];
-    const aliases = item.kind === "character" || item.kind === "world" ? parseAliases(item.content_json) : [];
-    const tags = parseTags(item.tags_json);
-    const terms = new Map<string, "title" | "alias" | "tag" | "person" | "plotline" | "custom" | "keyword">();
-    if (title) terms.set(title, "title");
-    for (const term of aliases) if (!terms.has(term)) terms.set(term, "alias");
-    for (const term of participantTerms) if (term && !terms.has(term)) terms.set(term, "person");
-    for (const term of plotlines) if (term && !terms.has(term)) terms.set(term, "plotline");
-    for (const field of customFields) {
-      if (!terms.has(field.key)) terms.set(field.key, "custom");
-      if (!terms.has(field.value)) terms.set(field.value, "custom");
-    }
-    for (const term of tags) if (term && !terms.has(term)) terms.set(term, "tag");
-    for (const term of keywordTermsByMaterial.get(`${item.kind}:${item.id}`) || [])
-      if (term && !terms.has(term)) terms.set(term, "keyword");
 
     let score = 0;
     let count = 0;
@@ -300,10 +384,10 @@ export function relevantMaterials(
     const reasons: string[] = [];
     let participantsHit = 0;
     const en = context.language === "en";
-    const commonKeywordLimit = Math.max(5, Math.ceil(keywordDocumentCount * 0.3));
-    for (const [rawTerm, type] of terms) {
+    const commonKeywordLimit = Math.max(5, Math.ceil(index.keywordDocumentCount * 0.3));
+    for (const [rawTerm, type] of entry.terms) {
       const term = normalize(rawTerm);
-      if (type === "keyword" && (keywordDocumentFrequency.get(term) || 0) > commonKeywordLimit) continue;
+      if (type === "keyword" && (index.keywordDocumentFrequency.get(term) || 0) > commonKeywordLimit) continue;
       const isChinesePhrase = type === "keyword" && /^[\p{Script=Han}]{2,3}$/u.test(term);
       const fullCount = isChinesePhrase
         ? textChinesePhrases.get(term) || 0
@@ -312,8 +396,8 @@ export function relevantMaterials(
         ? selectionChinesePhrases.get(term) || 0
         : countOccurrences(selection, term);
       const weight = type === "title" ? 3 : type === "tag" ? 1 : 2;
-      const documentFrequency = keywordDocumentFrequency.get(term) || 1;
-      const keywordWeight = Math.min(2.25, 0.55 + Math.log2((keywordDocumentCount + 1) / (documentFrequency + 1)) * 0.3);
+      const documentFrequency = index.keywordDocumentFrequency.get(term) || 1;
+      const keywordWeight = Math.min(2.25, 0.55 + Math.log2((index.keywordDocumentCount + 1) / (documentFrequency + 1)) * 0.3);
       const weighted = type === "keyword"
         ? Math.min(fullCount, 4) * keywordWeight + Math.min(selectionCount, 3) * 3
         : fullCount * weight + selectionCount * 3;

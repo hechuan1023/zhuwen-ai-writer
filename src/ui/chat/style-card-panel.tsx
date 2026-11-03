@@ -39,6 +39,7 @@ function styleLabel(card: StyleCard, language: string) {
     "style-serial-hook-payoff": ["Serial hooks & payoff", "Connect chapter rewards, unresolved actions, and the next reading impulse."],
     "style-scene-visual-payoff": ["Visual scene anchors & emotional aftermath", "Sharpen action and spatial clarity while preserving interiority and emotional resonance."],
     "style-suspense-information-control": ["Clues & information control", "Keep clues traceable and reveals consequential."],
+    "style-high-concept-fair-puzzle": ["High-concept puzzles & fair payoff", "Use visible clues, active verification, and a consequential solution."],
     "style-multipov-ensemble": ["Multi-POV ensemble & information gaps", "Use bounded viewpoint shifts to reveal distinct motives, information, and consequences."],
     "style-character-voice-tension": ["Character voice & tension", "Give dialogue a character-specific agenda and subtext."],
     "style-light-comedy-mismatch": ["Situational comedy", "Build humor from character relationships and mismatched situations."],
@@ -56,6 +57,13 @@ function styleLabel(card: StyleCard, language: string) {
     "style-short-form-closure": ["Short-form closure & pacing", "Focus causal progression and a satisfying resolution within a bounded length."],
     "style-authorial-genre-bending": ["Genre-bending & authorial voice", "Keep the genre promise while breaking formula through character choices and story-world causality."],
     "style-road-journey-healing": ["Road journey & gradual healing", "Connect episodic stops, evolving relationships, and slow, earned change through a journey."],
+    "style-rule-horror-uncanny": ["Rule-based horror & everyday distortion", "Make familiar spaces unreliable through verifiable rules that steadily tighten."],
+    "style-rebirth-causal-rewrite": ["Rebirth & causal change", "Use incomplete memories to alter choices and create butterfly effects."],
+    "style-period-market-texture": ["Period life & material texture", "Ground an era in work, housing, transport, goods, and social obligations."],
+    "style-court-intrigue-negotiation": ["Family intrigue & negotiation", "Turn ritual, marriage, inheritance, money, and relationships into traceable power."],
+    "style-cosmic-dread-liminal": ["Cosmic dread & liminal worlds", "Build unease from incomplete knowledge, unstable perception, and human-scale costs."],
+    "style-episodic-world-hopping": ["Episodic world-hopping", "Give each stop a local arc while carrying consequences across worlds."],
+    "style-sweet-romance-pull": ["Tender romance & mutual pull", "Build intimacy through consent, reciprocal attention, vulnerability, and choice."],
   };
   const [name, description] = labels[card.id] || [card.name, card.description];
   return { name, description };
@@ -107,6 +115,12 @@ const TECHNIQUE_PRESETS = [
     name: ["现实悬疑连载", "Grounded mystery serial"],
     description: ["证据链 + 人物声线 + 章节钩子", "Evidence + character voice + chapter hooks"],
     cardIds: ["style-grounded-mystery", "style-suspense-information-control", "style-character-voice-tension", "style-serial-hook-payoff"],
+  },
+  {
+    id: "genre-high-concept-fair-mystery",
+    name: ["高概念悬疑与逻辑爽感", "High-concept mystery & fair-play payoff"],
+    description: ["公平线索 + 主动验证 + 逻辑兑现", "Fair clues + active verification + logical payoff"],
+    cardIds: ["style-high-concept-fair-puzzle", "style-suspense-information-control", "style-grounded-mystery", "style-serial-hook-payoff"],
   },
   {
     id: "genre-ensemble-comedy",
@@ -167,6 +181,48 @@ const TECHNIQUE_PRESETS = [
     name: ["规则副本生存连载", "Rule-based survival serial"],
     description: ["规则验证 + 求生行动 + 悬念兑现", "Rule testing + survival choices + mystery payoff"],
     cardIds: ["style-rule-instance-progression", "style-close-survival", "style-suspense-information-control", "style-serial-hook-payoff"],
+  },
+  {
+    id: "genre-everyday-rule-horror",
+    name: ["日常规则怪谈", "Everyday rule-based horror"],
+    description: ["可验证规则 + 日常异化 + 信息差", "Verifiable rules + everyday distortion + information gaps"],
+    cardIds: ["style-rule-horror-uncanny", "style-suspense-information-control", "style-scene-visual-payoff", "style-close-survival"],
+  },
+  {
+    id: "genre-rebirth-causal-rewrite",
+    name: ["重生因果改写连载", "Rebirth & causal-change serial"],
+    description: ["片面记忆 + 成长选择 + 延迟代价", "Incomplete memory + growth choices + delayed costs"],
+    cardIds: ["style-rebirth-causal-rewrite", "style-growth-progression", "style-relationship-progression", "style-serial-hook-payoff"],
+  },
+  {
+    id: "genre-period-life-ensemble",
+    name: ["年代市井群像", "Period-life ensemble"],
+    description: ["物资生活 + 现实肌理 + 人情往来", "Material life + lived texture + social obligations"],
+    cardIds: ["style-period-market-texture", "style-lived-realism", "style-relationship-progression", "style-human-ensemble"],
+  },
+  {
+    id: "genre-family-intrigue",
+    name: ["古言家族博弈", "Historical family intrigue"],
+    description: ["礼法筹码 + 信息传递 + 关系张力", "Social constraints + information paths + relationship tension"],
+    cardIds: ["style-court-intrigue-negotiation", "style-multipov-ensemble", "style-character-voice-tension", "style-relationship-progression"],
+  },
+  {
+    id: "genre-cosmic-dread",
+    name: ["宇宙恐怖与边界空间", "Cosmic dread & liminal worlds"],
+    description: ["认知边界 + 可追踪线索 + 人物代价", "Limits of knowledge + traceable clues + human costs"],
+    cardIds: ["style-cosmic-dread-liminal", "style-suspense-information-control", "style-rule-horror-uncanny", "style-scene-visual-payoff"],
+  },
+  {
+    id: "genre-world-hopping-serial",
+    name: ["诸界漫游单元连载", "World-hopping episodic serial"],
+    description: ["单元闭环 + 跨界后果 + 主线兑现", "Local closure + cross-world consequences + serial payoff"],
+    cardIds: ["style-episodic-world-hopping", "style-short-form-closure", "style-serial-hook-payoff", "style-lived-realism"],
+  },
+  {
+    id: "genre-tender-romance",
+    name: ["温柔向情感连载", "Tender romance serial"],
+    description: ["相互选择 + 关系推进 + 生活质感", "Mutual choice + relationship progression + lived detail"],
+    cardIds: ["style-sweet-romance-pull", "style-relationship-progression", "style-character-voice-tension", "style-lived-realism"],
   },
 ];
 
@@ -247,13 +303,26 @@ export function StyleCardPanel({
   };
   const isCompositionSelected = (styleIds: string[]) =>
     styleIds.length === selectedIds.length && styleIds.every((id) => selectedIds.includes(id));
-  const items: MenuItem[] = cards.map((card) => ({
+  const inactiveSelectedCards = cards.filter(
+    (card) => selectedIds.includes(card.id) && !appliesToTask(card),
+  );
+  const applicableCards = cards.filter(appliesToTask);
+  const quickCards = [
+    ...inactiveSelectedCards,
+    ...applicableCards.filter((card) => selectedIds.includes(card.id)),
+    ...applicableCards.filter((card) => !selectedIds.includes(card.id)).slice(0, 6),
+  ];
+  const items: MenuItem[] = quickCards.map((card) => ({
     id: `style-${card.id}`,
     label: styleLabel(card, language).name,
-    hint: card.builtin ? tr("内置", "Built-in") : tr("自定义", "Custom"),
-    group: tr("技法卡", "Techniques"),
+    hint: selectedIds.includes(card.id)
+      ? tr("已选", "Selected")
+      : card.builtin ? tr("内置", "Built-in") : tr("自定义", "Custom"),
+    group: appliesToTask(card)
+      ? tr("当前任务可用", "For this task")
+      : tr("已选但当前任务不生效", "Selected but inactive"),
     icon: <IconSparkle />,
-    selected: selectedIds.includes(card.id),
+    checked: selectedIds.includes(card.id),
     onSelect: () => {
       onSelectionChange(selectedIds.includes(card.id)
         ? selectedIds.filter((id) => id !== card.id)
@@ -284,8 +353,8 @@ export function StyleCardPanel({
         }
         triggerClassName="zchat-pill wide"
         items={[
-          { id: "style-none", label: tr("不使用风格卡", "No style card"), selected: selectedIds.length === 0, onSelect: () => onSelectionChange([]) },
-          { id: "style-details", label: tr("查看与管理风格卡", "Manage writing styles"), hint: tr("管理", "Manage"), group: tr("风格设置", "Style settings"), icon: <IconDoc />, onSelect: () => setOpen(true) },
+          { id: "style-none", label: tr("不使用风格卡", "No style card"), onSelect: () => onSelectionChange([]) },
+          { id: "style-details", label: tr("管理/搜索风格卡", "Manage / search styles"), hint: tr(`${cards.length} 张`, `${cards.length} cards`), group: tr("风格设置", "Style settings"), icon: <IconDoc />, onSelect: () => setOpen(true) },
           ...items,
         ]}
       />

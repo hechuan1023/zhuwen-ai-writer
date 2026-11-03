@@ -22,22 +22,35 @@ export const api = <T = any,>(channel: string, payload?: unknown) =>
     data: undefined as T,
     error: error instanceof Error ? error.message : String(error),
   }));
-/** 退出前立即提交渲染端待发送的 AI 草稿（由 AiPanel 注册，App 在 before-close 时调用） */
-export const aiDraftFlusher = { current: () => {} };
-export function useAiSessionStore() {
+/** 退出前提交所有 AI 面板尚在防抖期的草稿。 */
+const aiDraftFlushers = new Map<string, () => void>();
+export function registerAiDraftFlusher(sessionId: string, flush: () => void) {
+  aiDraftFlushers.set(sessionId, flush);
+  return () => {
+    if (aiDraftFlushers.get(sessionId) === flush) aiDraftFlushers.delete(sessionId);
+  };
+}
+export const aiDraftFlusher = {
+  current: () => {
+    for (const flush of aiDraftFlushers.values()) flush();
+  },
+};
+export function useAiSessionStore(sessionId = "primary") {
   const [session, setSession] = useState<AnyRow | null>(null);
   useEffect(() => {
     let live = true;
-    api("ai:session:get").then((r) => {
+    api("ai:session:get", sessionId).then((r) => {
       if (live && r.ok) setSession(r.data);
     });
-    const off = window.zhuwen.onAiSession((d) => setSession(d));
+    const off = window.zhuwen.onAiSession((d) => {
+      if (String(d?.sessionId || "primary") === sessionId) setSession(d);
+    });
     return () => {
       live = false;
       off();
     };
-  }, []);
-  const patch = useCallback((p: AnyRow) => api("ai:session:patch", p), []);
+  }, [sessionId]);
+  const patch = useCallback((p: AnyRow) => api("ai:session:patch", { ...p, sessionId }), [sessionId]);
   return [session, patch] as const;
 }
 export const emptyDoc = { type: "doc", content: [{ type: "paragraph" }] };
@@ -250,6 +263,7 @@ export const kindNames: Record<string, string> = {
   chapter: "章节",
   summary: "章节摘要",
   continuation: "续写上文",
+  file: "本地文件",
   outline: "故事大纲",
   scene: "章节细纲",
   character: "人物卡",
@@ -264,6 +278,7 @@ const kindNamesEn: Record<string, string> = {
   chapter: "Chapter",
   summary: "Chapter summary",
   continuation: "Previous passage",
+  file: "Local file",
   outline: "Outline",
   scene: "Scene outline",
   character: "Character",

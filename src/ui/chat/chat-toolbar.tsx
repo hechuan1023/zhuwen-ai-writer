@@ -18,6 +18,8 @@ export function ChatToolbar({
   dockSide,
   hasProjectInstructions,
   generatingLabel,
+  canToggleSplit,
+  splitActive,
   onNew,
   onToggleHistory,
   historyOpen,
@@ -30,6 +32,7 @@ export function ChatToolbar({
   onDelete,
   onOpenFloat,
   onCloseFloat,
+  onToggleSplit,
 }: {
   title: string;
   language: string;
@@ -43,6 +46,8 @@ export function ChatToolbar({
   dockSide: "left" | "right";
   hasProjectInstructions: boolean;
   generatingLabel?: string | null;
+  canToggleSplit?: boolean;
+  splitActive?: boolean;
   onNew: () => void;
   onToggleHistory: () => void;
   historyOpen: boolean;
@@ -55,6 +60,7 @@ export function ChatToolbar({
   onDelete: () => void;
   onOpenFloat?: () => void;
   onCloseFloat?: () => void;
+  onToggleSplit?: () => void;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const items: MenuItem[] = [
@@ -155,8 +161,9 @@ export function ChatToolbar({
           className={`zchat-icon-btn ${historyOpen ? "active" : ""}`}
           data-fd-id="ai-history-toggle"
           aria-label={tr("历史对话", "Conversation history")}
+          aria-keyshortcuts="Control+K Meta+K"
           aria-expanded={historyOpen}
-          title={tr("历史对话", "Conversation history")}
+          title={tr("历史对话（Ctrl+K）", "Conversation history (Ctrl+K)")}
           onClick={onToggleHistory}
         >
           <IconHistory />
@@ -172,6 +179,22 @@ export function ChatToolbar({
             onClick={onToggleExpand}
           >
             {expanded ? <IconCollapse /> : <IconExpand />}
+          </button>
+        ) : null}
+        {canToggleSplit && !float ? (
+          <button
+            type="button"
+            className={`zchat-icon-btn ${splitActive ? "active" : ""}`}
+            data-fd-id="ai-split-toggle"
+            aria-label={splitActive ? tr("关闭并列对话", "Close side-by-side chat") : tr("并列打开另一段对话", "Open a second chat side by side")}
+            aria-pressed={Boolean(splitActive)}
+            title={splitActive ? tr("关闭并列对话", "Close side-by-side chat") : tr("并列打开另一段对话", "Open a second chat side by side")}
+            onClick={onToggleSplit}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3.5" y="4.5" width="17" height="15" rx="2" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M12 5v14" stroke="currentColor" strokeWidth="1.6" />
+            </svg>
           </button>
         ) : null}
         <ChatMenu

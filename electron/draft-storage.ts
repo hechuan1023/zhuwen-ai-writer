@@ -16,6 +16,8 @@ import path from "node:path";
 export type DraftRecord = {
   novelId: string;
   convId: string;
+  /** 可选面板身份；旧记录视为 primary，支持同一会话在并列面板中保留独立草稿。 */
+  sessionId?: string;
   text: string;
   contexts: any[];
   /** 分支重试时按会话保存的技法卡覆盖；不修改作品默认选择 */

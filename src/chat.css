@@ -13,6 +13,28 @@
   color: var(--ink, var(--text, #2c2a26));
 }
 
+/* 两个真正独立的会话面板；每栏各自滚动、输入和保存草稿。 */
+.ai-panel-layout {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+.ai-panel-slot {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+.ai-panel-slot > .zchat {
+  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ai-panel-layout.split > .ai-panel-slot + .ai-panel-slot {
+  border-left: 1px solid var(--line, #e2ddd2);
+}
+
 /* ── 顶部会话栏 ───────────────────────────────────────────── */
 .zchat-toolbar {
   display: flex;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { api, readerFonts, promptNameFor, ConfirmDialog, AnyRow, UiLanguage } from "./shared";
 import { PlanSection } from "./plan-section";
 import { Select, Combobox } from "./select";
@@ -53,9 +53,32 @@ export function Settings({
   presetProps?: PresetSectionProps;
 }) {
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
+  const settingsTabs = [
+    { id: "general", label: tr("通用", "General") },
+    { id: "editor", label: tr("编辑器", "Editor") },
+    { id: "appearance", label: tr("外观与背景", "Appearance") },
+    { id: "ai", label: tr("AI 模型", "AI models") },
+  ] as const;
   const [tab, setTab] = useState<"general" | "editor" | "appearance" | "ai">(
     "general",
   );
+  const moveSettingsTab = (event: KeyboardEvent<HTMLButtonElement>, current: typeof tab) => {
+    const currentIndex = settingsTabs.findIndex((item) => item.id === current);
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? settingsTabs.length - 1
+        : event.key === "ArrowRight" || event.key === "ArrowDown"
+          ? (currentIndex + 1) % settingsTabs.length
+          : event.key === "ArrowLeft" || event.key === "ArrowUp"
+            ? (currentIndex - 1 + settingsTabs.length) % settingsTabs.length
+            : -1;
+    if (nextIndex < 0) return;
+    event.preventDefault();
+    const next = settingsTabs[nextIndex];
+    setTab(next.id);
+    document.getElementById(`settings-tab-${next.id}`)?.focus();
+  };
   const modKey = window.zhuwen.platform === "darwin" ? "⌘" : "Ctrl";
   const [connections, setConnections] = useState<AnyRow[]>([]),
     [prompts, setPrompts] = useState<AnyRow[]>([]),
@@ -189,34 +212,34 @@ export function Settings({
   }
   return (
     <div className="settings-page">
-      <nav className="settings-nav">
+      <nav className="settings-nav" aria-label={tr("设置分类", "Settings sections")}>
         <b>{tr("设置", "Settings")}</b>
-        <button
-          className={tab === "general" ? "active" : ""}
-          onClick={() => setTab("general")}
-        >
-          {tr("通用", "General")}
-        </button>
-        <button
-          className={tab === "editor" ? "active" : ""}
-          onClick={() => setTab("editor")}
-        >
-          {tr("编辑器", "Editor")}
-        </button>
-        <button
-          className={tab === "appearance" ? "active" : ""}
-          onClick={() => setTab("appearance")}
-        >
-          {tr("外观与背景", "Appearance")}
-        </button>
-        <button
-          className={tab === "ai" ? "active" : ""}
-          onClick={() => setTab("ai")}
-        >
-          {tr("AI 模型", "AI models")}
-        </button>
+        <div className="settings-tablist" role="tablist" aria-orientation="vertical">
+          {settingsTabs.map((item) => (
+            <button
+              key={item.id}
+              id={`settings-tab-${item.id}`}
+              type="button"
+              role="tab"
+              aria-selected={tab === item.id}
+              aria-controls="settings-tabpanel"
+              tabIndex={tab === item.id ? 0 : -1}
+              className={tab === item.id ? "active" : ""}
+              onClick={() => setTab(item.id)}
+              onKeyDown={(event) => moveSettingsTab(event, item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </nav>
-      <div className="settings settings-detail">
+      <div
+        className="settings settings-detail"
+        id="settings-tabpanel"
+        role="tabpanel"
+        aria-labelledby={`settings-tab-${tab}`}
+        tabIndex={0}
+      >
         {tab === "general" && (
           <section>
             <h3>{tr("语言与通用设置", "Language & general")}</h3>

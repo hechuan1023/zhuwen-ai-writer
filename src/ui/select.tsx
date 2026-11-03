@@ -203,15 +203,21 @@ export function Select({
     };
     document.addEventListener("mousedown", onDoc, true);
     window.addEventListener("resize", onScroll);
+    // 捕获任意滚动容器的 scroll；弹层是 fixed，必须随触发器同步重定位。
+    window.addEventListener("scroll", onScroll, true);
+    const trigger = triggerRef.current;
+    const resizeObserver = trigger && typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(onScroll)
+      : null;
+    if (trigger) resizeObserver?.observe(trigger);
     // 捕获阶段 Esc，避免关闭外层弹窗
     document.addEventListener("keydown", onKey, true);
-    const scroller = triggerRef.current?.closest(".modal-content, .left-panel, .right-panel, .settings-detail, body");
-    scroller?.addEventListener("scroll", onScroll, true);
     return () => {
       document.removeEventListener("mousedown", onDoc, true);
       window.removeEventListener("resize", onScroll);
+      window.removeEventListener("scroll", onScroll, true);
+      resizeObserver?.disconnect();
       document.removeEventListener("keydown", onKey, true);
-      scroller?.removeEventListener("scroll", onScroll, true);
     };
   }, [open, activeIndex, filtered, enabledIndexes, listboxId, onValueChange, close, place, searchable]);
 
@@ -220,6 +226,11 @@ export function Select({
     if (searchable) searchRef.current?.focus();
     else listRef.current?.focus();
   }, [open, searchable]);
+
+  useEffect(() => {
+    if (!open) return;
+    document.getElementById(`${listboxId}-option-${activeIndex}`)?.scrollIntoView({ block: "nearest" });
+  }, [open, activeIndex, listboxId]);
 
   return (
     <div className={`zw-select ${size} ${className || ""}`} data-fd-id={id || rest["aria-label"] || "select"}>
@@ -232,7 +243,7 @@ export function Select({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
-        aria-label={rest["aria-label"]}
+        aria-label={rest["aria-label"] ? `${rest["aria-label"]}: ${display}` : display}
         onClick={() => (open ? close() : openMenu())}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
@@ -410,6 +421,10 @@ export function Combobox({
       .filter((s) => s.label.toLowerCase().includes(q) || s.value.toLowerCase().includes(q))
       .slice(0, 12);
   }, [draft, suggestions]);
+  const enabledIndexes = useMemo(
+    () => shown.map((option, index) => option.disabled ? -1 : index).filter((index) => index >= 0),
+    [shown],
+  );
 
   function commit(v: string) {
     onValueChange(v);
@@ -429,6 +444,7 @@ export function Combobox({
         role="combobox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
+        aria-activedescendant={open && shown[active] && !shown[active].disabled ? `${listId}-option-${active}` : undefined}
         aria-autocomplete="list"
         aria-label={rest["aria-label"]}
         disabled={disabled}
@@ -464,14 +480,19 @@ export function Combobox({
             return;
           }
           if (e.key === "ArrowDown") {
+            if (!enabledIndexes.length) return;
             e.preventDefault();
-            setActive((i) => Math.min(shown.length - 1, i + 1));
+            const position = enabledIndexes.indexOf(active);
+            setActive(enabledIndexes[(position < 0 ? 0 : (position + 1) % enabledIndexes.length)]);
           } else if (e.key === "ArrowUp") {
+            if (!enabledIndexes.length) return;
             e.preventDefault();
-            setActive((i) => Math.max(0, i - 1));
+            const position = enabledIndexes.indexOf(active);
+            setActive(enabledIndexes[position < 0 ? enabledIndexes.length - 1 : (position - 1 + enabledIndexes.length) % enabledIndexes.length]);
           } else if (e.key === "Enter") {
             e.preventDefault();
-            if (open && shown[active]) commit(shown[active].value);
+            if (open && shown[active] && !shown[active].disabled) commit(shown[active].value);
+            else if (open && enabledIndexes.length) commit(shown[enabledIndexes[0]].value);
             else commit(draft);
           }
         }}
@@ -486,12 +507,15 @@ export function Combobox({
           {shown.map((o, i) => (
             <div
               key={o.value}
+              id={`${listId}-option-${i}`}
               role="option"
               aria-selected={o.value === value}
-              className={`zw-select-option ${i === active ? "active" : ""} ${o.value === value ? "selected" : ""}`}
+              aria-disabled={o.disabled || undefined}
+              className={`zw-select-option ${i === active ? "active" : ""} ${o.value === value ? "selected" : ""} ${o.disabled ? "disabled" : ""}`}
               onMouseEnter={() => setActive(i)}
               onMouseDown={(e) => {
                 e.preventDefault();
+                if (o.disabled) return;
                 commit(o.value);
               }}
             >
