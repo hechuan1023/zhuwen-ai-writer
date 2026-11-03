@@ -115,12 +115,14 @@ export function IoPanel({
   novel,
   chapter,
   onImported,
+  onLocateChapterText,
   notify,
   language = "zh-CN",
 }: {
   novel: AnyRow;
   chapter?: AnyRow | null;
   onImported: () => void;
+  onLocateChapterText?: (source: { chapterId: string; text: string }) => Promise<boolean>;
   notify: (s: string) => void;
   language?: UiLanguage;
 }) {
@@ -1084,12 +1086,25 @@ export function IoPanel({
                     <span className="risk-audit-count">
                       {tr(`${hit.count} 处`, `${hit.count}×`)}
                     </span>
-                    <small className="risk-audit-source">
-                      {hit.sources.slice(0, 3).join(" · ")}
+                    <span className="risk-audit-source">
+                      {hit.sources.slice(0, 3).map((label, index) => {
+                        const chapterId = hit.sourceIds?.[index];
+                        return chapterId && onLocateChapterText ? (
+                          <button
+                            type="button"
+                            className="risk-audit-source-link"
+                            key={`${chapterId}:${index}`}
+                            title={tr(`跳转到《${label}》并定位命中词`, `Open "${label}" and locate this match`)}
+                            onClick={async () => {
+                              if (await onLocateChapterText({ chapterId, text: hit.term })) setRiskOpen(false);
+                            }}
+                          >{label}</button>
+                        ) : <span key={`${label}:${index}`}>{label}</span>;
+                      })}
                       {hit.sources.length > 3
-                        ? tr(` 等 ${hit.sources.length} 章`, ` +${hit.sources.length - 3} more`)
-                        : ""}
-                    </small>
+                        ? <small>{tr(`等 ${hit.sources.length} 章`, `+${hit.sources.length - 3} more`)}</small>
+                        : null}
+                    </span>
                   </li>
                 ))}
               </ul>

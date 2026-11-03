@@ -2607,6 +2607,11 @@ export function Workspace({
               novel={novel}
               chapter={chapter}
               onImported={onBack}
+              onLocateChapterText={async (source) => {
+                const located = await locateAiChapterText(source);
+                if (located) setModal(null);
+                return located;
+              }}
               notify={notify}
               language={language}
             />

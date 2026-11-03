@@ -19,6 +19,8 @@ export type RiskFinding = {
   count: number;
   /** 命中过的来源标签，按首次出现顺序去重 */
   sources: string[];
+  /** 汇总来源对应的章节 ID，与 sources 按索引一一对应 */
+  sourceIds?: string[];
 };
 
 export type RiskAuditResult = {
@@ -147,14 +149,19 @@ export function auditRiskSources(
       const current = merged.get(key);
       if (current) {
         current.count += hit.count;
-        if (!current.sources.includes(source.label))
+        const sourceIds = current.sourceIds || [];
+        if (!sourceIds.includes(source.id)) {
           current.sources.push(source.label);
+          sourceIds.push(source.id);
+          current.sourceIds = sourceIds;
+        }
       } else {
         merged.set(key, {
           term: hit.term,
           category: hit.category,
           count: hit.count,
           sources: [source.label],
+          sourceIds: [source.id],
         });
       }
     }
