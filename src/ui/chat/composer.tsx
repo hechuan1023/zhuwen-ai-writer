@@ -281,9 +281,10 @@ export function Composer({
         value={draft}
         onChange={(e) => onDraftChange(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+          const composing = e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229;
+          if (e.key === "Enter" && !e.shiftKey && !composing && canSend) {
             e.preventDefault();
-            if (canSend) onSend();
+            onSend();
           }
         }}
       />
