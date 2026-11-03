@@ -83,6 +83,7 @@ export function AiPanel({
   const tr = (zh: string, en: string) => (language === "en" ? en : zh);
   const [session, patch] = useAiSessionStore(sessionId);
   const [connections, setConnections] = useState<AnyRow[]>([]),
+    [connectionStatus, setConnectionStatus] = useState<"loading" | "ready" | "error">("loading"),
     [tokenState, setTokenState] = useState<{ configured: boolean } | null>(null),
     [prompts, setPrompts] = useState<AnyRow[]>([]),
     [conversations, setConversations] = useState<AnyRow[]>([]),
@@ -352,7 +353,7 @@ export function AiPanel({
         setProjectInstructions(String(r.data?.instructions || ""));
     });
     loadConversations();
-    api("connections:list").then((r) => r.ok && setConnections(r.data));
+    void loadConnections();
     api<{ configured: boolean }>("ai:token:status").then(
       (r) => r.ok && setTokenState(r.data),
     );
@@ -374,6 +375,18 @@ export function AiPanel({
         projectInstructionLoadSeq.current += 1;
     };
   }, [novelId]);
+  async function loadConnections() {
+    setConnectionStatus("loading");
+    try {
+      const result = await api<AnyRow[]>("connections:list");
+      if (!result.ok) throw new Error(String(result.error || "AI service status unavailable"));
+      setConnections(result.data || []);
+      setConnectionStatus("ready");
+    } catch {
+      setConnections([]);
+      setConnectionStatus("error");
+    }
+  }
   async function reloadStyleCards() {
     const r = await api<StyleCard[]>("ai:styles:list");
     if (r.ok) setStyleCards(r.data || []);
@@ -1214,7 +1227,11 @@ export function AiPanel({
   const sendHint = preparingSend
     ? tr("正在核对并准备本次请求…", "Verifying and preparing this request…")
     : !connection
-    ? tr("请先配置 AI 连接", "Configure an AI connection first")
+    ? connectionStatus === "loading"
+      ? tr("正在读取 AI 服务状态…", "Reading AI service status…")
+      : connectionStatus === "error"
+        ? tr("无法读取 AI 服务状态，请重试", "Could not read AI service status; retry")
+        : tr("铸文 AI 服务尚未就绪", "Zhuwen AI service is not ready")
     : !chapterId
       ? tr("请先选择章节", "Select a chapter first")
       : mode === "naturalize" && !hasSelectionReference
@@ -1927,18 +1944,26 @@ export function AiPanel({
           )}
         </div>
       )}
-      {!connections.length && (
-        <div className="zchat-notice" data-fd-id="ai-no-connection">
-          <p>{tr("尚未配置 AI 连接", "No AI connection configured")}</p>
+      {connectionStatus === "error" && (
+        <div className="zchat-notice" data-fd-id="ai-connection-error" role="status">
+          <p>{tr("暂时无法读取 AI 服务状态", "Could not read AI service status")}</p>
           <small className="hint">
-            {tr(
-              "你仍然可以浏览历史对话与草稿；配置连接后即可发送。",
-              "You can still browse history and drafts; configure a connection to send.",
-            )}
+            {tr("请检查应用状态后重试。服务地址和模型由铸文统一管理。", "Check the app status and try again. Zhuwen manages the service endpoint and model.")}
+          </small>
+          <button type="button" className="primary" onClick={() => void loadConnections()}>
+            {tr("重试", "Retry")}
+          </button>
+        </div>
+      )}
+      {connectionStatus === "ready" && !connections.length && (
+        <div className="zchat-notice" data-fd-id="ai-no-connection" role="status">
+          <p>{tr("铸文 AI 服务尚未就绪", "Zhuwen AI service is not ready")}</p>
+          <small className="hint">
+            {tr("你仍可查看历史对话与草稿；服务由铸文统一管理，无需选择模型。", "You can still browse history and drafts. Zhuwen manages the service; no model selection is needed.")}
           </small>
           {!float && onOpenSettings && (
             <button type="button" className="primary" onClick={onOpenSettings}>
-              {tr("去配置 AI 连接", "Configure AI connection")}
+              {tr("查看 AI 设置", "View AI settings")}
             </button>
           )}
         </div>
