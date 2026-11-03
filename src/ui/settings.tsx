@@ -59,6 +59,16 @@ export function Settings({
     { id: "appearance", label: tr("外观与背景", "Appearance") },
     { id: "ai", label: tr("AI 模型", "AI models") },
   ] as const;
+  const [settingsTabOrientation, setSettingsTabOrientation] = useState<"vertical" | "horizontal">(
+    () => window.matchMedia("(max-width: 720px)").matches ? "horizontal" : "vertical",
+  );
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 720px)");
+    const syncOrientation = () => setSettingsTabOrientation(media.matches ? "horizontal" : "vertical");
+    syncOrientation();
+    media.addEventListener("change", syncOrientation);
+    return () => media.removeEventListener("change", syncOrientation);
+  }, []);
   const [tab, setTab] = useState<"general" | "editor" | "appearance" | "ai">(
     "general",
   );
@@ -214,7 +224,7 @@ export function Settings({
     <div className="settings-page">
       <nav className="settings-nav" aria-label={tr("设置分类", "Settings sections")}>
         <b>{tr("设置", "Settings")}</b>
-        <div className="settings-tablist" role="tablist" aria-orientation="vertical">
+        <div className="settings-tablist" role="tablist" aria-orientation={settingsTabOrientation}>
           {settingsTabs.map((item) => (
             <button
               key={item.id}
