@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -59,6 +60,7 @@ export function Select({
   const autoId = useId();
   const listboxId = `${id || autoId}-listbox`;
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
@@ -89,6 +91,15 @@ export function Select({
     [filtered],
   );
   const selectedIndex = filtered.findIndex((o) => o.value === value && !o.disabled);
+
+  useLayoutEffect(() => {
+    if (!open || rect?.side !== "above") return;
+    const trigger = triggerRef.current;
+    const pop = popRef.current;
+    if (!trigger || !pop) return;
+    const top = trigger.getBoundingClientRect().top - 6 - pop.getBoundingClientRect().height;
+    if (Math.abs(top - rect.top) > 1) setRect({ ...rect, top });
+  }, [open, rect]);
 
   const place = useCallback(() => {
     const el = triggerRef.current;
@@ -269,6 +280,7 @@ export function Select({
       </button>
       {open && rect && (
         <div
+          ref={popRef}
           className={`zw-select-pop ${reducedMotion ? "no-motion" : ""}`}
           data-side={rect.side}
           style={{
