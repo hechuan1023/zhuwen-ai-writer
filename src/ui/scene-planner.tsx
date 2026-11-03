@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, parseJson, UiLanguage } from "./shared";
 import { Select, type SelectOption } from "./select";
-import { normalizeSceneManuscriptLink, normalizeSceneTargetWords, normalizeSceneWritingStatus, sceneManuscriptExcerptWords, SCENE_WRITING_STATUSES, verifySceneManuscriptLink } from "../scene-fields";
+import { normalizeSceneManuscriptLink, normalizeSceneTargetWords, normalizeSceneWritingStatus, sceneManuscriptExcerptWords, sceneManuscriptLinkSegments, SCENE_WRITING_STATUSES, verifySceneManuscriptLink } from "../scene-fields";
 import { buildPlotlineMatrix, filterScenesByPov, filterScenesByTrack, groupScenesForTimeline, sceneCustomFields, scenePlotlines, scenePovOptions, sceneTags, sceneTrackOptions } from "./scene-planner-model";
 
 type SceneRow = Record<string, any>;
@@ -77,12 +77,13 @@ export function ScenePlanner({
     const link = normalizeSceneManuscriptLink(dataFor(scene).manuscriptLink);
     if (!link) return null;
     const words = sceneManuscriptExcerptWords(link);
-    if (String(scene.chapter_id || "") !== link.chapterId) return { state: "moved", words, chapterTitle: link.chapterTitle };
-    if (currentChapter?.id !== link.chapterId) return { state: "other_chapter", words, chapterTitle: link.chapterTitle };
-    if (!chapterSaved) return { state: "unsaved", words, chapterTitle: link.chapterTitle };
+    const segments = sceneManuscriptLinkSegments(link).length;
+    if (String(scene.chapter_id || "") !== link.chapterId) return { state: "moved", words, segments, chapterTitle: link.chapterTitle };
+    if (currentChapter?.id !== link.chapterId) return { state: "other_chapter", words, segments, chapterTitle: link.chapterTitle };
+    if (!chapterSaved) return { state: "unsaved", words, segments, chapterTitle: link.chapterTitle };
     const match = verifySceneManuscriptLink(currentChapter.plain_text, link);
     const state = match === "missing" && Number(currentChapter.revision || 0) <= link.chapterRevision ? "pending" : match;
-    return { state, words, chapterTitle: link.chapterTitle };
+    return { state, words, segments, chapterTitle: link.chapterTitle };
   };
   const archivedScenes = useMemo(
     () => scenes.filter((scene) => Boolean(parseJson(scene.content_json).archivedAt)),
@@ -436,7 +437,7 @@ function SceneCard({
   scene: SceneRow;
   writingStatusOptions: SelectOption[];
   targetShare: number | null;
-  manuscriptMetric: { state: string; words: number; chapterTitle: string } | null;
+  manuscriptMetric: { state: string; words: number; segments: number; chapterTitle: string } | null;
   canRelinkSelection: boolean;
   onRelinkManuscript: () => Promise<boolean>;
   onOpenSourceChapter: () => void;
@@ -493,7 +494,7 @@ function SceneCard({
       {targetWords != null && <div className="scene-card-target" title={tr("相对条表示该场景目标字数占本章所有已规划场景目标字数的比例，不是写作进度", "The bar shows this scene's share of all planned scene targets in this chapter, not writing progress")}><span>{tr("目标", "Target")} {formattedTarget} {tr("字", "words")}</span>{targetShare != null && <><small>{targetShare}%</small><i aria-hidden="true"><b style={{ width: `${targetShare}%` }} /></i></>}</div>}
       {manuscriptMetric && <div className={`scene-card-manuscript state-${manuscriptMetric.state}`} title={tr("仅当关联位置与正文校验指纹一致时，才按该片段计算实写进度；正文编辑导致失配时需重新关联。", "Actual progress appears only while the linked position and manuscript fingerprint match; relink after edits make the anchor stale.")}>
         {manuscriptMetric.state === "matched" ? <>
-          <span>{targetWords != null ? tr(`正文 ${formatSceneWords(manuscriptMetric.words)} / ${formattedTarget} 字`, `Text ${formatSceneWords(manuscriptMetric.words)} / ${formattedTarget} words`) : tr(`正文已核对 · ${formatSceneWords(manuscriptMetric.words)} 字`, `Text verified · ${formatSceneWords(manuscriptMetric.words)} words`)}</span>
+          <span>{targetWords != null ? tr(`正文 ${manuscriptMetric.segments} 段 · ${formatSceneWords(manuscriptMetric.words)} / ${formattedTarget} 字`, `Text ${manuscriptMetric.segments} passages · ${formatSceneWords(manuscriptMetric.words)} / ${formattedTarget} words`) : tr(`正文已核对 · ${manuscriptMetric.segments} 段 · ${formatSceneWords(manuscriptMetric.words)} 字`, `Text verified · ${manuscriptMetric.segments} passages · ${formatSceneWords(manuscriptMetric.words)} words`)}</span>
           {targetWords != null && <><small>{Math.min(100, Math.round(manuscriptMetric.words / targetWords * 100))}%</small><i aria-hidden="true"><b style={{ width: `${Math.min(100, Math.round(manuscriptMetric.words / targetWords * 100))}%` }} /></i></>}
         </> : <span>{manuscriptMetric.state === "missing" ? tr("正文位置或内容已变化", "Excerpt moved or changed") : manuscriptMetric.state === "pending" ? tr("选区已关联 · 保存正文后核对", "Selection linked · save the manuscript to verify") : manuscriptMetric.state === "unsaved" ? tr("正文有未保存修改 · 保存后核对进度", "Manuscript has unsaved edits · save to verify progress") : manuscriptMetric.state === "moved" ? tr(`场景已换章 · 正文关联仍在《${manuscriptMetric.chapterTitle || "原章节"}》`, `Scene moved · excerpt remains in ${manuscriptMetric.chapterTitle || "source chapter"}`) : tr(`正文片段关联 · ${formatSceneWords(manuscriptMetric.words)} 字 · 打开《${manuscriptMetric.chapterTitle || "来源章节"}》核对`, `Excerpt linked · ${formatSceneWords(manuscriptMetric.words)} words · open ${manuscriptMetric.chapterTitle || "source chapter"} to verify`)}</span>}
         {(manuscriptMetric.state === "missing" || manuscriptMetric.state === "moved") && <button type="button" className="scene-card-relink" title={canRelinkSelection ? tr("将当前正文选区重新关联到此场景", "Relink the current manuscript selection to this scene") : tr("打开原关联章节，选中正确片段后再重新关联", "Open the source chapter, select the correct passage, then relink") } onClick={(event) => { event.stopPropagation(); if (canRelinkSelection) void onRelinkManuscript(); else onOpenSourceChapter(); }}>{canRelinkSelection ? tr("重新关联选区", "Relink selection") : tr("打开原关联章节", "Open source chapter")}</button>}

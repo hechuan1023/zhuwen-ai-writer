@@ -965,6 +965,9 @@ button.danger-text:not(:disabled):hover {
 .scene-manuscript-link-state.state-matched { color: var(--success); }
 .scene-manuscript-link-state.state-missing,.scene-manuscript-link-state.state-pending,.scene-manuscript-link-state.state-unsaved { color: var(--warning); }
 .scene-manuscript-link-state > span { min-width: 0; overflow-wrap: anywhere; }
+.scene-manuscript-segments { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.scene-manuscript-segments > span { display: inline-flex; align-items: center; gap: 3px; min-height: 26px; padding: 2px 4px 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--muted); font-size: 10px; line-height: 1.2; }
+.scene-manuscript-segments > span .icon { width: 20px; min-width: 20px; height: 20px; min-height: 20px; }
 .scene-manuscript-link-recovery { display: grid; justify-items: start; gap: 6px; padding: 8px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line)); border-radius: var(--r-sm); background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
 .scene-manuscript-link-recovery > small { color: var(--muted); font-size: 10px; line-height: 1.5; }
 .scene-manuscript-link-action { justify-self: start; max-width: 100%; font-size: 10px; }

@@ -10,7 +10,7 @@ import {
 } from "./library-model";
 import { Select } from "./select";
 import { materialReferenceContent } from "../relevant";
-import { findUniqueSceneManuscriptAnchor, normalizeSceneAiContextIds, normalizeSceneManuscriptLink, sceneExcerptFingerprint, sceneManuscriptAnchors, sceneManuscriptExcerptWords, SCENE_WRITING_STATUSES, normalizeSceneWritingStatus, verifySceneManuscriptLink } from "../scene-fields";
+import { findUniqueSceneManuscriptAnchors, normalizeSceneAiContextIds, normalizeSceneManuscriptLink, sceneExcerptFingerprint, sceneManuscriptAnchors, sceneManuscriptExcerptWords, sceneManuscriptLinkSegments, SCENE_WRITING_STATUSES, normalizeSceneWritingStatus, verifySceneManuscriptLink } from "../scene-fields";
 import { ScenePlanner } from "./scene-planner";
 
 function formatSceneRevision(row: AnyRow, language: UiLanguage) {
@@ -230,8 +230,8 @@ export function LibraryPanel({
     : manuscriptLink ? "other_chapter" : null;
   const manuscriptLinkCandidate = useMemo(() => {
     if (!editing || kind !== "scene" || dirty || !chapter?.id || !chapterSaved || !manuscriptLink || manuscriptLinkState !== "missing" || chapter.id !== manuscriptLink.chapterId) return null;
-    return findUniqueSceneManuscriptAnchor(chapter.plain_text, manuscriptLink);
-  }, [Boolean(editing), kind, dirty, chapter?.id, chapter?.plain_text, chapterSaved, manuscriptLink?.chapterId, manuscriptLink?.anchorStart, manuscriptLink?.anchorEnd, manuscriptLinkState]);
+    return findUniqueSceneManuscriptAnchors(chapter.plain_text, manuscriptLink);
+  }, [Boolean(editing), kind, dirty, chapter?.id, chapter?.plain_text, chapterSaved, manuscriptLink?.chapterId, manuscriptLink?.anchorStart, manuscriptLink?.anchorEnd, JSON.stringify(manuscriptLink?.segments || []), manuscriptLinkState]);
   const sceneContextIds = normalizeSceneAiContextIds(editing?.aiContextIds);
   const sceneContextCandidates = allItems.filter((item) => {
     if (!item.id || item.deleted_at || item.id === editing?.id || !["character", "world", "scene", "outline", "inspiration", "timeline", "foreshadow", "relation"].includes(String(item.kind || ""))) return false;
@@ -1070,7 +1070,7 @@ export function LibraryPanel({
                 {manuscriptLink ? (
                   <div className={`scene-manuscript-link-state state-${manuscriptLinkState}`}>
                     <span>{manuscriptLinkState === "matched"
-                      ? tr(`已在《${manuscriptLink.chapterTitle || "当前章节"}》核对 · ${sceneManuscriptExcerptWords(manuscriptLink)} 字`, `Verified in ${manuscriptLink.chapterTitle || "chapter"} · ${sceneManuscriptExcerptWords(manuscriptLink)} words`)
+                      ? tr(`已在《${manuscriptLink.chapterTitle || "当前章节"}》核对 · ${sceneManuscriptLinkSegments(manuscriptLink).length} 段 · ${sceneManuscriptExcerptWords(manuscriptLink)} 字`, `Verified in ${manuscriptLink.chapterTitle || "chapter"} · ${sceneManuscriptLinkSegments(manuscriptLink).length} passages · ${sceneManuscriptExcerptWords(manuscriptLink)} words`)
                       : manuscriptLinkState === "pending"
                         ? tr("选区已关联；保存章节正文后即可核对实写进度。", "Selection linked; save the chapter to verify writing progress.")
                         : manuscriptLinkState === "unsaved"
@@ -1081,51 +1081,85 @@ export function LibraryPanel({
                     <button type="button" className="icon" aria-label={tr("移除正文关联", "Remove manuscript link")} title={tr("移除关联", "Remove link")} onClick={() => updateEditing({ manuscriptLink: null })}><CloseIcon size={14} /></button>
                   </div>
                 ) : <p className="scene-manuscript-link-empty">{tr("尚未关联正文片段。", "No manuscript excerpt linked.")}</p>}
+                {manuscriptLink && sceneManuscriptLinkSegments(manuscriptLink).length > 1 ? (
+                  <div className="scene-manuscript-segments" aria-label={tr("已关联片段", "Linked passages")}>
+                    {sceneManuscriptLinkSegments(manuscriptLink).map((segment, index) => (
+                      <span key={`${segment.start}:${segment.end}`}>
+                        {tr(`片段 ${index + 1} · ${segment.characterCount} 字`, `Passage ${index + 1} · ${segment.characterCount} words`)}
+                        <button
+                          type="button"
+                          className="icon"
+                          aria-label={tr(`移除片段 ${index + 1}`, `Remove passage ${index + 1}`)}
+                          title={tr("移除此片段", "Remove this passage")}
+                          onClick={() => {
+                            const remaining = sceneManuscriptLinkSegments(manuscriptLink).filter((_, itemIndex) => itemIndex !== index);
+                            updateEditing({ manuscriptLink: remaining.length ? { ...manuscriptLink, ...remaining[0], ...(remaining.length > 1 ? { segments: remaining } : { segments: undefined }) } : null });
+                          }}
+                        ><CloseIcon size={12} /></button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
                 {manuscriptLinkState === "missing" && manuscriptLinkCandidate && manuscriptLink && chapter ? (
                   <div className="scene-manuscript-link-recovery">
-                    <small>{tr("找到唯一首尾锚点匹配。确认后会更新关联位置；保存细纲后生效。", "A unique match for both passage anchors was found. Confirm to update the link; save the scene outline to apply it.")}</small>
+                    <small>{tr(`所有 ${manuscriptLinkCandidate.length} 段都找到唯一首尾锚点匹配。确认后更新位置；保存细纲后生效。`, `All ${manuscriptLinkCandidate.length} passages have unique anchor matches. Confirm to update positions; save the scene outline to apply them.`)}</small>
                     <button
                       type="button"
                       className="secondary scene-manuscript-link-action"
                       onClick={() => {
-                        const excerpt = String(chapter.plain_text || "").slice(manuscriptLinkCandidate.start, manuscriptLinkCandidate.end);
+                        const body = String(chapter.plain_text || "");
+                        const segments = manuscriptLinkCandidate.map((range) => {
+                          const excerpt = body.slice(range.start, range.end);
+                          return {
+                            ...range,
+                            characterCount: sceneManuscriptExcerptWords(excerpt),
+                            fingerprint: sceneExcerptFingerprint(excerpt),
+                            ...sceneManuscriptAnchors(excerpt),
+                          };
+                        });
                         updateEditing({ manuscriptLink: {
                           ...manuscriptLink,
-                          ...manuscriptLinkCandidate,
-                          characterCount: sceneManuscriptExcerptWords(excerpt),
-                          fingerprint: sceneExcerptFingerprint(excerpt),
+                          ...segments[0],
+                          segments,
                           chapterTitle: chapter.title || manuscriptLink.chapterTitle,
                           chapterRevision: chapter.revision || 0,
-                          ...sceneManuscriptAnchors(excerpt),
                         } });
                       }}
-                    >{tr("确认唯一匹配并更新位置", "Confirm unique match and update link")}</button>
+                    >{tr(`确认 ${manuscriptLinkCandidate.length} 段唯一匹配并更新位置`, `Confirm ${manuscriptLinkCandidate.length} unique passage matches`)}</button>
                   </div>
                 ) : null}
                 <button
                   type="button"
                   className="secondary scene-manuscript-link-action"
-                  disabled={!chapter?.id || !selectedText.text.trim() || selectedText.start < 0 || selectedText.end - selectedText.start !== selectedText.text.length || Array.from(selectedText.text.trim()).length > 40_000}
-                  title={!selectedText.text.trim() ? tr("先在正文中选中一个片段", "Select a passage in the manuscript first") : selectedText.start < 0 || selectedText.end - selectedText.start !== selectedText.text.length ? tr("无法定位该选区，请重新选择正文片段", "Could not locate this selection; select the passage again") : Array.from(selectedText.text.trim()).length > 40_000 ? tr("片段过长，请选取不超过 40,000 字的范围", "Excerpt is too long; select up to 40,000 characters") : tr("将当前选区关联到当前章节", "Link the current selection to the open chapter")}
+                  disabled={!chapter?.id || !selectedText.text.trim() || selectedText.start < 0 || selectedText.end - selectedText.start !== selectedText.text.length || Array.from(selectedText.text.trim()).length > 40_000 || (manuscriptLink?.chapterId === chapter?.id && manuscriptLinkState === "matched" && (sceneManuscriptLinkSegments(manuscriptLink).length >= 12 || sceneManuscriptLinkSegments(manuscriptLink).some((segment) => selectedText.start < segment.end && segment.start < selectedText.end)))}
+                  title={manuscriptLink?.chapterId === chapter?.id && manuscriptLinkState === "matched" ? sceneManuscriptLinkSegments(manuscriptLink).length >= 12 ? tr("一个场景最多关联 12 段", "A scene can link up to 12 passages") : sceneManuscriptLinkSegments(manuscriptLink).some((segment) => selectedText.start < segment.end && segment.start < selectedText.end) ? tr("选区与已关联片段重叠", "This selection overlaps an existing passage") : tr("追加当前选区；最多 12 段，片段不可重叠", "Append this selection; up to 12 non-overlapping passages") : tr("将当前选区关联到当前章节", "Link the current selection to the open chapter")}
                   onClick={() => {
                     if (!chapter?.id) return;
                     const excerpt = selectedText.text;
                     if (!excerpt.trim() || selectedText.start < 0 || Array.from(excerpt).length > 40_000 || selectedText.end - selectedText.start !== excerpt.length) return;
+                    const segment = {
+                      start: selectedText.start,
+                      end: selectedText.end,
+                      characterCount: sceneManuscriptExcerptWords(excerpt),
+                      fingerprint: sceneExcerptFingerprint(excerpt),
+                      ...sceneManuscriptAnchors(excerpt),
+                    };
+                    const canAppend = Boolean(manuscriptLink?.chapterId === chapter.id && manuscriptLinkState === "matched");
+                    const segments = canAppend
+                      ? [...sceneManuscriptLinkSegments(manuscriptLink), segment].sort((a, b) => a.start - b.start)
+                      : [segment];
                     updateEditing({
                       chapter_id: chapter.id,
                       manuscriptLink: {
-                        start: selectedText.start,
-                        end: selectedText.end,
-                        characterCount: sceneManuscriptExcerptWords(excerpt),
-                        fingerprint: sceneExcerptFingerprint(excerpt),
-                        ...sceneManuscriptAnchors(excerpt),
+                        ...segments[0],
+                        ...(canAppend ? { segments } : {}),
                         chapterId: chapter.id,
                         chapterTitle: chapter.title || "",
                         chapterRevision: chapter.revision || 0,
                       },
                     });
                   }}
-                >{selectedText.text.trim() ? tr(`关联当前选区 · ${sceneManuscriptExcerptWords(selectedText.text)} 字`, `Link selection · ${sceneManuscriptExcerptWords(selectedText.text)} words`) : tr("关联正文选区", "Link manuscript selection")}</button>
+                >{selectedText.text.trim() ? tr(`${manuscriptLink?.chapterId === chapter?.id && manuscriptLinkState === "matched" ? "追加片段" : "关联当前选区"} · ${sceneManuscriptExcerptWords(selectedText.text)} 字`, `${manuscriptLink?.chapterId === chapter?.id && manuscriptLinkState === "matched" ? "Append passage" : "Link selection"} · ${sceneManuscriptExcerptWords(selectedText.text)} words`) : tr("关联正文选区", "Link manuscript selection")}</button>
               </section>
               <input
                 placeholder={tr("剧情作用", "Plot role")}
