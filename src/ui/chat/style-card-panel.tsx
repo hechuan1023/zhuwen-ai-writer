@@ -57,6 +57,7 @@ function styleLabel(card: StyleCard, language: string) {
     "style-longform-architecture-focus": ["Long-form architecture & focus", "Keep the main arc, stage goals, side plots, and chapter payoffs working together."],
     "style-short-form-closure": ["Short-form closure & pacing", "Focus causal progression and a satisfying resolution within a bounded length."],
     "style-authorial-genre-bending": ["Genre-bending & authorial voice", "Keep the genre promise while breaking formula through character choices and story-world causality; review it against text evidence."],
+    "style-everyday-healing-payoff": ["Everyday healing & small payoffs", "Build gentle, gradual change from ordinary life and reciprocal care, without forced cures."],
     "style-road-journey-healing": ["Road journey & gradual healing", "Connect episodic stops, evolving relationships, and slow, earned change through a journey."],
     "style-rule-horror-uncanny": ["Rule-based horror & everyday distortion", "Make familiar spaces unreliable through verifiable rules that steadily tighten."],
     "style-rebirth-causal-rewrite": ["Rebirth & causal change", "Use incomplete memories to alter choices and create butterfly effects."],
@@ -75,6 +76,12 @@ function taskLabel(task: string, language: string) {
 }
 
 const TECHNIQUE_PRESETS = [
+  {
+    id: "genre-everyday-healing",
+    name: ["治愈系日常群像", "Everyday healing ensemble"],
+    description: ["生活肌理 + 相互照料 + 微小变化", "Lived detail + reciprocal care + gradual change"],
+    cardIds: ["style-everyday-healing-payoff", "style-lived-realism", "style-human-ensemble"],
+  },
   {
     id: "genre-multipov-suspense",
     name: ["多视角悬疑群像", "Multi-POV ensemble suspense"],
