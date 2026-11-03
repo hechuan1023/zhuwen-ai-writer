@@ -48,6 +48,7 @@ function styleLabel(card: StyleCard, language: string) {
     "style-urban-workplace-agency": ["Urban work & lived detail", "Ground urban stories in concrete work processes, interests, and life choices."],
     "style-professional-knowledge-causality": ["Professional knowledge & story causality", "Turn work experience and expertise into readable action, risk, collaboration, and character choices."],
     "style-fantasy-social-fusion": ["Fantasy & social systems", "Make institutions, resources, and social pressures part of a coherent fantasy world."],
+    "style-scifi-civilization-everyday": ["Science fiction: civilization & everyday life", "Ground technological imagination in daily choices, then reveal its human and civilizational consequences."],
     "style-high-stakes-game-theory": ["High-stakes strategy & limited agency", "Build tense choices from scarce resources, harsh rules, uncertain allies, and consequences that carry forward."],
     "style-system-agency-gameplay": ["System strategy & agency", "Let characters understand, negotiate with, exploit, or resist rules—and bear the consequences."],
     "style-lived-realism": ["Everyday realism & lived texture", "Use small, observable details to ground characters without turning themes into slogans."],
@@ -237,6 +238,12 @@ const TECHNIQUE_PRESETS = [
     name: ["温柔向情感连载", "Tender romance serial"],
     description: ["相互选择 + 关系推进 + 生活质感", "Mutual choice + relationship progression + lived detail"],
     cardIds: ["style-sweet-romance-pull", "style-relationship-progression", "style-character-voice-tension", "style-lived-realism"],
+  },
+  {
+    id: "genre-scifi-civilization-everyday",
+    name: ["日常锚点与文明议题科幻", "Everyday science fiction & civilization"],
+    description: ["技术边界 + 人物选择 + 文明后果", "Technological limits + character choices + civilizational consequences"],
+    cardIds: ["style-scifi-civilization-everyday", "style-professional-knowledge-causality", "style-multipov-ensemble"],
   },
 ];
 
