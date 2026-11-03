@@ -362,7 +362,7 @@ export const BUILTIN_STYLE_CARDS: AiStyleCard[] = [
     name: "长篇主线与整体结构",
     description: "控制长篇扩张，让阶段目标、支线和章节回报持续服务作品主线。",
     tasks: ["outline", "continue", "check"],
-    version: 1,
+    version: 2,
     builtin: 1,
     rules: `${BASE_STYLE_RULES}
 
