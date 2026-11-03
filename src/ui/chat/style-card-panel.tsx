@@ -299,7 +299,7 @@ export function StyleCardPanel({
     const locale = language === "en" ? "en-US" : "zh-CN";
     const query = cardSearch.trim().toLocaleLowerCase(locale);
     return cards.filter((card) => {
-      if (cardFilter === "custom" ? Boolean(card.builtin) : cardFilter !== "all" && !(card.tasks.includes(cardFilter) || (cardFilter === "polish" && card.tasks.includes("naturalize")))) return false;
+      if (cardFilter === "custom" ? Boolean(card.builtin) : cardFilter !== "all" && !(card.tasks.includes(cardFilter) || (cardFilter === "naturalize" && card.tasks.includes("polish")))) return false;
       if (!query) return true;
       const label = styleLabel(card, language);
       const searchable = [
