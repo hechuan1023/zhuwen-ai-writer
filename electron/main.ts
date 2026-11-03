@@ -1464,14 +1464,22 @@ function withWriterPersona(messages: any[]) {
   return list;
 }
 function readProjectInstructions(novelId: string) {
-  const row: any = get(
+  const instructionsRow: any = get(
     "SELECT instructions FROM novel_ai_instructions WHERE novel_id=?",
     String(novelId || ""),
   );
-  return String(row?.instructions || "").trim();
+  return String(instructionsRow?.instructions || "").trim();
 }
-function projectInstructionPrompt(instructions: string) {
-  const text = String(instructions || "").trim();
+function projectInstructionPrompt(instructions: string, novelId = "") {
+  const novel: any = get("SELECT narrative_pov,narrative_tense FROM novels WHERE id=?", String(novelId || ""));
+  const profile = [
+    String(novel?.narrative_pov || "").trim() ? `默认叙述视角：${String(novel.narrative_pov).trim()}` : "",
+    String(novel?.narrative_tense || "").trim() ? `默认叙述时态/时间语气：${String(novel.narrative_tense).trim()}` : "",
+  ].filter(Boolean);
+  const profileInstruction = profile.length
+    ? `【作品叙述默认值】\n${profile.join("\n")}\n仅在本轮没有更具体要求时作为默认倾向；遵循场景视点边界，不为强行统一而改写用户明确指定的视角、时间顺序或文本事实。`
+    : "";
+  const text = [profileInstruction, String(instructions || "").trim()].filter(Boolean).join("\n\n");
   return text
     ? `【当前作品固定指令】这些要求适用于本作品的每次请求；与本轮用户明确任务或已确认作品事实冲突时，以本轮任务和已确认事实为准。\n${text}`
     : "";
@@ -1639,17 +1647,23 @@ function registerIpc(userDir: string) {
     ),
   );
   ipcMain.handle("novels:create", (_, p) => {
+    const narrativePov = String(p.narrative_pov || "").trim();
+    const narrativeTense = String(p.narrative_tense || "").trim();
+    if (Array.from(narrativePov).length > 160 || Array.from(narrativeTense).length > 160)
+      return fail("叙述偏好最多 160 个字符");
     const id = newId(),
       t = timestamp();
     db.transaction(() => {
       db.prepare(
-        "INSERT INTO novels(id,title,author,synopsis,genre,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+        "INSERT INTO novels(id,title,author,synopsis,genre,narrative_pov,narrative_tense,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
       ).run(
         id,
         p.title.trim(),
         p.author || "",
         p.synopsis || "",
         p.genre || "",
+        narrativePov,
+        narrativeTense,
         t,
         t,
       );
@@ -1662,11 +1676,19 @@ function registerIpc(userDir: string) {
     return ok({ id });
   });
   ipcMain.handle("novels:update", (_, p) => {
+    const update = { ...p };
+    for (const key of ["narrative_pov", "narrative_tense"] as const) {
+      if (!(key in update)) continue;
+      update[key] = String(update[key] || "").trim();
+      if (Array.from(update[key]).length > 160) return fail("叙述偏好最多 160 个字符");
+    }
     const fields = [
       "title",
       "author",
       "synopsis",
       "genre",
+      "narrative_pov",
+      "narrative_tense",
       "cover_path",
       "last_chapter_id",
       "archived",
@@ -1674,7 +1696,7 @@ function registerIpc(userDir: string) {
     const set = fields.filter((k) => k in p).map((k) => `${k}=@${k}`);
     db.prepare(
       `UPDATE novels SET ${set.join(",")},updated_at=@updated_at,data_version=data_version+1 WHERE id=@id`,
-    ).run({ ...p, updated_at: timestamp() });
+    ).run({ ...update, updated_at: timestamp() });
     return ok(true);
   });
   ipcMain.handle("novels:trash", (_, id) => {
@@ -3604,7 +3626,7 @@ function registerIpc(userDir: string) {
     const history = withWriterPersona(conversationHistory(String(p?.conversationId || "")));
     addProjectInstructions(
       history,
-      projectInstructionPrompt(readProjectInstructions(String(p?.novelId || ""))),
+      projectInstructionPrompt(readProjectInstructions(String(p?.novelId || "")), String(p?.novelId || "")),
     );
     const prefix = contextText(p?.contexts || []);
     const style = requestStyle(p);
@@ -3697,6 +3719,7 @@ function registerIpc(userDir: string) {
       }
       projectInstructionSnapshot = projectInstructionPrompt(
         readProjectInstructions(String(p.novelId || "")),
+        String(p.novelId || ""),
       );
       const uid = newId(),
         t = timestamp();
@@ -4961,6 +4984,10 @@ function verifyBackup(b: any) {
     (b.projectInstructions !== undefined &&
       (typeof b.projectInstructions !== "string" ||
         Array.from(b.projectInstructions).length > 8000)) ||
+    (b.novel.narrative_pov !== undefined &&
+      (typeof b.novel.narrative_pov !== "string" || Array.from(b.novel.narrative_pov).length > 160)) ||
+    (b.novel.narrative_tense !== undefined &&
+      (typeof b.novel.narrative_tense !== "string" || Array.from(b.novel.narrative_tense).length > 160)) ||
     (b.styleCards !== undefined && !Array.isArray(b.styleCards))
   )
     throw new Error("备份格式或版本不受支持");
@@ -5014,13 +5041,15 @@ function restoreBackupAsCopy(b: any) {
       convMap = new Map<string, string>(),
       messageMap = new Map<string, string>();
     db.prepare(
-      "INSERT INTO novels(id,title,author,synopsis,genre,cover_path,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+      "INSERT INTO novels(id,title,author,synopsis,genre,narrative_pov,narrative_tense,cover_path,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
     ).run(
       novelId,
       b.novel.title + "（恢复）",
       b.novel.author || "",
       b.novel.synopsis || "",
       b.novel.genre || "",
+      b.novel.narrative_pov || "",
+      b.novel.narrative_tense || "",
       b.novel.cover_path || null,
       t,
       t,

@@ -19,6 +19,8 @@ export function CreateNovel({
     author: "",
     genre: "",
     synopsis: "",
+    narrative_pov: "",
+    narrative_tense: "",
   });
   const [submitting, setSubmitting] = useState(false);
   async function submit() {
@@ -71,6 +73,28 @@ export function CreateNovel({
             placeholder={tr("可稍后填写", "You can add this later")}
           />
         </label>
+        <details className="novel-narrative-details">
+          <summary>{tr("AI 叙述偏好（可选）", "AI narrative preferences (optional)")}</summary>
+          <p className="hint">{tr("为这本作品设置默认视角与叙述时间语气；创建后仍可修改。留空不限制 AI。", "Set default point of view and temporal voice for this novel. You can change these later; blank fields add no constraints.")}</p>
+          <label>
+            {tr("叙述视角", "Narrative point of view")}
+            <input
+              maxLength={160}
+              value={form.narrative_pov}
+              onChange={(e) => setForm({ ...form, narrative_pov: e.target.value })}
+              placeholder={tr("例如：第三人称限知，主要跟随主角", "e.g. Close third person, mainly following the protagonist")}
+            />
+          </label>
+          <label>
+            {tr("叙述时态 / 时间语气", "Narrative tense / temporal voice")}
+            <input
+              maxLength={160}
+              value={form.narrative_tense}
+              onChange={(e) => setForm({ ...form, narrative_tense: e.target.value })}
+              placeholder={tr("例如：以事件发生时的现场感为主，回忆段落明确切换", "e.g. Favor immediacy; mark shifts into retrospective passages")}
+            />
+          </label>
+        </details>
         <div className="row end">
           <button onClick={close}>{tr("取消", "Cancel")}</button>
           <button className="primary" disabled={submitting} onClick={submit}>

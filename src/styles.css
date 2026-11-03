@@ -1169,6 +1169,23 @@ button.danger-text:not(:disabled):hover {
   margin: 10px 0;
   font-size: 12px;
 }
+.novel-narrative-profile,
+.novel-narrative-details {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 10px);
+  background: color-mix(in srgb, var(--panel) 55%, var(--paper));
+}
+.novel-narrative-profile > div > b { font-size: 12px; }
+.novel-narrative-profile .hint,
+.novel-narrative-details > .hint { margin: 4px 0 0; font-size: 11px; }
+.novel-narrative-profile label,
+.novel-narrative-details label { margin: 2px 0; }
+.novel-narrative-details > summary { color: var(--ink); font-size: 12px; font-weight: 600; cursor: pointer; }
+.novel-narrative-details[open] > summary { margin-bottom: 2px; }
 .settings input,
 .settings textarea,
 .io input,

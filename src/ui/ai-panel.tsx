@@ -838,6 +838,8 @@ export function AiPanel({
     messages.length,
     styleRuleChars,
     projectInstructions,
+    novel?.narrative_pov,
+    novel?.narrative_tense,
   ]);
 
   async function send() {

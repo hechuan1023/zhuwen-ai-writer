@@ -304,6 +304,13 @@ function migrate(db: Db) {
     db.exec(`ALTER TABLE novel_ai_styles ADD COLUMN style_intensity TEXT NOT NULL DEFAULT 'balanced' CHECK(style_intensity IN ('light','balanced','strong'));`)
     db.prepare('INSERT INTO schema_migrations VALUES(22,?)').run(now())
   })()
+  if (version < 23) db.transaction(() => {
+    db.exec(`
+      ALTER TABLE novels ADD COLUMN narrative_pov TEXT NOT NULL DEFAULT '';
+      ALTER TABLE novels ADD COLUMN narrative_tense TEXT NOT NULL DEFAULT '';
+    `)
+    db.prepare('INSERT INTO schema_migrations VALUES(23,?)').run(now())
+  })()
   // 已完成迁移的数据库也要能补齐或升级内置卡；不覆盖用户自定义记录。
   {
     const insert = db.prepare('INSERT OR IGNORE INTO ai_style_cards(id,name,description,tasks_json,rules,builtin,builtin_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')
