@@ -885,15 +885,39 @@ export function Workspace({
     const out: { from: number; to: number }[] = [];
     if (!editor || !term) return out;
     const q = term.toLowerCase();
-    editor.state.doc.descendants((node, pos) => {
-      if (node.isText && node.text) {
-        const t = node.text.toLowerCase();
-        let i = t.indexOf(q);
-        while (i !== -1) {
-          out.push({ from: pos + i, to: pos + i + term.length });
-          i = t.indexOf(q, i + q.length);
+    editor.state.doc.descendants((block: any, blockPos: number) => {
+      if (!block.isTextblock) return;
+      let text = "";
+      const segments: Array<{ start: number; end: number; from: number }> = [];
+      block.descendants((node: any, offset: number) => {
+        if (node.isText && node.text) {
+          const start = text.length;
+          text += node.text;
+          segments.push({ start, end: text.length, from: blockPos + 1 + offset });
+        } else if (node.isInline) {
+          // Do not let searches bridge hard breaks or inline atoms such as images.
+          text += "\uFFFC";
         }
+      });
+      const lower = text.toLowerCase();
+      let firstIndex = 0;
+      let lastIndex = 0;
+      let i = lower.indexOf(q);
+      while (i !== -1) {
+        const end = i + term.length;
+        while (firstIndex < segments.length && segments[firstIndex].end <= i) firstIndex += 1;
+        while (lastIndex < segments.length && segments[lastIndex].end < end) lastIndex += 1;
+        const first = segments[firstIndex];
+        const last = segments[lastIndex];
+        if (first && last && i >= first.start && end > last.start && end <= last.end) {
+          out.push({
+            from: first.from + i - first.start,
+            to: last.from + end - last.start,
+          });
+        }
+        i = lower.indexOf(q, i + q.length);
       }
+      return false;
     });
     return out;
   }
