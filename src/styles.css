@@ -1234,6 +1234,131 @@ button.danger-text:not(:disabled):hover {
   min-height: 36px;
   white-space: nowrap;
 }
+/* 发布前风险自检：入口 + 结果列表 */
+.io-risk-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+.io-risk-entry button {
+  flex: none;
+  min-height: 34px;
+}
+.io-risk-entry .hint {
+  flex: 1 1 220px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.risk-audit {
+  display: grid;
+  gap: 12px;
+  min-width: min(560px, 78vw);
+}
+.risk-audit .hint {
+  margin: 0;
+  line-height: 1.6;
+}
+.risk-audit-terms {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.risk-audit-terms textarea {
+  width: 100%;
+  min-height: 68px;
+  padding: 9px 11px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 10px);
+  background: var(--panel-2, var(--paper));
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.6;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.risk-audit-terms textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.risk-audit-list {
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  max-height: min(46vh, 420px);
+  overflow: auto;
+}
+.risk-audit-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 9px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 10px);
+  background: var(--paper);
+}
+.risk-audit-badge {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 10.5px;
+  line-height: 1.7;
+  white-space: nowrap;
+  color: var(--muted);
+  background: var(--panel-2, transparent);
+}
+.risk-audit-badge.is-contact {
+  color: color-mix(in srgb, var(--danger) 82%, var(--ink));
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--line));
+  background: color-mix(in srgb, var(--danger) 10%, var(--paper));
+}
+.risk-audit-badge.is-promotion {
+  color: color-mix(in srgb, var(--warning) 84%, var(--ink));
+  border-color: color-mix(in srgb, var(--warning) 36%, var(--line));
+  background: color-mix(in srgb, var(--warning) 12%, var(--paper));
+}
+.risk-audit-term {
+  font-weight: 650;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.risk-audit-count {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.risk-audit-source {
+  flex: 1 1 100%;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.risk-audit-empty {
+  margin: 0;
+  padding: 18px 12px;
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md, 10px);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.risk-audit-actions {
+  gap: 8px;
+}
+.risk-audit-actions button {
+  min-height: 34px;
+}
 .epub-custom-layout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

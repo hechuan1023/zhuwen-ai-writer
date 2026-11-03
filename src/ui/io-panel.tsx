@@ -1,6 +1,12 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api, time, PromptDialog, Modal, AnyRow, UiLanguage } from "./shared";
 import { Select } from "./select";
+import {
+  auditRiskSources,
+  normalizeRiskTerms,
+  RISK_CATEGORY_LABEL,
+  type RiskSource,
+} from "./risk-audit";
 
 type EpubCustomLayout = {
   lineHeight: number;
@@ -149,7 +155,13 @@ export function IoPanel({
     }),
     [autoLast, setAutoLast] = useState<any>(null),
     // 导入作品命名弹窗的初值；null 表示未打开
-    [importTitleEdit, setImportTitleEdit] = useState<string | null>(null);
+    [importTitleEdit, setImportTitleEdit] = useState<string | null>(null),
+    [riskOpen, setRiskOpen] = useState(false),
+    [riskBusy, setRiskBusy] = useState(false),
+    [riskProgress, setRiskProgress] = useState({ done: 0, total: 0 }),
+    [riskSources, setRiskSources] = useState<RiskSource[]>([]),
+    [riskCustom, setRiskCustom] = useState(""),
+    [riskCustomDraft, setRiskCustomDraft] = useState("");
   useEffect(() => {
     api("novels:open", novel.id).then(
       (r) => {
@@ -173,6 +185,10 @@ export function IoPanel({
     : exportScope === "volume"
       ? orderedChapters.filter((item) => item.volume_id === chapter?.volume_id)
       : orderedChapters;
+  const riskResult = useMemo(
+    () => auditRiskSources(riskSources, riskCustom),
+    [riskSources, riskCustom],
+  );
   const epubPreviewChapterIndex = scopedChapters.findIndex((item) => item.id === epubPreviewChapterId);
   const epubTocPageSize = 100;
   const epubTocPageCount = Math.max(1, Math.ceil(scopedChapters.length / epubTocPageSize));
@@ -204,6 +220,13 @@ export function IoPanel({
     api<any>("preferences:get", "autoBackupLast").then(
       (r) => r.ok && setAutoLast(r.data),
     );
+    api<any>("preferences:get", "riskAuditCustomTerms").then((r) => {
+      if (r.ok && Array.isArray(r.data)) {
+        const terms = r.data.join("\n");
+        setRiskCustom(terms);
+        setRiskCustomDraft(terms);
+      }
+    });
   }, []);
   useEffect(
     () => window.zhuwen.onImportProgress((progress) => setImportProgress(progress)),
@@ -294,6 +317,42 @@ export function IoPanel({
       if (format === "epub") setEpubPreviewOpen(false);
     }
     else if (!r.ok) notify(r.error || tr("导出失败", "Export failed"));
+  }
+  async function scanRisks() {
+    if (!scopedChapters.length) {
+      notify(tr("当前范围没有可检查的章节", "No chapters to check in this scope"));
+      return;
+    }
+    setRiskOpen(true);
+    setRiskBusy(true);
+    setRiskProgress({ done: 0, total: scopedChapters.length });
+    setRiskSources([]);
+    const collected: RiskSource[] = [];
+    let failed = 0;
+    for (const item of scopedChapters) {
+      const result = await api<any>("chapters:get", item.id);
+      if (!result.ok) failed += 1;
+      collected.push({
+        id: item.id,
+        label: String(item.title || tr("未命名章节", "Untitled chapter")),
+        text: String(result.ok ? result.data?.plain_text || "" : ""),
+      });
+      setRiskProgress({ done: collected.length, total: scopedChapters.length });
+    }
+    setRiskSources(collected);
+    setRiskBusy(false);
+    if (failed)
+      notify(tr(`有 ${failed} 个章节未能读取，检查结果可能不完整。`, `${failed} chapters could not be read; results may be incomplete.`));
+  }
+  function saveRiskTerms(value: string) {
+    const terms = normalizeRiskTerms(value);
+    const normalized = terms.join("\n");
+    setRiskCustom(normalized);
+    setRiskCustomDraft(normalized);
+    void api("preferences:set", {
+      key: "riskAuditCustomTerms",
+      value: terms,
+    });
   }
   const previewPreset = {
     standard: { lineHeight: 1.8, marginPercent: 5, paragraphGapEm: 0.65, indentEm: 2 },
@@ -485,6 +544,27 @@ export function IoPanel({
               {tr("预览并导出 EPUB", "Preview & export EPUB")}
             </button>
           </div>
+        </div>
+        <div className="io-risk-entry">
+          <button
+            type="button"
+            data-fd-id="risk-audit-open"
+            disabled={Boolean(operationBusy) || riskBusy || !scopedChapters.length}
+            onClick={() => void scanRisks()}
+          >
+            {riskBusy
+              ? tr(
+                  `检查中 ${riskProgress.done}/${riskProgress.total}`,
+                  `Checking ${riskProgress.done}/${riskProgress.total}`,
+                )
+              : tr("发布前自检", "Pre-publish check")}
+          </button>
+          <small className="hint">
+            {tr(
+              "在本机检查联系方式、站外导流和广告用语。仅作提示，不自动修改正文。",
+              "Checks contact details, off-platform links, and advertising wording locally. Alerts only; the manuscript is never changed.",
+            )}
+          </small>
         </div>
       </section>
       <section>
@@ -951,6 +1031,87 @@ export function IoPanel({
               <button type="button" onClick={() => setEpubPreviewOpen(false)}>{tr("返回修改设置", "Back to settings")}</button>
               <button type="button" className="primary" disabled={Boolean(operationBusy) || epubPreviewBusy} onClick={() => void exp("epub")}>
                 {operationBusy === "export:epub" ? tr("正在生成…", "Generating…") : tr("确认导出 EPUB", "Export EPUB")}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {riskOpen && (
+        <Modal
+          title={tr("发布前风险自检", "Pre-publish risk check")}
+          close={() => !riskBusy && setRiskOpen(false)}
+        >
+          <div className="risk-audit" data-fd-id="risk-audit-results">
+            <p className="hint">
+              {riskBusy
+                ? tr(
+                    `正在读取章节 ${riskProgress.done}/${riskProgress.total}…`,
+                    `Reading chapters ${riskProgress.done}/${riskProgress.total}…`,
+                  )
+                : tr(
+                    `已检查 ${riskResult.sourceCount} 章，命中 ${riskResult.totalHits} 处。结果只在本机生成，不会修改正文，也不代表平台最终判定。`,
+                    `Checked ${riskResult.sourceCount} chapters, ${riskResult.totalHits} matches. Results are local, never change the manuscript, and do not represent a platform's final decision.`,
+                  )}
+            </p>
+            <label className="risk-audit-terms">
+              <span>{tr("自定义词（每行一个）", "Custom terms (one per line)")}</span>
+              <textarea
+                rows={3}
+                value={riskCustomDraft}
+                spellCheck={false}
+                placeholder={tr(
+                  "例如：内部代号、需要回避的旧称、平台要求替换的词",
+                  "For example: internal codenames, retired names, or terms your platform asks you to replace",
+                )}
+                onChange={(event) => setRiskCustomDraft(event.target.value)}
+                onBlur={(event) => saveRiskTerms(event.target.value)}
+              />
+            </label>
+            {riskBusy ? (
+              <p className="risk-audit-empty" data-fd-id="risk-audit-progress">
+                {tr("扫描中，请稍候…", "Scanning, please wait…")}
+              </p>
+            ) : riskResult.findings.length ? (
+              <ul className="risk-audit-list">
+                {riskResult.findings.map((hit) => (
+                  <li key={`${hit.category}:${hit.term}`}>
+                    <span className={`risk-audit-badge is-${hit.category}`}>
+                      {RISK_CATEGORY_LABEL[hit.category][
+                        language === "en" ? 1 : 0
+                      ]}
+                    </span>
+                    <span className="risk-audit-term">{hit.term}</span>
+                    <span className="risk-audit-count">
+                      {tr(`${hit.count} 处`, `${hit.count}×`)}
+                    </span>
+                    <small className="risk-audit-source">
+                      {hit.sources.slice(0, 3).join(" · ")}
+                      {hit.sources.length > 3
+                        ? tr(` 等 ${hit.sources.length} 章`, ` +${hit.sources.length - 3} more`)
+                        : ""}
+                    </small>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="risk-audit-empty" data-fd-id="risk-audit-empty">
+                {tr(
+                  "当前范围未发现联系方式、站外导流或广告用语。",
+                  "No contact details, off-platform links, or advertising wording found in this scope.",
+                )}
+              </p>
+            )}
+            <div className="row end risk-audit-actions">
+              <button type="button" disabled={riskBusy} onClick={() => setRiskOpen(false)}>
+                {tr("关闭", "Close")}
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={riskBusy}
+                onClick={() => void scanRisks()}
+              >
+                {tr("重新检查", "Check again")}
               </button>
             </div>
           </div>
