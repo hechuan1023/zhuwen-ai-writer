@@ -1641,7 +1641,7 @@ function registerIpc(userDir: string) {
   ipcMain.handle("novels:list", (_, p = {}) =>
     ok(
       all(
-        `SELECT n.*, (SELECT COUNT(*) FROM chapters c WHERE c.novel_id=n.id AND c.deleted_at IS NULL) chapter_count, (SELECT COALESCE(SUM(word_count),0) FROM chapters c WHERE c.novel_id=n.id AND c.deleted_at IS NULL) word_count, (SELECT c.title FROM chapters c WHERE c.id=n.last_chapter_id AND c.deleted_at IS NULL) last_chapter_title FROM novels n WHERE n.deleted_at IS NULL AND n.archived=? ORDER BY ${p.sort === "title" ? "n.title COLLATE NOCASE" : p.sort === "created" ? "n.created_at DESC" : "n.updated_at DESC"}`,
+        `SELECT n.*, (SELECT COUNT(*) FROM chapters c WHERE c.novel_id=n.id AND c.deleted_at IS NULL) chapter_count, (SELECT COUNT(*) FROM library_items l WHERE l.novel_id=n.id AND l.deleted_at IS NULL) library_count, (SELECT COALESCE(SUM(word_count),0) FROM chapters c WHERE c.novel_id=n.id AND c.deleted_at IS NULL) word_count, (SELECT c.title FROM chapters c WHERE c.id=n.last_chapter_id AND c.deleted_at IS NULL) last_chapter_title FROM novels n WHERE n.deleted_at IS NULL AND n.archived=? ORDER BY ${p.sort === "title" ? "n.title COLLATE NOCASE" : p.sort === "created" ? "n.created_at DESC" : "n.updated_at DESC"}`,
         p.archived ? 1 : 0,
       ),
     ),

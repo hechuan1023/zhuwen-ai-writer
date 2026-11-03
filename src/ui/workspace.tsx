@@ -171,10 +171,12 @@ export function Workspace({
     [matchCount, setMatchCount] = useState(0),
     [searchOpen, setSearchOpen] = useState(false),
     [bookQuery, setBookQuery] = useState(""),
+    [bookSearchScope, setBookSearchScope] = useState<"current" | "all">("current"),
     [bookResultQuery, setBookResultQuery] = useState(""),
     [bookResults, setBookResults] = useState<AnyRow[]>([]),
     [bookSearching, setBookSearching] = useState(false),
     [bookProgress, setBookProgress] = useState({ scanned: 0, total: 0, matches: 0 }),
+    [bookProgressNovel, setBookProgressNovel] = useState(""),
     [statsOpen, setStatsOpen] = useState(false),
     [summaryOpen, setSummaryOpen] = useState(false),
     [ctxMenu, setCtxMenu] = useState<{
@@ -500,6 +502,8 @@ export function Workspace({
       discard: () => void;
     } | null>(null),
     searchRequest = useRef(""),
+    searchProgressRef = useRef<{ requestId: string; baseScanned: number; baseMatches: number; total: number; novelTitle: string } | null>(null),
+    pendingCrossNovelJump = useRef<{ novelId: string; chapterId: string; query: string } | null>(null),
     chapterRef = useRef<AnyRow | null>(null),
     findNextRef = useRef<(term?: string) => void>(() => {}),
     centerLineRef = useRef<() => void>(() => {}),
@@ -658,8 +662,14 @@ export function Workspace({
   useEffect(
     () =>
       window.zhuwen.onSearchProgress((progress) => {
-        if (progress.requestId === searchRequest.current)
-          setBookProgress(progress);
+        const aggregate = searchProgressRef.current;
+        if (progress.requestId !== searchRequest.current || !aggregate || aggregate.requestId !== progress.requestId) return;
+        setBookProgress({
+          scanned: aggregate.baseScanned + Number(progress.scanned || 0),
+          total: aggregate.total,
+          matches: aggregate.baseMatches + Number(progress.matches || 0),
+        });
+        setBookProgressNovel(aggregate.novelTitle);
       }),
     [],
   );
@@ -677,6 +687,17 @@ export function Workspace({
         : null,
     });
   }, [novel?.id, chapter?.id, chapter?.title, chapter?.revision]);
+  useEffect(() => {
+    const pending = pendingCrossNovelJump.current;
+    if (!pending || novel.id !== pending.novelId || chapter?.id !== pending.chapterId) return;
+    pendingCrossNovelJump.current = null;
+    setLeftView("chapters");
+    setFindText(pending.query);
+    setReplaceText("");
+    setShowReplace(false);
+    setFindOpen(true);
+    window.setTimeout(() => findNextRef.current(pending.query), 120);
+  }, [novel.id, chapter?.id]);
   const selectionTimer = useRef<number | undefined>(undefined);
   const pushSelectionRef = useRef<(t: string) => void>(() => {});
   pushSelectionRef.current = (t: string) => {
@@ -960,33 +981,113 @@ export function Workspace({
     searchRequest.current = requestId;
     setBookResults([]);
     setBookResultQuery("");
-    setBookProgress({ scanned: 0, total: chapters.length, matches: 0 });
     setBookSearching(true);
-    const r = await api<{ results: AnyRow[]; cancelled: boolean }>("search:novel", {
-      novelId: novel.id,
-      query,
-      requestId,
-    });
+    setBookProgress({ scanned: 0, total: 0, matches: 0 });
+    setBookProgressNovel("");
+    const [activeResult, archivedResult] = await Promise.all([
+      api<AnyRow[]>("novels:list", { archived: false }),
+      api<AnyRow[]>("novels:list", { archived: true }),
+    ]);
     if (searchRequest.current !== requestId) return;
+    if (!activeResult.ok || !archivedResult.ok) {
+      searchRequest.current = "";
+      setBookSearching(false);
+      notify(activeResult.error || archivedResult.error || tr("无法读取作品列表", "Could not load the novel list"));
+      return;
+    }
+    const allNovels = [...(activeResult.data || []), ...(archivedResult.data || [])];
+    const targets = bookSearchScope === "all"
+      ? allNovels.sort((a, b) => String(a.title || "").localeCompare(String(b.title || ""), language === "en" ? "en" : "zh-CN"))
+      : allNovels.filter((item) => String(item.id) === novel.id);
+    const total = targets.reduce((sum, item) => sum + Number(item.chapter_count || 0) + Number(item.library_count || 0), 0);
+    let scanned = 0;
+    let matches = 0;
+    const results: AnyRow[] = [];
+    setBookProgress({ scanned, total, matches });
+    for (const target of targets) {
+      if (searchRequest.current !== requestId) return;
+      searchProgressRef.current = { requestId, baseScanned: scanned, baseMatches: matches, total, novelTitle: String(target.title || tr("未命名作品", "Untitled novel")) };
+      setBookProgressNovel(searchProgressRef.current.novelTitle);
+      const r = await api<{ results: AnyRow[]; cancelled: boolean }>("search:novel", {
+        novelId: target.id,
+        query,
+        requestId,
+      });
+      if (searchRequest.current !== requestId) return;
+      if (!r.ok) {
+        notify(r.error || tr("搜索失败", "Search failed"));
+        break;
+      }
+      const novelResults = (r.data.results || []).map((result) => ({
+        ...result,
+        novelId: target.id,
+        novelTitle: String(target.title || tr("未命名作品", "Untitled novel")),
+      }));
+      results.push(...novelResults);
+      setBookResults([...results]);
+      matches += novelResults.length;
+      scanned += Number(target.chapter_count || 0) + Number(target.library_count || 0);
+      setBookProgress({ scanned, total, matches });
+      searchProgressRef.current = { requestId, baseScanned: scanned, baseMatches: matches, total, novelTitle: searchProgressRef.current.novelTitle };
+      if (r.data.cancelled) break;
+    }
+    if (searchRequest.current !== requestId) return;
+    searchProgressRef.current = null;
     searchRequest.current = "";
     setBookSearching(false);
-    if (r.ok) {
-      setBookResults(r.data.results);
-      setBookResultQuery(query);
-    }
-    else notify(r.error || tr("搜索失败", "Search failed"));
+    setBookResultQuery(query);
   }
   async function closeBookSearch() {
     if (searchRequest.current) {
       await api("search:cancel", searchRequest.current);
       searchRequest.current = "";
       setBookSearching(false);
+      searchProgressRef.current = null;
     }
     setSearchOpen(false);
   }
-  async function openSearchResult(resultId: string) {
+  async function openSearchResult(result: AnyRow) {
     if (leftView === "library" && libraryControlsRef.current?.isDirty() && !(await libraryControlsRef.current.requestLeave())) return;
-    const result = bookResults.find((item) => item.chapterId === resultId || item.sourceId === resultId);
+    const query = bookResultQuery;
+    if (!query) return;
+    if (result.novelId && String(result.novelId) !== novel.id) {
+      if (!(await save(true))) return;
+      const opened = await api<AnyRow>("novels:open", String(result.novelId));
+      if (!opened.ok || !opened.data?.novel) {
+        notify(opened.error || tr("无法打开搜索结果所属作品", "Could not open the novel containing this result"));
+        return;
+      }
+      const targetChapter = result.resultType === "chapter"
+        ? (opened.data.chapters || []).find((item: AnyRow) => String(item.id) === String(result.chapterId))
+        : null;
+      if (result.resultType === "chapter" && !targetChapter) {
+        notify(tr("搜索结果章节已不存在。", "The chapter in this search result no longer exists."));
+        return;
+      }
+      if (targetChapter) {
+        pendingCrossNovelJump.current = {
+          novelId: String(result.novelId),
+          chapterId: String(targetChapter.id),
+          query,
+        };
+        chapterRef.current = targetChapter;
+        setLeftView("chapters");
+      } else {
+        chapterRef.current = null;
+        setLeftView("library");
+      }
+      setChapter(null);
+      setVolumes(opened.data.volumes || []);
+      setChapters(opened.data.chapters || []);
+      setNovel(opened.data.novel);
+      setSearchOpen(false);
+      if (result.resultType === "library") {
+        const libraryKinds = new Set(["outline", "scene", "character", "world", "inspiration", "timeline", "foreshadow", "relation"]);
+        if (!libraryKinds.has(result.kind) || !result.sourceId) return;
+        setSourceNavigationRequest({ nonce: crypto.randomUUID(), kind: result.kind, sourceId: result.sourceId });
+      }
+      return;
+    }
     if (result?.resultType === "library") {
       const libraryKinds = new Set(["outline", "scene", "character", "world", "inspiration", "timeline", "foreshadow", "relation"]);
       if (!libraryKinds.has(result.kind) || !result.sourceId) return;
@@ -995,10 +1096,8 @@ export function Workspace({
       setSourceNavigationRequest({ nonce: crypto.randomUUID(), kind: result.kind, sourceId: result.sourceId });
       return;
     }
-    const target = chapters.find((c) => c.id === resultId);
+    const target = chapters.find((c) => c.id === result.chapterId);
     if (!target) return;
-    const query = bookResultQuery;
-    if (!query) return;
     setSearchOpen(false);
     await switchChapter(target);
     setFindText(query);
@@ -2517,10 +2616,14 @@ export function Workspace({
       {searchOpen && (
         <Modal title={tr("全书与资料查找", "Search book & story bible")} close={closeBookSearch}>
           <div className="book-search">
+            <div className="book-search-scope" role="group" aria-label={tr("搜索范围", "Search scope")}>
+              <button type="button" className={bookSearchScope === "current" ? "active" : ""} aria-pressed={bookSearchScope === "current"} disabled={bookSearching} onClick={() => setBookSearchScope("current")}>{tr("当前作品", "Current novel")}</button>
+              <button type="button" className={bookSearchScope === "all" ? "active" : ""} aria-pressed={bookSearchScope === "all"} disabled={bookSearching} onClick={() => setBookSearchScope("all")}>{tr("全部作品（含归档）", "All novels (including archived)")}</button>
+            </div>
             <div className="row">
               <input
                 autoFocus
-                placeholder={tr("搜章节正文、人物、设定、场景等；回车搜索", "Search chapters, characters, settings, scenes… press Enter")}
+                placeholder={tr("搜索章节正文、人物、设定、场景等；回车搜索", "Search chapters, characters, settings, scenes… press Enter")}
                 value={bookQuery}
                 onChange={(e) => setBookQuery(e.target.value)}
                 onKeyDown={(e) => {
@@ -2544,7 +2647,7 @@ export function Workspace({
             {bookSearching && (
               <div className="search-progress">
                 <i style={{ width: `${bookProgress.total ? (bookProgress.scanned / bookProgress.total) * 100 : 0}%` }} />
-                <span>{tr(`已扫描 ${bookProgress.scanned} / ${bookProgress.total} 章，找到 ${bookProgress.matches} 章`, `Scanned ${bookProgress.scanned} / ${bookProgress.total} chapters; ${bookProgress.matches} matched`)}</span>
+                <span>{tr(`正在搜索「${bookProgressNovel || novel.title}」· 已扫描 ${bookProgress.scanned} / ${bookProgress.total} 条，找到 ${bookProgress.matches} 项`, `Searching “${bookProgressNovel || novel.title}” · scanned ${bookProgress.scanned} / ${bookProgress.total} items, ${bookProgress.matches} matches`)}</span>
               </div>
             )}
             {!bookSearching && bookResultQuery === bookQuery.trim() && bookResultQuery && !bookResults.length && (
@@ -2553,11 +2656,12 @@ export function Workspace({
             <div className="search-results">
               {bookResults.map((r) => (
                 <button
-                  key={r.resultType === "library" ? `library:${r.sourceId}` : `chapter:${r.chapterId}`}
-                  onClick={() => openSearchResult(r.resultType === "library" ? r.sourceId : r.chapterId)}
+                  key={`${r.novelId || novel.id}:${r.resultType === "library" ? `library:${r.sourceId}` : `chapter:${r.chapterId}`}`}
+                  onClick={() => void openSearchResult(r)}
                 >
                   <b>
                     {r.title}
+                    <small className="search-result-novel">{r.novelTitle || novel.title}</small>
                     <small className="search-result-kind">{r.resultType === "library"
                       ? ({ outline: tr("大纲", "Outline"), scene: tr("场景", "Scene"), character: tr("人物", "Character"), world: tr("世界设定", "World"), inspiration: tr("灵感", "Idea"), timeline: tr("时间线", "Timeline"), foreshadow: tr("伏笔", "Foreshadow"), relation: tr("关系", "Relationship") } as Record<string, string>)[r.kind] || tr("故事资料", "Story material")
                       : tr("章节", "Chapter")}</small>
