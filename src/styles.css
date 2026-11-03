@@ -971,6 +971,12 @@ button.danger-text:not(:disabled):hover {
 .scene-manuscript-link-recovery { display: grid; justify-items: start; gap: 6px; padding: 8px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line)); border-radius: var(--r-sm); background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
 .scene-manuscript-link-recovery > small { color: var(--muted); font-size: 10px; line-height: 1.5; }
 .scene-manuscript-link-action { justify-self: start; max-width: 100%; font-size: 10px; }
+.scene-cast-tools { display: grid; justify-items: start; gap: 6px; min-width: 0; }
+.scene-cast-tools > small,.scene-cast-review-head > small { color: var(--muted); font-size: 10px; line-height: 1.5; }
+.scene-cast-review { display: grid; gap: 7px; width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: var(--r-sm); background: color-mix(in srgb, var(--panel) 55%, var(--paper)); }
+.scene-cast-review-head { display: grid; gap: 3px; }
+.scene-cast-review-head > b { color: var(--ink); font-size: 11px; }
+.scene-cast-candidate-list { max-height: 160px; }
 .scene-ai-context { display: grid; gap: 7px; min-width: 0; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: var(--r-md); background: color-mix(in srgb, var(--panel) 42%, var(--paper)); }
 .scene-ai-context > legend { padding: 0 4px; color: var(--ink); font-size: 11px; font-weight: 650; }
 .scene-ai-context > small { color: var(--muted); font-size: 10px; line-height: 1.5; }

@@ -198,6 +198,8 @@ export function LibraryPanel({
   const [sceneRestoreOpen, setSceneRestoreOpen] = useState(false);
   const [sceneRelinkBusyId, setSceneRelinkBusyId] = useState("");
   const [sceneContextSearch, setSceneContextSearch] = useState("");
+  const [sceneCastReviewOpen, setSceneCastReviewOpen] = useState(false);
+  const [sceneCastSelectedIds, setSceneCastSelectedIds] = useState<string[]>([]);
   const draftVersion = useRef(0);
   const listSeq = useRef(0);
   const presenceDetailSeq = useRef(0);
@@ -238,6 +240,28 @@ export function LibraryPanel({
     const query = sceneContextSearch.trim().toLocaleLowerCase();
     return !query || `${item.title || ""} ${kindLabel(String(item.kind || ""))}`.toLocaleLowerCase().includes(query);
   });
+  const sceneCastCandidates = useMemo(() => {
+    if (!editing || kind !== "scene" || !chapter?.id || !chapterSaved || !manuscriptLink || manuscriptLink.chapterId !== chapter.id || manuscriptLinkState !== "matched") return [];
+    const body = String(chapter.plain_text || "");
+    const segments = sceneManuscriptLinkSegments(manuscriptLink);
+    const excerpts = segments.map((segment) => body.slice(segment.start, segment.end));
+    if (!excerpts.length || excerpts.some((excerpt, index) => excerpt.length !== segments[index].end - segments[index].start)) return [];
+    const normalizedExcerpts = excerpts.map((excerpt) => excerpt.toLocaleLowerCase());
+    return allItems.flatMap((item) => {
+      if (item.kind !== "character" || !item.id || item.deleted_at || !String(item.title || "").trim()) return [];
+      const card = parseJson(item.content_json || "{}");
+      const terms = [...new Set([String(item.title || "").trim(), ...String(card.alias || "").split(/[,，、;；\n\r]+/u).map((alias: string) => alias.trim())])]
+        .filter((term) => Array.from(term).length >= 2);
+      const matchedTerms = terms.filter((term) => normalizedExcerpts.some((excerpt) => excerpt.includes(term.toLocaleLowerCase())));
+      if (!matchedTerms.length) return [];
+      const passageCount = normalizedExcerpts.filter((excerpt) => matchedTerms.some((term) => excerpt.includes(term.toLocaleLowerCase()))).length;
+      return [{ id: String(item.id), title: String(item.title).trim(), matchedTerms, passageCount }];
+    }).sort((left, right) => right.passageCount - left.passageCount || left.title.localeCompare(right.title, language === "en" ? "en" : "zh-CN")).slice(0, 80);
+  }, [editing?.id, kind, chapter?.id, chapter?.plain_text, chapterSaved, manuscriptLink?.chapterId, manuscriptLink?.start, manuscriptLink?.end, JSON.stringify(manuscriptLink?.segments || []), manuscriptLinkState, allItems, language]);
+  useEffect(() => {
+    setSceneCastReviewOpen(false);
+    setSceneCastSelectedIds([]);
+  }, [editing?.id, chapter?.id, manuscriptLink?.chapterId, manuscriptLink?.fingerprint]);
   const sceneHistoryPreviewText = sceneHistoryPreview
     ? formatSceneRevision(sceneHistoryPreview, language)
     : "";
@@ -1181,6 +1205,59 @@ export function LibraryPanel({
                 value={editing.cast || ""}
                 onChange={(e) => updateEditing({ cast: e.target.value })}
               />
+              <div className="scene-cast-tools">
+                <button
+                  type="button"
+                  className="secondary scene-manuscript-link-action"
+                  disabled={!chapter?.id || !chapterSaved || manuscriptLink?.chapterId !== chapter?.id || manuscriptLinkState !== "matched"}
+                  title={tr("只扫描当前章节中已核验的关联正文片段", "Scans only verified linked excerpts in the current chapter")}
+                  onClick={() => {
+                    setSceneCastSelectedIds([]);
+                    setSceneCastReviewOpen((open) => !open);
+                  }}
+                >{tr("从关联正文找人物", "Find characters in linked text")}</button>
+                <small>{tr("本机按人物卡名称和别名匹配；结果需由你确认，不会自动保存。", "Matches character card names and aliases locally. Review candidates before adding; nothing is saved automatically.")}</small>
+                {sceneCastReviewOpen && (
+                  <div className="scene-cast-review">
+                    <div className="scene-cast-review-head">
+                      <b>{tr(`候选人物 · ${sceneCastCandidates.length}`, `Candidates · ${sceneCastCandidates.length}`)}</b>
+                      <small>{tr("子串匹配可能误报，请核对关联片段。", "Substring matches can be false positives; review the linked passages.")}</small>
+                    </div>
+                    <div className="scene-ai-context-list scene-cast-candidate-list">
+                      {sceneCastCandidates.map((candidate) => (
+                        <label key={candidate.id} title={tr(`命中：${candidate.matchedTerms.join("、")}`, `Matched: ${candidate.matchedTerms.join(", ")}`)}>
+                          <input
+                            type="checkbox"
+                            checked={sceneCastSelectedIds.includes(candidate.id)}
+                            onChange={(event) => setSceneCastSelectedIds((current) => event.target.checked ? [...current, candidate.id] : current.filter((id) => id !== candidate.id))}
+                          />
+                          <span>{candidate.title}</span>
+                          <small>{tr(`${candidate.passageCount} 段命中`, `${candidate.passageCount} passages`)}</small>
+                        </label>
+                      ))}
+                      {!sceneCastCandidates.length && <span className="scene-ai-context-empty">{tr("没有找到名称或别名匹配。", "No name or alias matches found.")}</span>}
+                    </div>
+                    <button
+                      type="button"
+                      className="secondary scene-manuscript-link-action"
+                      disabled={!sceneCastSelectedIds.length}
+                      onClick={() => {
+                        const current = String(editing.cast || "").split(/[,，、;；\n\r]+/u).map((name) => name.trim()).filter(Boolean);
+                        const existing = new Set(current.map((name) => name.toLocaleLowerCase()));
+                        const additions = sceneCastCandidates.filter((candidate) => sceneCastSelectedIds.includes(candidate.id) && !existing.has(candidate.title.toLocaleLowerCase())).map((candidate) => candidate.title);
+                        if (!additions.length) {
+                          notify(tr("所选人物已在出场名单中", "Selected characters are already in the cast list"));
+                          setSceneCastReviewOpen(false);
+                          return;
+                        }
+                        updateEditing({ cast: [...current, ...additions].join("，") });
+                        setSceneCastReviewOpen(false);
+                        setSceneCastSelectedIds([]);
+                      }}
+                    >{tr(`加入已选人物 · ${sceneCastSelectedIds.length}`, `Add selected · ${sceneCastSelectedIds.length}`)}</button>
+                  </div>
+                )}
+              </div>
             </>
           )}
           {kind === "timeline" && (
