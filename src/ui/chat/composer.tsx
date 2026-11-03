@@ -57,21 +57,31 @@ function RefChips({
     <div className="zchat-refs" data-fd-id="ai-ref-chips">
       {shown.map((x, i) => {
         const invalid = x.invalid === true;
+        const timelineHorizon = String(x.progressionHorizonChapterTitle || "").trim();
+        const timelineStale = Boolean(x.progressionHorizonStale);
+        const timelineHint = timelineHorizon
+          ? `${tr("沿革截至", "Timeline through")} ${timelineHorizon}${timelineStale ? tr(" · 来源已更改", " · source changed") : ""}`
+          : "";
         return (
           <span
             className={`zchat-ref ${invalid ? "invalid" : ""}`}
             key={`${x.kind}:${x.sourceId || i}`}
-            title={invalid ? tr("来源已删除或失效", "Source deleted or unavailable") : x.label}
+            title={[
+              invalid ? tr("来源已删除或失效", "Source deleted or unavailable") : x.label,
+              timelineHint,
+              timelineStale ? tr("引用保留添加时快照；移除后重新添加可刷新。", "This reference keeps its original snapshot; remove and add it again to refresh.") : "",
+            ].filter(Boolean).join(" · ")}
           >
             <button
               type="button"
               className="zchat-ref-main"
               onClick={() => onPreview(i)}
-              aria-label={tr(`查看引用：${x.label}`, `View reference: ${x.label}`)}
+              aria-label={tr(`查看引用：${x.label}${timelineHint ? `，${timelineHint}` : ""}`, `View reference: ${x.label}${timelineHint ? `, ${timelineHint}` : ""}`)}
             >
               <IconQuote />
               <span className="zchat-ellipsis">{x.label}</span>
               <small>{kindNameFor(x.kind, language as never)}</small>
+              {timelineHorizon ? <small className={`zchat-ref-horizon ${timelineStale ? "stale" : ""}`}>≤{timelineHorizon}</small> : null}
             </button>
             <button
               type="button"

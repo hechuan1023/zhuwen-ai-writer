@@ -542,10 +542,18 @@ export function AiPanel({
       if ((context.kind !== "character" && context.kind !== "world") || !context.sourceId || context.sourceDataVersion == null)
         return context;
       const source = libraryAll.find((item) => item.kind === context.kind && String(item.id) === String(context.sourceId));
-      if (!source || Number(source.data_version) !== Number(context.sourceDataVersion)) return context;
+      if (!source) return context;
+      const sourceContent = parseJson(source.content_json || "{}");
+      const hasTimeline = Array.isArray(sourceContent.progressions) && sourceContent.progressions.length > 0 &&
+        (context.kind === "character" || ["地点", "势力"].includes(String(sourceContent.category || "")));
+      if (Number(source.data_version) !== Number(context.sourceDataVersion))
+        return hasTimeline ? { ...context, progressionHorizonStale: true } : context;
       return {
         ...context,
         content: materialReferenceContent(source, 6000, chapterTitles, chapterOrder, horizonChapterId),
+        progressionHorizonChapterId: hasTimeline ? horizonChapterId || "" : undefined,
+        progressionHorizonChapterTitle: hasTimeline && horizonChapterId ? chapterTitles[String(horizonChapterId)] || "" : undefined,
+        progressionHorizonStale: false,
       };
     });
   }
@@ -1069,6 +1077,12 @@ export function AiPanel({
     bookChapters,
     selectionText,
     hasChapterText: Boolean(chapterText().trim()),
+  }).map((context) => {
+    if (!context.progressionHorizonChapterId || context.sourceDataVersion == null) return context;
+    const source = libraryAll.find((item) => item.kind === context.kind && String(item.id) === String(context.sourceId));
+    return source && Number(source.data_version) !== Number(context.sourceDataVersion)
+      ? { ...context, progressionHorizonStale: true }
+      : context;
   });
   const sourceRevisionNow = Number(session?.chapter?.revision ?? chapter?.revision ?? -1);
   const decorateMessage = useCallback((message: AnyRow) => {

@@ -679,6 +679,8 @@
   color: var(--muted, #8a8577);
   flex: none;
 }
+.zchat-ref-main .zchat-ref-horizon { color: color-mix(in srgb, var(--accent) 82%, var(--ink)); }
+.zchat-ref-main .zchat-ref-horizon.stale { color: var(--danger, #a33); }
 .zchat-ref-remove {
   display: inline-flex;
   align-items: center;
@@ -1479,6 +1481,7 @@
   color: var(--muted, #8a8577);
   flex: none;
 }
+.zchat-context-stale { display: block; padding: 6px 10px 0; color: var(--warning, #9a753b); font-size: 11px; }
 .zchat-context-ref pre,
 .zchat-ref-preview pre {
   white-space: pre-wrap;

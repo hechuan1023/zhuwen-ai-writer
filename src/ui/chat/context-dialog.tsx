@@ -124,9 +124,15 @@ export function ContextDialog({
                   <span className="zchat-ellipsis">{x.label}</span>
                   <small>
                     {kindNameFor(x.kind, language as never)} ·{" "}
+                    {x.progressionHorizonChapterTitle ? `${tr("沿革截至", "Timeline through")} ${x.progressionHorizonChapterTitle} · ` : ""}
                     {String(x.content || "").length.toLocaleString()} {tr("字", "chars")}
                   </small>
                 </summary>
+                {x.progressionHorizonStale ? (
+                  <small className="zchat-context-stale">
+                    {tr("资料已更改，此处保留添加时的快照；移除后重新添加可刷新。", "The source changed; this reference keeps its original snapshot. Remove and add it again to refresh.")}
+                  </small>
+                ) : null}
                 <pre>{x.content}</pre>
               </details>
             ))}
