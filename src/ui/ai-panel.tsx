@@ -1923,7 +1923,7 @@ export function AiPanel({
           ))}
         </nav>
       )}
-      {tokenState && !tokenState.configured && (
+      {connectionStatus === "ready" && connections.length > 0 && tokenState && !tokenState.configured && (
         <div className="zchat-notice zchat-notice-warn" data-fd-id="ai-token-missing">
           <p>{tr("AI 服务尚未激活", "AI service is not activated")}</p>
           <small className="hint">
