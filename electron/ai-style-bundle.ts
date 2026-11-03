@@ -13,7 +13,7 @@ export type StyleCompositionBundle = {
   cards: StyleBundleCard[];
 };
 
-const STYLE_TASKS = new Set(["continue", "polish", "naturalize", "outline"]);
+const STYLE_TASKS = new Set(["continue", "polish", "naturalize", "outline", "check"]);
 
 /** Validate the portable format before any database writes take place. */
 export function parseStyleCompositionBundle(input: unknown): StyleCompositionBundle {

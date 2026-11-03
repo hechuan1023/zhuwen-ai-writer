@@ -374,7 +374,7 @@ export function StyleCardPanel({
       />
       {open && (
         <Modal title={tr("AI 写作风格", "AI writing styles")} close={() => setOpen(false)}>
-          <p className="hint">{tr("可组合多张技法卡。内置卡抽象通用叙事方法，不复刻单部作品或作者表达；每张卡按适用任务生效，普通聊天和逻辑检查不会注入写作风格。", "Combine techniques. Built-ins abstract general narrative methods rather than copying a specific work or author; cards apply only to enabled writing tasks, not normal chat or logic checks.")}</p>
+          <p className="hint">{tr("可组合多张技法卡。内置卡抽象通用叙事方法，不复刻单部作品或作者表达；普通聊天不注入风格，检查任务只应用标注了“检查”的卡片。", "Combine techniques. Built-ins abstract general narrative methods rather than copying a specific work or author. Normal chat does not apply style cards; review tasks use only cards enabled for review.")}</p>
           <section className="zchat-style-preview" data-fd-id="ai-style-composition-preview">
             <header><b>{tr("本任务实际注入规则", "Rules applied to this task")}</b><small>{taskLabel(taskKind, language)}</small></header>
             <div className="zchat-style-intensity" role="group" aria-label={tr("技法强调度", "Technique emphasis")} data-fd-id="ai-style-intensity">

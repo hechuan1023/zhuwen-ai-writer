@@ -3272,7 +3272,7 @@ function registerIpc(userDir: string) {
     const old: any = get("SELECT builtin FROM ai_style_cards WHERE id=?", id);
     if (old?.builtin) return fail("内置风格不能直接修改，请先复制为自定义风格");
     const t = timestamp();
-    const taskOptions = new Set(["continue", "polish", "naturalize", "outline"]);
+    const taskOptions = new Set(["continue", "polish", "naturalize", "outline", "check"]);
     const tasks = [...new Set((Array.isArray(p?.tasks) ? p.tasks : ["continue", "polish"])
       .map((task: unknown) => String(task || ""))
       .filter((task: string) => taskOptions.has(task)))];
@@ -3323,7 +3323,7 @@ function registerIpc(userDir: string) {
       const name = String(card.name || "").trim();
       const description = String(card.description || "").trim();
       const rules = String(card.rules || "").trim();
-      const allowedTasks = new Set(["continue", "polish", "naturalize", "outline"]);
+      const allowedTasks = new Set(["continue", "polish", "naturalize", "outline", "check"]);
       const tasks = [...new Set((Array.isArray(card.tasks) ? card.tasks : [])
         .map((task: unknown) => String(task || ""))
         .filter((task: string) => allowedTasks.has(task)))];
